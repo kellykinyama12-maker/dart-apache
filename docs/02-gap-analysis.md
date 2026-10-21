@@ -15,6 +15,9 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | Traversal protection | ✅ | `lib/src/request_resolver.dart` |
 | Access logging (CLF) | ✅ basic | `lib/src/server.dart` |
 | Multi-core isolates | ✅ worker-per-core, shared socket | `lib/src/supervisor.dart` |
+| Worker respawn + reload | ✅ respawn + zero-downtime SIGHUP reload | `lib/src/supervisor.dart` |
+| Streaming PHP (back-pressure) | ✅ request + response streamed | `lib/src/php/` |
+| FastCGI (PHP-FPM) | ✅ `--php-fpm=host:port` or `unix:/path` | `lib/src/php/fastcgi.dart` |
 | Config via CLI flags | ✅ minimal | `lib/src/config.dart` |
 
 ## Gaps to close
@@ -27,13 +30,13 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | **TLS** | None | TLS 1.3, ALPN, SNI, OCSP stapling, cert rotation |
 | **Reverse proxy** | None | HTTP/FastCGI/SCGI upstreams, keep-alive pools |
 | **Load balancing** | None | round-robin, least-conn, hashing, health checks |
-| **PHP integration** | CGI (`php-cgi`) | **FastCGI to PHP-FPM** (persistent workers) |
+| **PHP integration** | ✅ CGI (`php-cgi`) **and** FastCGI (PHP-FPM) | Connection pooling to FPM |
 | **Static perf** | `openRead` stream | zero-copy/sendfile, ranges, caching, compression |
 | **Caching** | None | Response cache + reverse-proxy cache |
 | **Config** | CLI flags | Declarative file, validation, hot reload |
 | **Observability** | stdout logs | Structured logs, Prometheus metrics, OTel tracing |
 | **Security** | Traversal guard | TLS, rate limits, header policy, request limits |
-| **Graceful lifecycle** | Hard stop | Drain + zero-downtime reload/restart |
+| **Graceful lifecycle** | ✅ drain + zero-downtime reload (SIGHUP), worker respawn | Config-validated reload |
 | **Testing** | Unit tests | Conformance suites, load, soak, fuzz |
 
 ## Key architectural decision

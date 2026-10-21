@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'config.dart';
 import 'mime_types.dart';
-import 'php_handler.dart';
+import 'php/cgi_backend.dart';
+import 'php/fastcgi.dart';
+import 'php/php_backend.dart';
 import 'request_resolver.dart';
 
 /// A small HTTP server that serves static files and runs PHP through `php-cgi`,
@@ -11,11 +13,13 @@ import 'request_resolver.dart';
 class ApacheServer {
   ApacheServer(this.config)
       : _resolver = RequestResolver(config),
-        _php = PhpCgiHandler(config);
+        _php = config.phpFpm != null
+            ? FastCgiBackend(config)
+            : CgiBackend(config);
 
   final ServerConfig config;
   final RequestResolver _resolver;
-  final PhpCgiHandler _php;
+  final PhpBackend _php;
 
   HttpServer? _server;
 
@@ -45,10 +49,13 @@ class ApacheServer {
     unawaited(server.forEach(_handle));
   }
 
-  /// Stops accepting new connections.
-  Future<void> stop() async {
-    await _server?.close(force: true);
+  /// Stops accepting new connections. When [graceful] is true, in-flight
+  /// requests are allowed to finish (connection draining); otherwise the
+  /// listening socket is closed immediately.
+  Future<void> stop({bool graceful = false}) async {
+    await _server?.close(force: !graceful);
     _server = null;
+    await _php.close();
   }
 
   Future<void> _handle(HttpRequest request) async {
@@ -111,23 +118,19 @@ class ApacheServer {
   }
 
   Future<void> _servePhp(HttpRequest request, Resolution resolution) async {
-    final body = <int>[];
-    await request.forEach(body.addAll);
-
-    final cgi = await _php.handle(
+    final php = await _php.handle(
       request: request,
       scriptFilename: resolution.filePath,
       scriptName: resolution.scriptName,
       pathInfo: resolution.pathInfo,
-      requestBody: body,
     );
 
     final response = request.response
-      ..statusCode = cgi.statusCode
-      ..reasonPhrase = cgi.reasonPhrase;
+      ..statusCode = php.statusCode
+      ..reasonPhrase = php.reasonPhrase;
 
     var sawContentType = false;
-    cgi.headers.forEach((name, values) {
+    php.headers.forEach((name, values) {
       if (name.toLowerCase() == 'content-type') sawContentType = true;
       for (final value in values) {
         response.headers.add(name, value);
@@ -139,10 +142,13 @@ class ApacheServer {
         'text/html; charset=UTF-8',
       );
     }
-    response.headers.set(HttpHeaders.contentLengthHeader, '${cgi.body.length}');
 
-    if (request.method != 'HEAD') {
-      response.add(cgi.body);
+    // No Content-Length is set here: the body is streamed, so the response is
+    // chunked unless the script supplied its own Content-Length header.
+    if (request.method == 'HEAD') {
+      await php.body.drain<void>();
+    } else {
+      await response.addStream(php.body);
     }
     await response.close();
   }

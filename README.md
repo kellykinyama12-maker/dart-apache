@@ -42,6 +42,7 @@ Flags:
 | `--port=`        | `8080`      | `Listen` port     |
 | `--root=`        | current dir | `DocumentRoot`    |
 | `--php-cgi=`     | `php-cgi`   | CGI handler       |
+| `--php-fpm=`     | (unset)     | FastCGI target `host:port` or `unix:/path` (PHP-FPM) |
 | `--server-name=` | `localhost` | `ServerName`      |
 | `--workers=`     | CPU count   | `worker_processes` (one isolate per core, shared socket) |
 
@@ -50,11 +51,13 @@ Then open `http://127.0.0.1:8080/`.
 ## Project layout
 
 - `bin/dart_apache.dart` — entry point / CLI.
-- `lib/src/supervisor.dart` — worker-per-core isolate supervisor (shared socket).
+- `lib/src/supervisor.dart` — worker-per-core isolate supervisor (shared socket,
+  respawn, zero-downtime reload).
 - `lib/src/server.dart` — HTTP server and request dispatch.
 - `lib/src/request_resolver.dart` — URL-to-filesystem mapping, DirectoryIndex,
   PATH_INFO splitting, traversal protection.
-- `lib/src/php_handler.dart` — `php-cgi` CGI execution and response parsing.
+- `lib/src/php/` — PHP backends: streaming `php-cgi` (CGI) and FastCGI (PHP-FPM),
+  shared CGI param/response handling.
 - `lib/src/mime_types.dart` — MIME type table.
 - `lib/src/config.dart` — server configuration.
 - `public/` — sample DocumentRoot with a PHP page and a static page.

@@ -1,59 +1,159 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
 import 'config.dart';
 import 'server.dart';
 
-/// Spawns and supervises worker isolates, each running an independent,
-/// non-blocking [ApacheServer] bound to a shared listening socket. This is the
-/// shared-nothing, worker-per-core model (nginx-style) that lets the server
-/// scale across all CPU cores.
+/// Supervises worker isolates, each running an independent, non-blocking
+/// [ApacheServer] bound to a shared listening socket (shared-nothing,
+/// worker-per-core — nginx-style). The supervisor:
+///
+/// - **respawns** workers that exit unexpectedly, and
+/// - performs **zero-downtime reloads**: a fresh generation of workers is
+///   spawned on the same shared socket, then the old generation is told to
+///   drain in-flight requests and exit.
 class ServerSupervisor {
   ServerSupervisor(this.config);
 
   final ServerConfig config;
-  final List<Isolate> _workers = [];
+  final List<_Worker> _workers = [];
 
-  /// Starts the configured number of workers. With a single worker the server
-  /// runs in-process; otherwise each worker runs in its own isolate.
+  bool _stopping = false;
+  bool _reloading = false;
+
+  /// Spawns the configured number of workers and begins serving.
   Future<void> start() async {
     stdout.writeln('dart-apache serving "${config.documentRoot}"');
     stdout.writeln('Listening on http://${config.address}:${config.port}/');
-    stdout.writeln('PHP handler: ${config.phpCgiPath}');
+    stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
     stdout.writeln('Workers: ${config.workers} isolate(s)');
 
-    if (config.workers <= 1) {
-      await ApacheServer(config).start(workerId: 0);
-      return;
-    }
-
     for (var i = 0; i < config.workers; i++) {
-      final isolate = await Isolate.spawn(
-        _workerMain,
-        _WorkerArgs(config, i),
-        debugName: 'dart-apache-worker-$i',
-      );
-      _workers.add(isolate);
+      _workers.add(await _spawn(i));
     }
   }
 
-  /// Tears down all worker isolates.
+  /// Zero-downtime reload: spawn a new generation, then drain the old one.
+  Future<void> reload() async {
+    if (_stopping || _reloading) return;
+    _reloading = true;
+    stdout.writeln('[supervisor] reloading ${config.workers} worker(s)...');
+
+    final old = List<_Worker>.of(_workers);
+    final fresh = <_Worker>[];
+    for (var i = 0; i < config.workers; i++) {
+      fresh.add(await _spawn(i));
+    }
+    _workers
+      ..clear()
+      ..addAll(fresh);
+
+    // New workers are bound to the shared socket; drain the old generation.
+    for (final worker in old) {
+      worker.draining = true;
+      worker.control.send(_WorkerMessage.drain);
+    }
+    _reloading = false;
+    stdout.writeln('[supervisor] reload complete');
+  }
+
+  /// Gracefully drains and stops all workers.
   Future<void> stop() async {
+    _stopping = true;
     for (final worker in _workers) {
-      worker.kill(priority: Isolate.immediate);
+      worker.draining = true;
+      worker.control.send(_WorkerMessage.drain);
     }
     _workers.clear();
   }
+
+  Future<_Worker> _spawn(int id) async {
+    final ready = ReceivePort();
+    final exit = ReceivePort();
+    final readyCompleter = Completer<SendPort>();
+    late _Worker worker;
+
+    ready.listen((msg) {
+      if (!readyCompleter.isCompleted) readyCompleter.complete(msg as SendPort);
+    });
+
+    final isolate = await Isolate.spawn(
+      _workerMain,
+      _WorkerArgs(config, id, ready.sendPort),
+      onExit: exit.sendPort,
+      debugName: 'dart-apache-worker-$id',
+    );
+
+    exit.listen((_) {
+      exit.close();
+      ready.close();
+      if (!readyCompleter.isCompleted) {
+        readyCompleter.completeError(
+          StateError('worker $id exited before becoming ready'),
+        );
+        return;
+      }
+      if (_stopping || worker.draining) return;
+      stderr.writeln('[supervisor] worker $id exited unexpectedly; respawning');
+      _respawn(worker);
+    });
+
+    // Wait until the worker is bound and ready (or fails to start).
+    final control = await readyCompleter.future;
+    ready.close();
+    worker = _Worker(id, isolate, control, exit);
+    return worker;
+  }
+
+  Future<void> _respawn(_Worker dead) async {
+    _workers.remove(dead);
+    if (_stopping) return;
+    try {
+      _workers.add(await _spawn(dead.id));
+    } catch (e) {
+      stderr.writeln('[supervisor] failed to respawn worker ${dead.id}: $e');
+    }
+  }
 }
 
-/// Isolate payload: the (sendable) config plus the worker index.
+/// Control messages sent from the supervisor to a worker.
+enum _WorkerMessage { drain }
+
+class _Worker {
+  _Worker(this.id, this.isolate, this.control, this.exit);
+  final int id;
+  final Isolate isolate;
+  final SendPort control;
+  final ReceivePort exit;
+
+  /// True once the worker has been asked to drain (so its exit is expected).
+  bool draining = false;
+}
+
+/// Isolate payload: the (sendable) config, worker index, and a port used to
+/// report readiness back to the supervisor.
 class _WorkerArgs {
-  _WorkerArgs(this.config, this.id);
+  _WorkerArgs(this.config, this.id, this.toSupervisor);
   final ServerConfig config;
   final int id;
+  final SendPort toSupervisor;
 }
 
 /// Entry point run inside each worker isolate.
 Future<void> _workerMain(_WorkerArgs args) async {
-  await ApacheServer(args.config).start(workerId: args.id);
+  final control = ReceivePort();
+  final server = ApacheServer(args.config);
+  await server.start(workerId: args.id);
+
+  // Signal readiness by handing the supervisor our control port.
+  args.toSupervisor.send(control.sendPort);
+
+  await for (final message in control) {
+    if (message == _WorkerMessage.drain) {
+      await server.stop(graceful: true);
+      control.close();
+      break;
+    }
+  }
 }

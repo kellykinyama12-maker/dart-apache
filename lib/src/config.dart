@@ -9,6 +9,7 @@ class ServerConfig {
     this.port = 8080,
     required this.documentRoot,
     this.phpCgiPath = 'php-cgi',
+    this.phpFpm,
     List<String>? directoryIndex,
     this.serverName = 'localhost',
     this.serverSoftware = 'dart-apache/1.0.0',
@@ -29,6 +30,10 @@ class ServerConfig {
 
   /// Path to the `php-cgi` executable used as the CGI handler.
   final String phpCgiPath;
+
+  /// Optional PHP-FPM FastCGI target (`host:port` or `unix:/path`). When set,
+  /// PHP runs via FastCGI instead of spawning `php-cgi` per request.
+  final String? phpFpm;
 
   /// Files tried, in order, when a directory is requested (`DirectoryIndex`).
   final List<String> directoryIndex;
@@ -64,6 +69,7 @@ class ServerConfig {
       port: int.tryParse(map['port'] ?? '') ?? 8080,
       documentRoot: Directory(root).absolute.path,
       phpCgiPath: map['php-cgi'] ?? 'php-cgi',
+      phpFpm: map['php-fpm'],
       serverName: map['server-name'] ?? 'localhost',
       workers: int.tryParse(map['workers'] ?? ''),
     );
