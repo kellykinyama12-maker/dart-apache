@@ -7,3 +7,4 @@ export 'src/mime_types.dart';
 export 'src/php_handler.dart' show CgiResponse, CgiException, PhpCgiHandler;
 export 'src/request_resolver.dart';
 export 'src/server.dart';
+export 'src/supervisor.dart';

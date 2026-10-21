@@ -12,7 +12,11 @@ class ServerConfig {
     List<String>? directoryIndex,
     this.serverName = 'localhost',
     this.serverSoftware = 'dart-apache/1.0.0',
-  }) : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'];
+    int? workers,
+  })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
+        workers = (workers == null || workers < 1)
+            ? Platform.numberOfProcessors
+            : workers;
 
   /// Interface to bind to.
   final String address;
@@ -35,10 +39,15 @@ class ServerConfig {
   /// Reported as `SERVER_SOFTWARE` and the `Server:` response header.
   final String serverSoftware;
 
+  /// Number of worker isolates to run (one acceptor per core by default).
+  /// Each worker binds the same port with a shared socket; the kernel/runtime
+  /// load-balances connections across them.
+  final int workers;
+
   /// Parses `key=value` style CLI arguments into a [ServerConfig].
   ///
   /// Supported flags: `--address`, `--port`, `--root`, `--php-cgi`,
-  /// `--server-name`.
+  /// `--server-name`, `--workers`.
   factory ServerConfig.fromArgs(List<String> args) {
     final map = <String, String>{};
     for (final arg in args) {
@@ -56,6 +65,7 @@ class ServerConfig {
       documentRoot: Directory(root).absolute.path,
       phpCgiPath: map['php-cgi'] ?? 'php-cgi',
       serverName: map['server-name'] ?? 'localhost',
+      workers: int.tryParse(map['workers'] ?? ''),
     );
   }
 }

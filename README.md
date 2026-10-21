@@ -43,12 +43,14 @@ Flags:
 | `--root=`        | current dir | `DocumentRoot`    |
 | `--php-cgi=`     | `php-cgi`   | CGI handler       |
 | `--server-name=` | `localhost` | `ServerName`      |
+| `--workers=`     | CPU count   | `worker_processes` (one isolate per core, shared socket) |
 
 Then open `http://127.0.0.1:8080/`.
 
 ## Project layout
 
 - `bin/dart_apache.dart` — entry point / CLI.
+- `lib/src/supervisor.dart` — worker-per-core isolate supervisor (shared socket).
 - `lib/src/server.dart` — HTTP server and request dispatch.
 - `lib/src/request_resolver.dart` — URL-to-filesystem mapping, DirectoryIndex,
   PATH_INFO splitting, traversal protection.

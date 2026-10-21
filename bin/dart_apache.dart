@@ -15,7 +15,7 @@ Future<void> main(List<String> arguments) async {
     return;
   }
 
-  final server = ApacheServer(config);
+  final server = ServerSupervisor(config);
 
   // Graceful shutdown on Ctrl+C.
   ProcessSignal.sigint.watch().listen((_) async {

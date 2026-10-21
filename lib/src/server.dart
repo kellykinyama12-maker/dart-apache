@@ -19,15 +19,28 @@ class ApacheServer {
 
   HttpServer? _server;
 
-  /// Binds the socket and starts handling requests.
-  Future<void> start() async {
-    final server = await HttpServer.bind(config.address, config.port);
+  /// Binds the (shared) socket and starts handling requests.
+  ///
+  /// [workerId] identifies the owning isolate for logging; when omitted the
+  /// server prints its own startup banner (single-isolate/dev use).
+  Future<void> start({int? workerId}) async {
+    // `shared: true` lets every worker isolate bind the same port and have the
+    // runtime load-balance connections across them (no blocking, no lock).
+    final server = await HttpServer.bind(
+      config.address,
+      config.port,
+      shared: true,
+    );
     server.serverHeader = config.serverSoftware;
     _server = server;
 
-    stdout.writeln('dart-apache serving "${config.documentRoot}"');
-    stdout.writeln('Listening on http://${config.address}:${config.port}/');
-    stdout.writeln('PHP handler: ${config.phpCgiPath}');
+    if (workerId == null) {
+      stdout.writeln('dart-apache serving "${config.documentRoot}"');
+      stdout.writeln('Listening on http://${config.address}:${config.port}/');
+      stdout.writeln('PHP handler: ${config.phpCgiPath}');
+    } else {
+      stdout.writeln('[worker $workerId] ready');
+    }
 
     unawaited(server.forEach(_handle));
   }

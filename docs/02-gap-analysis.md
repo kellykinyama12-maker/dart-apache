@@ -14,13 +14,14 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | PATH_INFO splitting | ✅ | `lib/src/request_resolver.dart` |
 | Traversal protection | ✅ | `lib/src/request_resolver.dart` |
 | Access logging (CLF) | ✅ basic | `lib/src/server.dart` |
+| Multi-core isolates | ✅ worker-per-core, shared socket | `lib/src/supervisor.dart` |
 | Config via CLI flags | ✅ minimal | `lib/src/config.dart` |
 
 ## Gaps to close
 
 | Area | Current | Target |
 | --- | --- | --- |
-| **Concurrency** | Single isolate | Multi-isolate acceptors over a shared port |
+| **Concurrency** | ✅ multi-isolate acceptors over a shared port | Add master supervisor + rolling restart |
 | **HTTP/2** | None | Full h2 (streams, HPACK, flow control, priorities) |
 | **HTTP/3 / QUIC** | None | QUIC transport + HTTP/3 (QPACK) |
 | **TLS** | None | TLS 1.3, ALPN, SNI, OCSP stapling, cert rotation |
