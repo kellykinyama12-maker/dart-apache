@@ -12,8 +12,10 @@ latency.
 
 ## Primary goals
 
-1. **Protocol completeness** — HTTP/1.1, HTTP/2, and HTTP/3 (QUIC) with TLS 1.3,
-   ALPN negotiation, and graceful downgrade.
+1. **HTTP/3-first protocol support** — QUIC + HTTP/3 over TLS 1.3 is the
+   primary, reference transport; HTTP/2 and HTTP/1.1 are conformant
+   compatibility fallbacks with ALPN negotiation and `Alt-Svc` discovery. See
+   [12-http3-integration-plan.md](12-http3-integration-plan.md).
 2. **Reverse proxy & load balancing** — upstream pools, health checks, multiple
    balancing strategies, connection reuse/keep-alive to upstreams.
 3. **Static serving at scale** — sendfile/zero-copy where possible, byte-range

@@ -19,6 +19,7 @@ path to **HTTP/3 (QUIC)**, TLS, reverse proxying, and horizontal scalability.
 | [09-performance.md](09-performance.md) | Benchmarks, zero-copy, tuning, capacity targets |
 | [10-roadmap.md](10-roadmap.md) | Phased delivery plan with milestones and exit criteria |
 | [11-testing-and-release.md](11-testing-and-release.md) | Test strategy, CI, compliance, release process |
+| [12-http3-integration-plan.md](12-http3-integration-plan.md) | **HTTP/3-first**: status of the h3 PoC + plan to route HTTP/3 through the unified pipeline |
 
 ## Reading order
 
@@ -36,6 +37,9 @@ Implemented in the prototype today:
   protection.
 - **PHP** via streaming `php-cgi` (CGI/1.1) and **FastCGI/PHP-FPM**
   (`--php-fpm=`), with end-to-end **back-pressure**.
+- **Experimental HTTP/3 (QUIC)** server over pure-Dart `dart_quiche`: serves
+  static + PHP (proof-of-concept, not yet pipeline-integrated — see
+  [12-http3-integration-plan.md](12-http3-integration-plan.md)).
 - Common Log Format access logging.
 
 Planned (see [10-roadmap.md](10-roadmap.md)):
