@@ -40,13 +40,16 @@ loss.
 **Goal:** be a useful edge/proxy on h1.
 - Zero-copy static, ranges, conditional requests, compression.
 - Reverse proxy with keep-alive pools; round-robin + least-conn; health checks.
+- **WebSocket**: origin upgrade handler (RFC 6455) and proxy passthrough
+  (forward `101` + bidirectional socket splice with back-pressure).
 - **Exit:** can front real backends; passes proxy correctness + static feature
-  tests.
+  tests; WebSocket echo + proxy verified.
 
 ## Phase 3 — HTTP/2
 **Goal:** modern multiplexed transport.
 - Framing, HPACK, streams, flow control, concurrency limits.
 - Rapid-Reset mitigation.
+- **WebSocket over HTTP/2** via `CONNECT` + `:protocol=websocket` (RFC 8441).
 - **Exit:** **h2spec** green; h2 reverse proxy and static verified under load.
 
 ## Phase 4 — HTTP/3 (QUIC)
@@ -55,6 +58,9 @@ loss.
   QUIC + HTTP/3, no FFI) behind the `ServerTransport` / `Http3Transport`
   interface; build `http3/` on top of it.
 - QUIC listener on UDP/443, QPACK, Alt-Svc advertisement, 0-RTT gating.
+- **WebTransport** over HTTP/3 (Extended `CONNECT` with
+  `:protocol=webtransport`), using `dart_quiche`'s WebTransport support; expose
+  datagrams + uni/bidi streams to a session handler.
 - Harden the dependency: pin/vendor the pre-1.0 package, add conformance gating,
   and validate TLS/cert handling for our server use.
 - **Exit:** **quic-interop** targets pass; `curl --http3` and browsers serve over

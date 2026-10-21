@@ -30,6 +30,8 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | **TLS** | None | TLS 1.3, ALPN, SNI, OCSP stapling, cert rotation |
 | **Reverse proxy** | None | HTTP/FastCGI/SCGI upstreams, keep-alive pools |
 | **Load balancing** | None | round-robin, least-conn, hashing, health checks |
+| **WebSocket** | None | Origin upgrade (RFC 6455/8441) + proxy passthrough (Phase 2–3) |
+| **WebTransport** | None | Origin over HTTP/3 via `dart_quiche` (Phase 4) |
 | **PHP integration** | ✅ CGI (`php-cgi`) **and** FastCGI (PHP-FPM) | Connection pooling to FPM |
 | **Static perf** | `openRead` stream | zero-copy/sendfile, ranges, caching, compression |
 | **Caching** | None | Response cache + reverse-proxy cache |

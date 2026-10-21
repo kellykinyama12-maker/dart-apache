@@ -39,7 +39,54 @@ flowchart LR
   large bodies.
 - **Timeouts & retries**: connect/read/write timeouts; safe retries on
   idempotent methods and connection errors; circuit breaking.
-- **WebSocket & upgrades**: transparent `Upgrade` passthrough.
+- **WebSocket & upgrades**: transparent `Upgrade` passthrough (details in
+  [Real-time protocols](#real-time-protocols-websocket--webtransport)).
+
+## Real-time protocols (WebSocket & WebTransport)
+
+Two distinct jobs, each in two modes (origin = terminate here; proxy = pass
+through to a backend):
+
+### WebSocket (HTTP/1.1 and HTTP/2)
+
+- **Origin (serve):** detect `Connection: Upgrade` + `Upgrade: websocket`,
+  complete the RFC 6455 handshake (`Sec-WebSocket-Accept`), and hand matched
+  locations to a WebSocket handler. On HTTP/2, support the `CONNECT` +
+  `:protocol=websocket` bootstrap (RFC 8441).
+- **Proxy:** forward the `101 Switching Protocols` handshake to the upstream,
+  then splice the two raw sockets **bidirectionally with back-pressure** until
+  either side closes. Honors idle/handshake timeouts and connection limits.
+- **Routing:** per-location opt-in; subprotocol (`Sec-WebSocket-Protocol`) and
+  origin checks; message/frame size limits; optional permessage-deflate.
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant S as dart-apache
+  participant U as Upstream
+  C->>S: GET /ws (Upgrade: websocket)
+  alt proxy
+    S->>U: forward handshake
+    U-->>S: 101 Switching Protocols
+    S-->>C: 101 Switching Protocols
+    C<<->>U: frames spliced (back-pressure)
+  else origin
+    S-->>C: 101 (handled here)
+    C<<->>S: frames to WS handler
+  end
+```
+
+### WebTransport (HTTP/3 only)
+
+- Requires the QUIC/HTTP/3 datapath; the vendored **`dart_quiche`** already
+  implements WebTransport over HTTP/3 (Extended `CONNECT` with
+  `:protocol=webtransport`, capsule framing, unidirectional `0x54` and
+  bidirectional `WEBTRANSPORT_STREAM 0x41`).
+- **Origin:** route Extended CONNECT to a WebTransport session handler exposing
+  datagrams plus uni/bidi streams.
+- **Proxy:** forward the CONNECT session and relay streams/datagrams to a
+  backend (a later, niche capability).
+- Depends on Phase 4 (HTTP/3); cannot exist before QUIC lands.
 
 ## Load balancing
 
