@@ -36,6 +36,7 @@ class ApacheServer {
       shared: true,
     );
     server.serverHeader = config.serverSoftware;
+    server.idleTimeout = config.idleTimeout;
     _server = server;
 
     if (workerId == null) {
@@ -64,6 +65,15 @@ class ApacheServer {
     final altSvc = config.altSvcHeader;
     if (altSvc != null) response.headers.set('alt-svc', altSvc);
     try {
+      // Reject over-large declared bodies before doing any work.
+      if (request.contentLength > config.maxRequestBodyBytes) {
+        await _serveError(
+          response,
+          HttpStatus.requestEntityTooLarge,
+          'Payload Too Large',
+        );
+        return;
+      }
       final resolution = _resolver.resolve(request.uri.path);
       switch (resolution.kind) {
         case ResolutionKind.staticFile:

@@ -12,6 +12,11 @@
   unit-tested wire codec; `php-cgi` remains the default.
 - Supervisor hardening: automatic worker respawn on crash and zero-downtime
   reload (SIGHUP on POSIX) that drains the old worker generation.
+- Crash-loop protection: respawns use exponential backoff and give up after
+  repeated rapid crashes.
+- Request limits: configurable keep-alive idle timeout (`--idle-timeout`) and
+  max request body (`--max-body`, returns `413`).
+- Linux cross-compilation helper (`tool/build_linux.dart`) and AOT build docs.
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.

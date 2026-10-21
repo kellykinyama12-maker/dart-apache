@@ -46,8 +46,23 @@ Flags:
 | `--server-name=` | `localhost` | `ServerName`      |
 | `--workers=`     | CPU count   | `worker_processes` (one isolate per core, shared socket) |
 | `--advertise-h3=`| (unset)     | Advertise HTTP/3 on this UDP port via the `Alt-Svc` header |
+| `--idle-timeout=`| `120`       | Keep-alive idle timeout in seconds (slowloris defense) |
+| `--max-body=`    | `10485760`  | Max request body in bytes (`413` beyond this) |
 
 Then open `http://127.0.0.1:8080/`.
+
+## Building native binaries (incl. Linux cross-compile)
+
+AOT-compile to a standalone native executable (faster startup/throughput than
+`dart run`). Dart can **cross-compile to Linux from any host**:
+
+```sh
+# all three executables -> build/*-linux-x64
+dart run tool/build_linux.dart          # or: dart run tool/build_linux.dart arm64
+
+# or a single binary for the host OS
+dart compile exe bin/dart_apache.dart -o build/dart_apache
+```
 
 ## HTTP/3 (experimental)
 

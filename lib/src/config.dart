@@ -15,6 +15,8 @@ class ServerConfig {
     this.serverSoftware = 'dart-apache/1.0.0',
     this.altSvcH3Port,
     this.altSvcMaxAge = 86400,
+    this.idleTimeout = const Duration(seconds: 120),
+    this.maxRequestBodyBytes = 10 * 1024 * 1024,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
         workers = (workers == null || workers < 1)
@@ -59,6 +61,13 @@ class ServerConfig {
   /// `ma` (max-age) seconds for the advertised `Alt-Svc` entry.
   final int altSvcMaxAge;
 
+  /// How long an idle keep-alive connection may stay open (slowloris defense).
+  final Duration idleTimeout;
+
+  /// Maximum accepted request body size in bytes; larger declared bodies get a
+  /// `413 Payload Too Large`.
+  final int maxRequestBodyBytes;
+
   /// The `Alt-Svc` header value advertising HTTP/3, or null if disabled.
   String? get altSvcHeader => altSvcH3Port == null
       ? null
@@ -87,6 +96,11 @@ class ServerConfig {
       phpFpm: map['php-fpm'],
       serverName: map['server-name'] ?? 'localhost',
       altSvcH3Port: int.tryParse(map['advertise-h3'] ?? ''),
+      idleTimeout: Duration(
+        seconds: int.tryParse(map['idle-timeout'] ?? '') ?? 120,
+      ),
+      maxRequestBodyBytes:
+          int.tryParse(map['max-body'] ?? '') ?? 10 * 1024 * 1024,
       workers: int.tryParse(map['workers'] ?? ''),
     );
   }

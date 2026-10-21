@@ -36,6 +36,25 @@ void main() {
     });
   });
 
+  group('backoffDelay', () {
+    test('first restart is immediate', () {
+      expect(backoffDelay(1), Duration.zero);
+    });
+
+    test('grows exponentially from the base', () {
+      expect(backoffDelay(2), const Duration(milliseconds: 200));
+      expect(backoffDelay(3), const Duration(milliseconds: 400));
+      expect(backoffDelay(4), const Duration(milliseconds: 800));
+    });
+
+    test('is capped at the maximum', () {
+      expect(
+        backoffDelay(50, max: const Duration(seconds: 30)),
+        const Duration(seconds: 30),
+      );
+    });
+  });
+
   group('RequestResolver', () {
     late Directory root;
     late RequestResolver resolver;

@@ -22,6 +22,12 @@ class ServerSupervisor {
   bool _stopping = false;
   bool _reloading = false;
 
+  /// A worker that stays up at least this long resets its crash counter.
+  static const Duration _stableWindow = Duration(seconds: 60);
+
+  /// Give up respawning after this many rapid consecutive crashes.
+  static const int _maxRestarts = 5;
+
   /// Spawns the configured number of workers and begins serving.
   Future<void> start() async {
     stdout.writeln('dart-apache serving "${config.documentRoot}"');
@@ -68,7 +74,7 @@ class ServerSupervisor {
     _workers.clear();
   }
 
-  Future<_Worker> _spawn(int id) async {
+  Future<_Worker> _spawn(int id, {int restarts = 0}) async {
     final ready = ReceivePort();
     final exit = ReceivePort();
     final readyCompleter = Completer<SendPort>();
@@ -95,22 +101,43 @@ class ServerSupervisor {
         return;
       }
       if (_stopping || worker.draining) return;
-      stderr.writeln('[supervisor] worker $id exited unexpectedly; respawning');
+      stderr.writeln('[supervisor] worker $id exited unexpectedly');
       _respawn(worker);
     });
 
     // Wait until the worker is bound and ready (or fails to start).
     final control = await readyCompleter.future;
     ready.close();
-    worker = _Worker(id, isolate, control, exit);
+    worker = _Worker(id, isolate, control, exit, restarts: restarts);
     return worker;
   }
 
+  /// Respawns a crashed worker with exponential backoff, giving up if it keeps
+  /// crashing (crash-loop protection).
   Future<void> _respawn(_Worker dead) async {
     _workers.remove(dead);
     if (_stopping) return;
+
+    // A worker that ran long enough is treated as a fresh failure, not a loop.
+    final ranLongEnough =
+        DateTime.now().difference(dead.startedAt) >= _stableWindow;
+    final restarts = ranLongEnough ? 1 : dead.restarts + 1;
+
+    if (restarts > _maxRestarts) {
+      stderr.writeln('[supervisor] worker ${dead.id} crashed $restarts times '
+          'in a row; giving up (crash loop)');
+      return;
+    }
+
+    final delay = backoffDelay(restarts);
+    if (delay > Duration.zero) {
+      stderr.writeln('[supervisor] respawning worker ${dead.id} in '
+          '${delay.inMilliseconds}ms (attempt $restarts)');
+      await Future<void>.delayed(delay);
+      if (_stopping) return;
+    }
     try {
-      _workers.add(await _spawn(dead.id));
+      _workers.add(await _spawn(dead.id, restarts: restarts));
     } catch (e) {
       stderr.writeln('[supervisor] failed to respawn worker ${dead.id}: $e');
     }
@@ -120,12 +147,38 @@ class ServerSupervisor {
 /// Control messages sent from the supervisor to a worker.
 enum _WorkerMessage { drain }
 
+/// Exponential backoff for respawning a crashed worker: the first restart is
+/// immediate, then `base * 2^(n-2)` capped at [max].
+Duration backoffDelay(
+  int restarts, {
+  Duration base = const Duration(milliseconds: 200),
+  Duration max = const Duration(seconds: 30),
+}) {
+  if (restarts <= 1) return Duration.zero;
+  final ms = base.inMilliseconds * (1 << (restarts - 2));
+  return Duration(
+    milliseconds: ms > max.inMilliseconds ? max.inMilliseconds : ms,
+  );
+}
+
 class _Worker {
-  _Worker(this.id, this.isolate, this.control, this.exit);
+  _Worker(
+    this.id,
+    this.isolate,
+    this.control,
+    this.exit, {
+    this.restarts = 0,
+  }) : startedAt = DateTime.now();
   final int id;
   final Isolate isolate;
   final SendPort control;
   final ReceivePort exit;
+
+  /// Consecutive rapid crash count carried across respawns.
+  final int restarts;
+
+  /// When this worker became ready (used to detect crash loops).
+  final DateTime startedAt;
 
   /// True once the worker has been asked to drain (so its exit is expected).
   bool draining = false;
