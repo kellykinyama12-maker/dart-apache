@@ -60,6 +60,9 @@ class ApacheServer {
 
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
+    // Advertise HTTP/3 availability so capable clients upgrade to QUIC.
+    final altSvc = config.altSvcHeader;
+    if (altSvc != null) response.headers.set('alt-svc', altSvc);
     try {
       final resolution = _resolver.resolve(request.uri.path);
       switch (resolution.kind) {

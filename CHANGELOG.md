@@ -15,3 +15,5 @@
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.
+- HTTP/3 discovery: the HTTP/1.1 server advertises HTTP/3 via the `Alt-Svc`
+  header (`--advertise-h3=PORT`), so capable clients upgrade to QUIC.

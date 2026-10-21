@@ -173,10 +173,14 @@ accept model does not directly apply. Plan:
 
 ### Fallback & discovery (still HTTP/3-first)
 
+> **Status:** basic discovery is **implemented** — the HTTP/1.1 server emits
+> `Alt-Svc: h3=":<port>"; ma=<ttl>` on every response (`--advertise-h3=PORT`,
+> [`ServerConfig.altSvcHeader`](../lib/src/config.dart)).
+
 - Run the TCP listener (h1/h2) primarily to **advertise** HTTP/3 via `Alt-Svc`
   and to serve clients that cannot do QUIC yet.
-- Optional HSTS + `Alt-Svc: h3=":443"` so capable clients upgrade to h3 on the
-  next request.
+- Next: tie the advertised port to the actual running h3 listener, add `HSTS`,
+  and support `Alt-Svc` on the h2 path too.
 
 ### Observability
 

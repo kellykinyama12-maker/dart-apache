@@ -13,6 +13,8 @@ class ServerConfig {
     List<String>? directoryIndex,
     this.serverName = 'localhost',
     this.serverSoftware = 'dart-apache/1.0.0',
+    this.altSvcH3Port,
+    this.altSvcMaxAge = 86400,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
         workers = (workers == null || workers < 1)
@@ -49,10 +51,23 @@ class ServerConfig {
   /// load-balances connections across them.
   final int workers;
 
+  /// When set, HTTP responses advertise HTTP/3 availability on this UDP port
+  /// via the `Alt-Svc` header (RFC 7838/9114), so capable clients upgrade to
+  /// QUIC on a later request.
+  final int? altSvcH3Port;
+
+  /// `ma` (max-age) seconds for the advertised `Alt-Svc` entry.
+  final int altSvcMaxAge;
+
+  /// The `Alt-Svc` header value advertising HTTP/3, or null if disabled.
+  String? get altSvcHeader => altSvcH3Port == null
+      ? null
+      : 'h3=":$altSvcH3Port"; ma=$altSvcMaxAge';
+
   /// Parses `key=value` style CLI arguments into a [ServerConfig].
   ///
   /// Supported flags: `--address`, `--port`, `--root`, `--php-cgi`,
-  /// `--server-name`, `--workers`.
+  /// `--server-name`, `--workers`, `--advertise-h3`.
   factory ServerConfig.fromArgs(List<String> args) {
     final map = <String, String>{};
     for (final arg in args) {
@@ -71,6 +86,7 @@ class ServerConfig {
       phpCgiPath: map['php-cgi'] ?? 'php-cgi',
       phpFpm: map['php-fpm'],
       serverName: map['server-name'] ?? 'localhost',
+      altSvcH3Port: int.tryParse(map['advertise-h3'] ?? ''),
       workers: int.tryParse(map['workers'] ?? ''),
     );
   }

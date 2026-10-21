@@ -45,6 +45,7 @@ Flags:
 | `--php-fpm=`     | (unset)     | FastCGI target `host:port` or `unix:/path` (PHP-FPM) |
 | `--server-name=` | `localhost` | `ServerName`      |
 | `--workers=`     | CPU count   | `worker_processes` (one isolate per core, shared socket) |
+| `--advertise-h3=`| (unset)     | Advertise HTTP/3 on this UDP port via the `Alt-Svc` header |
 
 Then open `http://127.0.0.1:8080/`.
 
@@ -58,7 +59,14 @@ TLS 1.3, self-signed cert):
 dart run bin/dart_apache_h3.dart --root=./public --port=4433
 ```
 
-Fetch it with the vendored H3 client:
+Advertise it from the HTTP/1.1 server so clients discover and upgrade to QUIC
+(`Alt-Svc: h3=":4433"; ma=86400` on every response):
+
+```sh
+dart run bin/dart_apache.dart --root=./public --port=8080 --advertise-h3=4433
+```
+
+Fetch h3 directly with the vendored H3 client:
 
 ```sh
 cd third_party/dart_quiche

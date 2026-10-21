@@ -17,6 +17,25 @@ void main() {
     });
   });
 
+  group('Alt-Svc advertisement', () {
+    test('disabled by default', () {
+      final config = ServerConfig(documentRoot: '.');
+      expect(config.altSvcHeader, isNull);
+    });
+
+    test('advertises h3 on the configured port', () {
+      final config =
+          ServerConfig(documentRoot: '.', altSvcH3Port: 443, altSvcMaxAge: 3600);
+      expect(config.altSvcHeader, 'h3=":443"; ma=3600');
+    });
+
+    test('parses --advertise-h3 flag', () {
+      final config = ServerConfig.fromArgs(['--advertise-h3=4433']);
+      expect(config.altSvcH3Port, 4433);
+      expect(config.altSvcHeader, 'h3=":4433"; ma=86400');
+    });
+  });
+
   group('RequestResolver', () {
     late Directory root;
     late RequestResolver resolver;
