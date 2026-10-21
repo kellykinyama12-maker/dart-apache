@@ -4,6 +4,10 @@ library;
 
 export 'src/config.dart';
 export 'src/mime_types.dart';
+export 'src/client/alt_svc.dart';
+export 'src/client/alt_svc_client.dart';
+export 'src/client/client_response.dart';
+export 'src/client/h3_client.dart';
 export 'src/php/cgi_backend.dart';
 export 'src/php/cgi_params.dart';
 export 'src/php/fastcgi.dart';

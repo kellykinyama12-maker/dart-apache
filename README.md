@@ -73,6 +73,27 @@ cd third_party/dart_quiche
 dart run bin/interop_h3_get.dart 127.0.0.1 4433 localhost /
 ```
 
+## Pure-Dart client with automatic HTTP/3 upgrade
+
+`AltSvcHttpClient` is a client for Dart apps that starts on HTTP/1.1, reads the
+`Alt-Svc` header, and **transparently upgrades to HTTP/3** for later requests to
+the same origin (falling back to HTTP/1.1 if QUIC fails):
+
+```dart
+import 'package:dart_apache/dart_apache.dart';
+
+final client = AltSvcHttpClient();
+final first = await client.get(Uri.parse('http://127.0.0.1:8080/')); // http/1.1
+final second = await client.get(Uri.parse('http://127.0.0.1:8080/')); // h3
+print('${first.protocol} then ${second.protocol}'); // http/1.1 then h3
+```
+
+Demo (run the h1 server with `--advertise-h3=4433` and the h3 server on 4433):
+
+```sh
+dart run bin/dart_apache_client.dart http://127.0.0.1:8080/
+```
+
 ## Project layout
 
 - `bin/dart_apache.dart` — entry point / CLI.
@@ -84,7 +105,9 @@ dart run bin/interop_h3_get.dart 127.0.0.1 4433 localhost /
 - `lib/src/php/` — PHP backends: streaming `php-cgi` (CGI) and FastCGI (PHP-FPM),
   shared CGI param/response handling.
 - `lib/src/http3/` — experimental HTTP/3 (QUIC) server over `dart_quiche`.
+- `lib/src/client/` — Alt-Svc-aware HTTP client that auto-upgrades to HTTP/3.
 - `lib/src/mime_types.dart` — MIME type table.
 - `lib/src/config.dart` — server configuration.
 - `bin/dart_apache_h3.dart` — experimental HTTP/3 entry point.
+- `bin/dart_apache_client.dart` — Alt-Svc auto-upgrade client demo.
 - `public/` — sample DocumentRoot with a PHP page and a static page.

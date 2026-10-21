@@ -17,3 +17,6 @@
   serves static files and PHP via `php-cgi`.
 - HTTP/3 discovery: the HTTP/1.1 server advertises HTTP/3 via the `Alt-Svc`
   header (`--advertise-h3=PORT`), so capable clients upgrade to QUIC.
+- Pure-Dart `AltSvcHttpClient`: an HTTP client that discovers HTTP/3 from the
+  `Alt-Svc` header and transparently upgrades subsequent requests to HTTP/3
+  (with HTTP/1.1 fallback); demo in `bin/dart_apache_client.dart`.
