@@ -1,0 +1,58 @@
+# dart-apache
+
+A Dart web server that serves static files and executes PHP, following the
+request-handling model of the Apache HTTP Server.
+
+Like Apache, this server does not interpret PHP itself. It delegates PHP
+execution to the `php-cgi` binary over the CGI/1.1 protocol: request metadata is
+passed as environment variables, the request body is piped to the interpreter's
+stdin, and the response (headers + body) is read back from its stdout.
+
+## Features (Apache equivalents)
+
+- **DocumentRoot** — serves static files with correct `Content-Type` (MIME) and
+  `Content-Length`.
+- **DirectoryIndex** — a request for a directory serves `index.php`, then
+  `index.html`.
+- **PHP via CGI** — runs `php-cgi` with a full CGI environment
+  (`SCRIPT_FILENAME`, `QUERY_STRING`, `REQUEST_METHOD`, `CONTENT_LENGTH`,
+  `PATH_INFO`, `REMOTE_ADDR`, `SERVER_*`, all `HTTP_*` request headers, and
+  `REDIRECT_STATUS`).
+- **PATH_INFO** — `/info.php/a/b` runs `info.php` with `PATH_INFO=/a/b`.
+- **Security** — directory traversal outside the DocumentRoot is rejected with
+  `403`; missing paths return `404`.
+- **Logging** — access logs in Common Log Format, like Apache's `access_log`.
+
+## Requirements
+
+- Dart SDK.
+- `php-cgi` on your `PATH` (or point to it with `--php-cgi=`).
+
+## Usage
+
+```sh
+dart run bin/dart_apache.dart --root=./public --port=8080
+```
+
+Flags:
+
+| Flag             | Default     | Apache equivalent |
+| ---------------- | ----------- | ----------------- |
+| `--address=`     | `127.0.0.1` | `Listen` address  |
+| `--port=`        | `8080`      | `Listen` port     |
+| `--root=`        | current dir | `DocumentRoot`    |
+| `--php-cgi=`     | `php-cgi`   | CGI handler       |
+| `--server-name=` | `localhost` | `ServerName`      |
+
+Then open `http://127.0.0.1:8080/`.
+
+## Project layout
+
+- `bin/dart_apache.dart` — entry point / CLI.
+- `lib/src/server.dart` — HTTP server and request dispatch.
+- `lib/src/request_resolver.dart` — URL-to-filesystem mapping, DirectoryIndex,
+  PATH_INFO splitting, traversal protection.
+- `lib/src/php_handler.dart` — `php-cgi` CGI execution and response parsing.
+- `lib/src/mime_types.dart` — MIME type table.
+- `lib/src/config.dart` — server configuration.
+- `public/` — sample DocumentRoot with a PHP page and a static page.
