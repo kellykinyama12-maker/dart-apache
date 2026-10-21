@@ -9,6 +9,10 @@ environment:
 # Add regular dependencies here.
 dependencies:
   path: ^1.9.0
+  # HTTP/3 (QUIC) stack, vendored locally so it can be edited/hardened.
+  # Pure-Dart port of Cloudflare's quiche; see docs/04-protocols.md.
+  dart_quiche:
+    path: third_party/dart_quiche
 
 dev_dependencies:
   lints: ^6.0.0

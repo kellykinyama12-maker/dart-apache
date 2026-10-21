@@ -73,6 +73,10 @@ internal `Http3Transport` interface. It already provides QUIC v1/v2, TLS 1.3,
 loss recovery and congestion control, HTTP/3 framing, QPACK, and WebTransport,
 with a minimal HTTP/3 server example (`bin/h3_server.dart`) and 486 unit tests.
 
+It is **vendored** at `third_party/dart_quiche` and wired as a `path` dependency
+in [../pubspec.yaml](../pubspec.yaml), so we can patch/harden it in-tree (e.g.
+PKI validation) without waiting on upstream releases.
+
 **Caveats to close before production** (track as Phase 4 work):
 - Package is pre-1.0 (`0.1.0-dev.3`) and from an unverified publisher — pin the
   version, vendor/fork if needed, and add our own conformance gating.
