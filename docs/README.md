@@ -25,3 +25,26 @@ path to **HTTP/3 (QUIC)**, TLS, reverse proxying, and horizontal scalability.
 Start with [01-vision-and-goals.md](01-vision-and-goals.md), then
 [02-gap-analysis.md](02-gap-analysis.md), then follow the numbered sequence.
 The [10-roadmap.md](10-roadmap.md) ties every capability to a delivery phase.
+
+## Current status (snapshot)
+
+Implemented in the prototype today:
+
+- Non-blocking HTTP/1.1 server, **worker-per-core isolates** over a shared
+  socket, with **respawn** and **zero-downtime reload** (SIGHUP on POSIX).
+- Static file serving (MIME, DirectoryIndex) and **directory-traversal**
+  protection.
+- **PHP** via streaming `php-cgi` (CGI/1.1) and **FastCGI/PHP-FPM**
+  (`--php-fpm=`), with end-to-end **back-pressure**.
+- Common Log Format access logging.
+
+Planned (see [10-roadmap.md](10-roadmap.md)):
+
+- HTTP/2, HTTP/3 (QUIC via vendored `dart_quiche`), TLS 1.3.
+- Reverse proxy + load balancing, WebSocket (origin + proxy), WebTransport.
+- Caching, declarative config, observability (metrics/tracing), security
+  hardening, benchmarking/soak → GA.
+
+> Note: FastCGI and SIGHUP reload are POSIX-oriented and not yet exercised
+> end-to-end on Windows (no PHP-FPM / no SIGHUP there). See
+> [02-gap-analysis.md](02-gap-analysis.md).
