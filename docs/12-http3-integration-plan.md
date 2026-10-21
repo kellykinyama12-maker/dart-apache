@@ -197,16 +197,18 @@ accept model does not directly apply. Plan:
 | H3-1 ✅ | Define `ServerExchange` / `ServerResponse` contract | `lib/src/pipeline/server_exchange.dart`; handlers compile against it |
 | H3-2 ✅ | Port static + PHP handlers to the contract | `RequestPipeline` serves static + PHP; HTTP/1.1 runs via it; tests green |
 | H3-3 ✅ | HTTP/3 server adapts `dart_quiche` to the contract | h3 serves static + PHP through the **same** pipeline (verified) |
-| H3-4 | **Streaming** h3 responses + request-body back-pressure | Large body streamed over h3 without full buffering |
+| H3-4 ✅ | **Streaming** h3 responses (per-chunk DATA + flush) | Large static (200 KB) + PHP streamed over h3 without full-body buffering |
 | H3-5 | Real certs + SNI + `--dev` self-signed; silence cert debug | TLS cert loaded from file; no stray stdout |
 | H3-6 | Multi-isolate UDP acceptor + CID affinity via supervisor | h3 served across all cores; respawn/reload work |
 | H3-7 | GOAWAY drain, migration, Alt-Svc advertisement | Zero-dropped-stream reload; `Alt-Svc` upgrades clients |
 | H3-8 | quic-interop + load/soak; qlog + metrics | Interop targets pass; metrics/qlog available |
 
-> **Status:** H3-1..H3-3 are **done** — both HTTP/1.1 and HTTP/3 now run through
-> the single [`RequestPipeline`](../lib/src/pipeline/request_pipeline.dart) via
-> transport adapters (`HttpExchange`, the h3 `_H3Exchange`). The h3 response is
-> still buffered (H3-4 streams it next).
+> **Status:** H3-1..H3-4 are **done** — both HTTP/1.1 and HTTP/3 run through the
+> single [`RequestPipeline`](../lib/src/pipeline/request_pipeline.dart), and the
+> h3 response body now **streams** (HEADERS on first chunk, a DATA frame per
+> chunk flushed to the socket, FIN on close). Remaining: request-body streaming
+> into PHP (h3 still collects the request body before dispatch) and true
+> window-aware write back-pressure.
 
 ## Risks
 

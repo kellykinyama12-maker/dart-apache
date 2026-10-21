@@ -171,17 +171,18 @@ class Http3PhpServer {
     _txAll(session);
   }
 
-  /// Sends a buffered HTTP/3 response (called by the response sink on close).
-  void _deliver(
+  /// Sends the response HEADERS frame (QPACK-encoded). [fin] closes the stream
+  /// for headers-only / empty-body responses.
+  void _sendHeaders(
     _Session session,
     int streamId,
     int status,
-    Map<String, List<String>> headers,
-    List<int> body,
-  ) {
+    Map<String, List<String>> headers, {
+    required bool fin,
+  }) {
     final h3Headers = <H3Header>[_h3Header(':status', '$status')];
     headers.forEach((name, values) {
-      if (name == ':status' || name == 'content-length') return;
+      if (name == ':status') return;
       for (final value in values) {
         h3Headers.add(_h3Header(name, value));
       }
@@ -189,15 +190,20 @@ class Http3PhpServer {
     if (!headers.containsKey('server')) {
       h3Headers.add(_h3Header('server', config.serverSoftware));
     }
-    h3Headers.add(_h3Header('content-length', '${body.length}'));
+    session.h3!.sendResponse(streamId, h3Headers, fin: fin);
+    _txAll(session);
+  }
 
-    session.h3!.sendResponse(
-      streamId,
-      h3Headers,
-      body: Uint8List.fromList(body),
-      fin: true,
-    );
-    _log('→ stream $streamId: $status (${body.length}B)');
+  /// Streams one body chunk (DATA frame) and flushes it to the socket, giving
+  /// soft back-pressure as the source produces data.
+  void _sendData(
+    _Session session,
+    int streamId,
+    List<int> chunk, {
+    required bool fin,
+  }) {
+    session.h3!.sendData(streamId, Uint8List.fromList(chunk), fin: fin);
+    _txAll(session);
   }
 
   void _txAll(_Session session) {
@@ -318,8 +324,8 @@ class _H3Exchange implements ServerExchange {
       _H3ResponseSink(_server, _session, _streamId);
 }
 
-/// Buffers a response and delivers it over HTTP/3 on close. (Streaming h3
-/// responses is a follow-up; see docs/12-http3-integration-plan.md.)
+/// Streams a response over HTTP/3: HEADERS on the first body chunk, then a DATA
+/// frame per chunk (each flushed to the socket), then FIN on close.
 class _H3ResponseSink implements ServerResponse {
   _H3ResponseSink(this._server, this._session, this._streamId);
 
@@ -327,8 +333,8 @@ class _H3ResponseSink implements ServerResponse {
   final _Session _session;
   final int _streamId;
   final Map<String, List<String>> _headers = {};
-  final BytesBuilder _body = BytesBuilder(copy: false);
   int _status = 200;
+  bool _headersSent = false;
 
   @override
   int get statusCode => _status;
@@ -340,21 +346,29 @@ class _H3ResponseSink implements ServerResponse {
   void setHeader(String name, String value) =>
       _headers.putIfAbsent(name.toLowerCase(), () => <String>[]).add(value);
 
+  void _ensureHeaders() {
+    if (_headersSent) return;
+    _headersSent = true;
+    _server._sendHeaders(_session, _streamId, _status, _headers, fin: false);
+  }
+
   @override
   Future<void> addStream(Stream<List<int>> body) async {
     await for (final chunk in body) {
-      _body.add(chunk);
+      _ensureHeaders();
+      if (chunk.isNotEmpty) {
+        _server._sendData(_session, _streamId, chunk, fin: false);
+      }
     }
   }
 
   @override
   Future<void> close() async {
-    _server._deliver(
-      _session,
-      _streamId,
-      _status,
-      _headers,
-      _body.takeBytes(),
-    );
+    if (_headersSent) {
+      _server._sendData(_session, _streamId, const [], fin: true);
+    } else {
+      // Headers-only / empty body (e.g. HEAD, 304): close with the headers.
+      _server._sendHeaders(_session, _streamId, _status, _headers, fin: true);
+    }
   }
 }
