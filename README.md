@@ -48,6 +48,23 @@ Flags:
 
 Then open `http://127.0.0.1:8080/`.
 
+## HTTP/3 (experimental)
+
+A proof-of-concept HTTP/3 (QUIC) server serves the same static files and PHP
+over the pure-Dart [`dart_quiche`](third_party/dart_quiche) transport (QUIC +
+TLS 1.3, self-signed cert):
+
+```sh
+dart run bin/dart_apache_h3.dart --root=./public --port=4433
+```
+
+Fetch it with the vendored H3 client:
+
+```sh
+cd third_party/dart_quiche
+dart run bin/interop_h3_get.dart 127.0.0.1 4433 localhost /
+```
+
 ## Project layout
 
 - `bin/dart_apache.dart` — entry point / CLI.
@@ -58,6 +75,8 @@ Then open `http://127.0.0.1:8080/`.
   PATH_INFO splitting, traversal protection.
 - `lib/src/php/` — PHP backends: streaming `php-cgi` (CGI) and FastCGI (PHP-FPM),
   shared CGI param/response handling.
+- `lib/src/http3/` — experimental HTTP/3 (QUIC) server over `dart_quiche`.
 - `lib/src/mime_types.dart` — MIME type table.
 - `lib/src/config.dart` — server configuration.
+- `bin/dart_apache_h3.dart` — experimental HTTP/3 entry point.
 - `public/` — sample DocumentRoot with a PHP page and a static page.

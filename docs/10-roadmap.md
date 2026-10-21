@@ -54,6 +54,13 @@ loss.
 
 ## Phase 4 — HTTP/3 (QUIC)
 **Goal:** the headline capability.
+
+> **Status:** a working proof-of-concept exists
+> ([`lib/src/http3/h3_php_server.dart`](../lib/src/http3/h3_php_server.dart),
+> run via `bin/dart_apache_h3.dart`): it terminates QUIC + TLS 1.3, speaks
+> HTTP/3, and serves static files + PHP (`php-cgi`) — verified with
+> `dart_quiche`'s H3 client. Remaining work below hardens and integrates it.
+
 - Adopt **[`dart_quiche`](https://pub.dev/packages/dart_quiche)** (pure-Dart
   QUIC + HTTP/3, no FFI) behind the `ServerTransport` / `Http3Transport`
   interface; build `http3/` on top of it.

@@ -18,6 +18,7 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | Worker respawn + reload | ✅ respawn + zero-downtime SIGHUP reload | `lib/src/supervisor.dart` |
 | Streaming PHP (back-pressure) | ✅ request + response streamed | `lib/src/php/` |
 | FastCGI (PHP-FPM) | ✅ `--php-fpm=host:port` or `unix:/path` | `lib/src/php/fastcgi.dart` |
+| HTTP/3 + PHP (PoC) | ✅ QUIC/TLS 1.3 + h3, static + `php-cgi` | `lib/src/http3/h3_php_server.dart` |
 | Config via CLI flags | ✅ minimal | `lib/src/config.dart` |
 
 ## Gaps to close
@@ -26,8 +27,8 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | --- | --- | --- |
 | **Concurrency** | ✅ multi-isolate acceptors over a shared port | Add master supervisor + rolling restart |
 | **HTTP/2** | None | Full h2 (streams, HPACK, flow control, priorities) |
-| **HTTP/3 / QUIC** | None | QUIC transport + HTTP/3 (QPACK) |
-| **TLS** | None | TLS 1.3, ALPN, SNI, OCSP stapling, cert rotation |
+| **HTTP/3 / QUIC** | ✅ experimental PoC: static + PHP over h3 (`dart_quiche`) | Harden, integrate into main pipeline, conformance |
+| **TLS** | h3 uses TLS 1.3 (self-signed, via `dart_quiche`) | TLS 1.3 for h1/h2, ALPN, SNI, OCSP, cert rotation |
 | **Reverse proxy** | None | HTTP/FastCGI/SCGI upstreams, keep-alive pools |
 | **Load balancing** | None | round-robin, least-conn, hashing, health checks |
 | **WebSocket** | None | Origin upgrade (RFC 6455/8441) + proxy passthrough (Phase 2–3) |
