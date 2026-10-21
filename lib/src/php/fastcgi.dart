@@ -4,6 +4,7 @@ import 'dart:io' hide BytesBuilder;
 import 'dart:typed_data';
 
 import '../config.dart';
+import '../pipeline/server_exchange.dart';
 import 'cgi_params.dart';
 import 'php_backend.dart';
 
@@ -140,14 +141,14 @@ class FastCgiBackend implements PhpBackend {
 
   @override
   Future<PhpResponse> handle({
-    required HttpRequest request,
+    required ServerExchange exchange,
     required String scriptFilename,
     required String scriptName,
     required String pathInfo,
   }) async {
     final params = buildCgiParams(
       config: config,
-      request: request,
+      exchange: exchange,
       scriptFilename: scriptFilename,
       scriptName: scriptName,
       pathInfo: pathInfo,
@@ -175,7 +176,7 @@ class FastCgiBackend implements PhpBackend {
     socket.add(encodeFcgiRecord(FcgiType.params, _requestId, const []));
 
     // STDIN: stream the request body, terminated by an empty STDIN record.
-    unawaited(_pumpStdin(request, socket));
+    unawaited(_pumpStdin(exchange.body, socket));
 
     // Decode STDOUT into a byte stream for the shared CGI parser; log STDERR.
     final stdoutController = StreamController<List<int>>();
@@ -230,9 +231,9 @@ class FastCgiBackend implements PhpBackend {
     );
   }
 
-  Future<void> _pumpStdin(HttpRequest request, Socket socket) async {
+  Future<void> _pumpStdin(Stream<List<int>> body, Socket socket) async {
     try {
-      await for (final chunk in request) {
+      await for (final chunk in body) {
         for (final part in _chunked(chunk)) {
           socket.add(encodeFcgiRecord(FcgiType.stdin, _requestId, part));
         }

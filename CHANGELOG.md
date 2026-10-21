@@ -17,6 +17,9 @@
 - Request limits: configurable keep-alive idle timeout (`--idle-timeout`) and
   max request body (`--max-body`, returns `413`).
 - Linux cross-compilation helper (`tool/build_linux.dart`) and AOT build docs.
+- Unified, transport-agnostic request pipeline (`ServerExchange` / `ServerResponse`
+  contract + `RequestPipeline`): HTTP/1.1 and HTTP/3 now share one set of static
+  and PHP handlers via thin per-transport adapters.
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.

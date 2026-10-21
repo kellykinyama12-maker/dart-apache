@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../config.dart';
+import '../pipeline/server_exchange.dart';
 import 'cgi_params.dart';
 import 'php_backend.dart';
 
@@ -16,14 +17,14 @@ class CgiBackend implements PhpBackend {
 
   @override
   Future<PhpResponse> handle({
-    required HttpRequest request,
+    required ServerExchange exchange,
     required String scriptFilename,
     required String scriptName,
     required String pathInfo,
   }) async {
     final env = buildCgiParams(
       config: config,
-      request: request,
+      exchange: exchange,
       scriptFilename: scriptFilename,
       scriptName: scriptName,
       pathInfo: pathInfo,
@@ -40,7 +41,7 @@ class CgiBackend implements PhpBackend {
     // Stream the request body to the interpreter (back-pressure in). Errors
     // (e.g. client abort) just close stdin.
     unawaited(
-      request.cast<List<int>>().pipe(process.stdin).catchError((_) {}),
+      exchange.body.cast<List<int>>().pipe(process.stdin).catchError((_) {}),
     );
 
     // Collect stderr for diagnostics if the process fails without output.

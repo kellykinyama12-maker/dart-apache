@@ -20,6 +20,7 @@ path to **HTTP/3 (QUIC)**, TLS, reverse proxying, and horizontal scalability.
 | [10-roadmap.md](10-roadmap.md) | Phased delivery plan with milestones and exit criteria |
 | [11-testing-and-release.md](11-testing-and-release.md) | Test strategy, CI, compliance, release process |
 | [12-http3-integration-plan.md](12-http3-integration-plan.md) | **HTTP/3-first**: status of the h3 PoC + plan to route HTTP/3 through the unified pipeline |
+| [13-wsl-linux-testing.md](13-wsl-linux-testing.md) | What must be verified on WSL/Linux (FastCGI, SIGHUP reload, h3) |
 
 ## Reading order
 

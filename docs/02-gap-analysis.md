@@ -19,6 +19,7 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | Streaming PHP (back-pressure) | ✅ request + response streamed | `lib/src/php/` |
 | FastCGI (PHP-FPM) | ✅ `--php-fpm=host:port` or `unix:/path` | `lib/src/php/fastcgi.dart` |
 | HTTP/3 + PHP (PoC) | ✅ QUIC/TLS 1.3 + h3, static + `php-cgi` | `lib/src/http3/h3_php_server.dart` |
+| Unified request pipeline | ✅ h1 + h3 share one transport-agnostic pipeline | `lib/src/pipeline/` |
 | Config via CLI flags | ✅ minimal | `lib/src/config.dart` |
 
 ## Gaps to close

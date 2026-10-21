@@ -5,6 +5,8 @@ import 'dart:typed_data' show BytesBuilder;
 
 import 'package:path/path.dart' as p;
 
+import '../pipeline/server_exchange.dart';
+
 /// A streamed PHP/CGI response: parsed status and headers, plus a body stream
 /// that carries back-pressure from the client all the way back to the
 /// interpreter (php-cgi stdout or a FastCGI stream).
@@ -30,7 +32,7 @@ class PhpResponse {
 /// Implemented by the CGI (`php-cgi`) and FastCGI (PHP-FPM) backends.
 abstract interface class PhpBackend {
   Future<PhpResponse> handle({
-    required HttpRequest request,
+    required ServerExchange exchange,
     required String scriptFilename,
     required String scriptName,
     required String pathInfo,

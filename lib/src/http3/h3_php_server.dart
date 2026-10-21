@@ -9,22 +9,20 @@ import 'package:dart_quiche/dart_quiche.dart' hide Stream;
 import 'package:dart_quiche/src/handshake_keys.dart';
 
 import '../config.dart';
-import '../mime_types.dart';
-import '../php/php_backend.dart';
-import '../request_resolver.dart';
+import '../pipeline/request_pipeline.dart';
+import '../pipeline/server_exchange.dart';
 
 /// An experimental HTTP/3 (QUIC) server that serves static files and runs PHP
-/// via `php-cgi`, using the pure-Dart `dart_quiche` transport. This is the
-/// Phase 4 proof-of-concept: it terminates QUIC + TLS 1.3, speaks HTTP/3, and
-/// maps each request onto the same document-root resolution and CGI execution
-/// used by the HTTP/1.1 server.
+/// using the pure-Dart `dart_quiche` transport. It terminates QUIC + TLS 1.3,
+/// speaks HTTP/3, and adapts each request to the shared [RequestPipeline] — the
+/// same handlers the HTTP/1.1 server uses.
 class Http3PhpServer {
   Http3PhpServer(this.config, {this.verbose = false})
-      : _resolver = RequestResolver(config);
+      : _pipeline = RequestPipeline(config);
 
   final ServerConfig config;
   final bool verbose;
-  final RequestResolver _resolver;
+  final RequestPipeline _pipeline;
 
   late final RawDatagramSocket _socket;
   late final _cert = generateSelfSignedP256Cert();
@@ -40,7 +38,7 @@ class Http3PhpServer {
     stdout.writeln('dart-apache HTTP/3 serving "${config.documentRoot}"');
     stdout.writeln('Listening on https://${config.address}:${config.port}/ '
         '(QUIC/UDP)');
-    stdout.writeln('PHP handler: ${config.phpCgiPath}');
+    stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
 
     _socket.listen(_onSocketEvent);
   }
@@ -158,142 +156,48 @@ class Http3PhpServer {
     }
   }
 
-  /// Handles one completed request: resolve, execute, and respond — then flush
-  /// any resulting QUIC packets.
+  /// Handles one completed request by adapting it to a [ServerExchange] and
+  /// running the shared pipeline, then flushing any resulting QUIC packets.
   Future<void> _dispatch(_Session session, int streamId, _ReqState req) async {
     if (req.responded) return;
     req.responded = true;
 
+    final exchange = _H3Exchange(this, session, streamId, req);
     try {
-      final request = _parseRequest(req);
-      final response = await _serve(session, request);
-      _send(session, streamId, response);
+      await _pipeline.serve(exchange);
     } catch (e) {
       _log('request error: $e');
-      _send(
-        session,
-        streamId,
-        _H3Response.text(500, 'Internal Server Error\n'),
-      );
     }
     _txAll(session);
   }
 
-  Future<_H3Response> _serve(_Session session, _H3Request request) async {
-    final resolution = _resolver.resolve(request.path);
-    switch (resolution.kind) {
-      case ResolutionKind.staticFile:
-        final bytes = await File(resolution.filePath).readAsBytes();
-        return _H3Response(
-          200,
-          {'content-type': mimeTypeFor(resolution.filePath)},
-          bytes,
-        );
-      case ResolutionKind.phpScript:
-        return _runPhp(session, request, resolution);
-      case ResolutionKind.forbidden:
-        return _H3Response.text(403, 'Forbidden\n');
-      case ResolutionKind.notFound:
-        return _H3Response.text(404, 'Not Found\n');
-    }
-  }
-
-  Future<_H3Response> _runPhp(
+  /// Sends a buffered HTTP/3 response (called by the response sink on close).
+  void _deliver(
     _Session session,
-    _H3Request request,
-    Resolution resolution,
-  ) async {
-    final env = _buildCgiEnv(session, request, resolution);
-    final process = await Process.start(
-      config.phpCgiPath,
-      const [],
-      environment: env,
-      includeParentEnvironment: false,
-    );
-
-    if (request.body.isNotEmpty) process.stdin.add(request.body);
-    unawaited(process.stdin.close().catchError((_) {}));
-
-    final stderrBytes = <int>[];
-    final stderrDone = process.stderr.forEach(stderrBytes.addAll);
-
-    final php = await parseCgiStream(
-      process.stdout,
-      logTag: 'php-cgi',
-      onEmpty: () async {
-        await stderrDone;
-        final code = await process.exitCode;
-        return 'php-cgi exited with code $code';
-      },
-    );
-
-    final body = await _collect(php.body);
-    final headers = <String, String>{};
-    php.headers.forEach((name, values) {
-      headers[name.toLowerCase()] = values.join(', ');
-    });
-    headers.putIfAbsent('content-type', () => 'text/html; charset=UTF-8');
-    return _H3Response(php.statusCode, headers, body);
-  }
-
-  Map<String, String> _buildCgiEnv(
-    _Session session,
-    _H3Request request,
-    Resolution resolution,
+    int streamId,
+    int status,
+    Map<String, List<String>> headers,
+    List<int> body,
   ) {
-    final env = <String, String>{
-      'GATEWAY_INTERFACE': 'CGI/1.1',
-      'SERVER_SOFTWARE': config.serverSoftware,
-      'SERVER_PROTOCOL': 'HTTP/3.0',
-      'SERVER_NAME': config.serverName,
-      'SERVER_ADDR': config.address,
-      'SERVER_PORT': '${config.port}',
-      'DOCUMENT_ROOT': config.documentRoot,
-      'REQUEST_METHOD': request.method,
-      'REQUEST_URI': request.requestUri,
-      'QUERY_STRING': request.query,
-      'SCRIPT_NAME': resolution.scriptName,
-      'SCRIPT_FILENAME': resolution.filePath,
-      'PATH_TRANSLATED': resolution.filePath,
-      'REMOTE_ADDR': session.addr.address,
-      'REMOTE_PORT': '${session.port}',
-      'HTTPS': 'on',
-      'REDIRECT_STATUS': '200',
-    };
-    if (resolution.pathInfo.isNotEmpty) {
-      env['PATH_INFO'] = resolution.pathInfo;
-    }
-    final contentType = request.headers['content-type'];
-    if (contentType != null) env['CONTENT_TYPE'] = contentType;
-    if (request.body.isNotEmpty) {
-      env['CONTENT_LENGTH'] = '${request.body.length}';
-    }
-    request.headers.forEach((name, value) {
-      final key = 'HTTP_${name.toUpperCase().replaceAll('-', '_')}';
-      env[key] = value;
+    final h3Headers = <H3Header>[_h3Header(':status', '$status')];
+    headers.forEach((name, values) {
+      if (name == ':status' || name == 'content-length') return;
+      for (final value in values) {
+        h3Headers.add(_h3Header(name, value));
+      }
     });
-    return env;
-  }
-
-  void _send(_Session session, int streamId, _H3Response response) {
-    final headers = <H3Header>[
-      _h3Header(':status', '${response.statusCode}'),
-      _h3Header('content-length', '${response.body.length}'),
-      _h3Header('server', config.serverSoftware),
-    ];
-    response.headers.forEach((name, value) {
-      if (name == 'content-length' || name == ':status') return;
-      headers.add(_h3Header(name, value));
-    });
+    if (!headers.containsKey('server')) {
+      h3Headers.add(_h3Header('server', config.serverSoftware));
+    }
+    h3Headers.add(_h3Header('content-length', '${body.length}'));
 
     session.h3!.sendResponse(
       streamId,
-      headers,
-      body: Uint8List.fromList(response.body),
+      h3Headers,
+      body: Uint8List.fromList(body),
       fin: true,
     );
-    _log('→ stream $streamId: ${response.statusCode} '
-        '(${response.body.length}B)');
+    _log('→ stream $streamId: $status (${body.length}B)');
   }
 
   void _txAll(_Session session) {
@@ -312,51 +216,10 @@ class Http3PhpServer {
     }
   }
 
-  _H3Request _parseRequest(_ReqState req) {
-    var method = 'GET';
-    var target = '/';
-    final headers = <String, String>{};
-    for (final h in req.headers ?? const <H3Header>[]) {
-      final name = String.fromCharCodes(h.name);
-      final value = String.fromCharCodes(h.value);
-      switch (name) {
-        case ':method':
-          method = value;
-        case ':path':
-          target = value;
-        case ':scheme':
-        case ':authority':
-        case ':protocol':
-          break; // other pseudo-headers are not CGI vars
-        default:
-          headers[name] = value;
-      }
-    }
-    final q = target.indexOf('?');
-    final path = q < 0 ? target : target.substring(0, q);
-    final query = q < 0 ? '' : target.substring(q + 1);
-    return _H3Request(
-      method: method,
-      path: Uri.decodeComponent(path),
-      query: query,
-      requestUri: target,
-      headers: headers,
-      body: req.body.takeBytes(),
-    );
-  }
-
   H3Header _h3Header(String name, String value) => H3Header(
         Uint8List.fromList(name.codeUnits),
         Uint8List.fromList(value.codeUnits),
       );
-
-  Future<List<int>> _collect(Stream<List<int>> stream) async {
-    final out = <int>[];
-    await for (final chunk in stream) {
-      out.addAll(chunk);
-    }
-    return out;
-  }
 
   void _log(String message) {
     if (verbose) stdout.writeln('  $message');
@@ -385,33 +248,113 @@ class _ReqState {
   bool responded = false;
 }
 
-class _H3Request {
-  _H3Request({
-    required this.method,
-    required this.path,
-    required this.query,
-    required this.requestUri,
-    required this.headers,
-    required this.body,
-  });
+/// Adapts a completed HTTP/3 request to the [ServerExchange] contract.
+class _H3Exchange implements ServerExchange {
+  _H3Exchange(this._server, this._session, this._streamId, _ReqState req)
+      : _bodyBytes = req.body.takeBytes() {
+    for (final h in req.headers ?? const <H3Header>[]) {
+      final name = String.fromCharCodes(h.name);
+      final value = String.fromCharCodes(h.value);
+      switch (name) {
+        case ':method':
+          _method = value;
+        case ':path':
+          _target = value;
+        case ':scheme':
+        case ':authority':
+        case ':protocol':
+          break; // pseudo-headers are not CGI/request headers
+        default:
+          _headers[name.toLowerCase()] = value;
+      }
+    }
+  }
 
-  final String method;
-  final String path;
-  final String query;
-  final String requestUri;
-  final Map<String, String> headers;
-  final List<int> body;
+  final Http3PhpServer _server;
+  final _Session _session;
+  final int _streamId;
+  final List<int> _bodyBytes;
+  final Map<String, String> _headers = {};
+  String _method = 'GET';
+  String _target = '/';
+
+  @override
+  String get method => _method;
+
+  @override
+  Uri get uri => Uri.parse(_target);
+
+  @override
+  String get protocolVersion => '3';
+
+  @override
+  String get scheme => 'https';
+
+  @override
+  String get protocol => 'h3';
+
+  @override
+  String get remoteAddress => _session.addr.address;
+
+  @override
+  int get remotePort => _session.port;
+
+  @override
+  int get contentLength => _bodyBytes.length;
+
+  @override
+  String? get contentType => _headers['content-type'];
+
+  @override
+  void forEachHeader(void Function(String name, String value) action) =>
+      _headers.forEach(action);
+
+  @override
+  Stream<List<int>> get body =>
+      _bodyBytes.isEmpty ? const Stream.empty() : Stream.value(_bodyBytes);
+
+  @override
+  ServerResponse respond() =>
+      _H3ResponseSink(_server, _session, _streamId);
 }
 
-class _H3Response {
-  _H3Response(this.statusCode, this.headers, this.body);
+/// Buffers a response and delivers it over HTTP/3 on close. (Streaming h3
+/// responses is a follow-up; see docs/12-http3-integration-plan.md.)
+class _H3ResponseSink implements ServerResponse {
+  _H3ResponseSink(this._server, this._session, this._streamId);
 
-  _H3Response.text(int status, String text)
-      : statusCode = status,
-        headers = {'content-type': 'text/plain; charset=utf-8'},
-        body = text.codeUnits;
+  final Http3PhpServer _server;
+  final _Session _session;
+  final int _streamId;
+  final Map<String, List<String>> _headers = {};
+  final BytesBuilder _body = BytesBuilder(copy: false);
+  int _status = 200;
 
-  final int statusCode;
-  final Map<String, String> headers;
-  final List<int> body;
+  @override
+  int get statusCode => _status;
+
+  @override
+  void setStatus(int statusCode, [String? reasonPhrase]) => _status = statusCode;
+
+  @override
+  void setHeader(String name, String value) =>
+      _headers.putIfAbsent(name.toLowerCase(), () => <String>[]).add(value);
+
+  @override
+  Future<void> addStream(Stream<List<int>> body) async {
+    await for (final chunk in body) {
+      _body.add(chunk);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    _server._deliver(
+      _session,
+      _streamId,
+      _status,
+      _headers,
+      _body.takeBytes(),
+    );
+  }
 }
