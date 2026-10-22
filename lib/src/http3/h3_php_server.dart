@@ -10,6 +10,7 @@ import 'package:dart_quiche/dart_quiche.dart' hide Stream;
 import 'package:dart_quiche/src/handshake_keys.dart';
 
 import '../config.dart';
+import '../pipeline/dart_handler.dart';
 import '../pipeline/request_pipeline.dart';
 import '../pipeline/server_exchange.dart';
 import '../worker_server.dart';
@@ -20,8 +21,8 @@ import '../wt/ticket.dart';
 /// speaks HTTP/3, and adapts each request to the shared [RequestPipeline] — the
 /// same handlers the HTTP/1.1 server uses.
 class Http3PhpServer implements WorkerServer {
-  Http3PhpServer(this.config, {this.verbose = false})
-      : _pipeline = RequestPipeline(config);
+  Http3PhpServer(this.config, {this.verbose = false, DartApp? app})
+      : _pipeline = RequestPipeline(config, app: app);
 
   final ServerConfig config;
   final bool verbose;

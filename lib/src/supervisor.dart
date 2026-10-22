@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'config.dart';
 import 'http3/h3_php_server.dart';
+import 'pipeline/dart_handler.dart';
 import 'server.dart';
 import 'unified_server.dart';
 import 'worker_server.dart';
@@ -20,10 +21,16 @@ enum WorkerKind { http1, http3, unified }
 ///   spawned on the same shared socket, then the old generation is told to
 ///   drain in-flight requests and exit.
 class ServerSupervisor {
-  ServerSupervisor(this.config, {this.kind = WorkerKind.http1});
+  ServerSupervisor(this.config, {this.kind = WorkerKind.http1, this.appBuilder});
 
   final ServerConfig config;
   final WorkerKind kind;
+
+  /// Optional top-level builder invoked inside each worker isolate to construct
+  /// that isolate's in-process Dart route table. Must be a top-level/static
+  /// function so it can cross the isolate boundary.
+  final DartAppBuilder? appBuilder;
+
   final List<_Worker> _workers = [];
 
   bool _stopping = false;
@@ -106,7 +113,7 @@ class ServerSupervisor {
 
     final isolate = await Isolate.spawn(
       _workerMain,
-      _WorkerArgs(config, id, ready.sendPort, kind),
+      _WorkerArgs(config, id, ready.sendPort, kind, appBuilder),
       onExit: exit.sendPort,
       debugName: 'dart-apache-worker-$id',
     );
@@ -205,22 +212,25 @@ class _Worker {
 }
 
 /// Isolate payload: the (sendable) config, worker index, a port used to report
-/// readiness back to the supervisor, and which transport to serve.
+/// readiness back to the supervisor, which transport to serve, and an optional
+/// top-level builder for the per-worker Dart route table.
 class _WorkerArgs {
-  _WorkerArgs(this.config, this.id, this.toSupervisor, this.kind);
+  _WorkerArgs(this.config, this.id, this.toSupervisor, this.kind, this.appBuilder);
   final ServerConfig config;
   final int id;
   final SendPort toSupervisor;
   final WorkerKind kind;
+  final DartAppBuilder? appBuilder;
 }
 
 /// Entry point run inside each worker isolate.
 Future<void> _workerMain(_WorkerArgs args) async {
   final control = ReceivePort();
+  final app = args.appBuilder?.call(args.config);
   final WorkerServer server = switch (args.kind) {
-    WorkerKind.http3 => Http3PhpServer(args.config),
-    WorkerKind.unified => UnifiedServer(args.config),
-    WorkerKind.http1 => ApacheServer(args.config),
+    WorkerKind.http3 => Http3PhpServer(args.config, app: app),
+    WorkerKind.unified => UnifiedServer(args.config, app: app),
+    WorkerKind.http1 => ApacheServer(args.config, app: app),
   };
   await server.start(workerId: args.id);
 

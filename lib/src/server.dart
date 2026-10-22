@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'config.dart';
+import 'pipeline/dart_handler.dart';
 import 'pipeline/http_exchange.dart';
 import 'pipeline/request_pipeline.dart';
 import 'tls/dev_cert.dart';
@@ -13,7 +14,8 @@ import 'worker_server.dart';
 /// transport-agnostic [RequestPipeline]; this class owns the listening socket
 /// and adapts each `dart:io` request to the pipeline.
 class ApacheServer implements WorkerServer {
-  ApacheServer(this.config) : _pipeline = RequestPipeline(config);
+  ApacheServer(this.config, {DartApp? app})
+      : _pipeline = RequestPipeline(config, app: app);
 
   final ServerConfig config;
   final RequestPipeline _pipeline;

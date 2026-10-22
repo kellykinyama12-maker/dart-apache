@@ -9,6 +9,7 @@ import '../php/php_backend.dart';
 import '../proxy/reverse_proxy.dart';
 import '../request_resolver.dart';
 import '../wt/ticket.dart';
+import 'dart_handler.dart';
 import 'server_exchange.dart';
 
 /// Transport-agnostic request handling: resolves a [ServerExchange] against the
@@ -16,7 +17,7 @@ import 'server_exchange.dart';
 /// writing the result to the exchange's [ServerResponse]. Shared by every
 /// transport (HTTP/3, HTTP/1.1, …) so handlers are written once.
 class RequestPipeline {
-  RequestPipeline(this.config)
+  RequestPipeline(this.config, {this.app})
       : _resolver = RequestResolver(config),
         _php = config.phpFpm != null
             ? FastCgiBackend(config)
@@ -26,6 +27,9 @@ class RequestPipeline {
             : ReverseProxyHandler(config.proxyRoutes);
 
   final ServerConfig config;
+
+  /// Optional in-process Dart route table, consulted before static/PHP.
+  final DartApp? app;
   final RequestResolver _resolver;
   final PhpBackend _php;
   final ReverseProxyHandler? _proxy;
@@ -67,6 +71,15 @@ class RequestPipeline {
       final route = _proxy?.routeFor(exchange.uri.path);
       if (route != null) {
         await _proxy!.proxy(exchange, response, route);
+        return;
+      }
+
+      // In-process Dart handlers run before static/PHP so an app can own a
+      // path prefix (e.g. /api) natively over HTTP/3. The handler owns the
+      // response (write + close), like the static/PHP handlers.
+      final dartRoute = app?.match(exchange.method, exchange.uri.path);
+      if (dartRoute != null) {
+        await dartRoute.handler(exchange, response);
         return;
       }
 

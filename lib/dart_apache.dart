@@ -13,6 +13,7 @@ export 'src/php/cgi_params.dart';
 export 'src/php/fastcgi.dart';
 export 'src/php/php_backend.dart'
     show PhpBackend, PhpResponse, CgiException, parseCgiStream;
+export 'src/pipeline/dart_handler.dart';
 export 'src/pipeline/request_pipeline.dart';
 export 'src/pipeline/server_exchange.dart';
 export 'src/proxy/reverse_proxy.dart';

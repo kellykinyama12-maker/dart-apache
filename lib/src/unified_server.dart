@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'config.dart';
 import 'http3/h3_php_server.dart';
+import 'pipeline/dart_handler.dart';
 import 'server.dart';
 import 'worker_server.dart';
 
@@ -10,9 +11,9 @@ import 'worker_server.dart';
 /// advertise the co-located HTTP/3 listener via `Alt-Svc`, so discovery points
 /// at a listener that is actually running in this process.
 class UnifiedServer implements WorkerServer {
-  UnifiedServer(this.config)
-      : _h1 = ApacheServer(config),
-        _h3 = Http3PhpServer(config);
+  UnifiedServer(this.config, {DartApp? app})
+      : _h1 = ApacheServer(config, app: app),
+        _h3 = Http3PhpServer(config, app: app);
 
   final ServerConfig config;
   final ApacheServer _h1;
