@@ -5,6 +5,7 @@ import '../mime_types.dart';
 import '../php/cgi_backend.dart';
 import '../php/fastcgi.dart';
 import '../php/php_backend.dart';
+import '../proxy/reverse_proxy.dart';
 import '../request_resolver.dart';
 import 'server_exchange.dart';
 
@@ -17,17 +18,24 @@ class RequestPipeline {
       : _resolver = RequestResolver(config),
         _php = config.phpFpm != null
             ? FastCgiBackend(config)
-            : CgiBackend(config);
+            : CgiBackend(config),
+        _proxy = config.proxyRoutes.isEmpty
+            ? null
+            : ReverseProxyHandler(config.proxyRoutes);
 
   final ServerConfig config;
   final RequestResolver _resolver;
   final PhpBackend _php;
+  final ReverseProxyHandler? _proxy;
 
   /// Called with a Common Log Format line after each request (defaults to
   /// stdout). Transports can override to centralize logging.
   void Function(String line) onAccessLog = stdout.writeln;
 
-  Future<void> close() => _php.close();
+  Future<void> close() async {
+    await _php.close();
+    await _proxy?.close();
+  }
 
   Future<void> serve(ServerExchange exchange) async {
     final response = exchange.respond();
@@ -42,6 +50,13 @@ class RequestPipeline {
       if (exchange.contentLength > config.maxRequestBodyBytes) {
         await _serveError(response, HttpStatus.requestEntityTooLarge,
             'Payload Too Large');
+        return;
+      }
+
+      // Reverse-proxy routes take precedence over local static/PHP.
+      final route = _proxy?.routeFor(exchange.uri.path);
+      if (route != null) {
+        await _proxy!.proxy(exchange, response, route);
         return;
       }
 

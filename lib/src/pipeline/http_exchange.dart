@@ -22,6 +22,10 @@ class HttpExchange implements ServerExchange {
   String get scheme => _request.requestedUri.scheme;
 
   @override
+  String get authority =>
+      _request.headers.host != null ? _request.headers.host! : '';
+
+  @override
   String get protocol => 'http/${_request.protocolVersion}';
 
   @override

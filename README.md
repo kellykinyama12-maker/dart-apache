@@ -48,6 +48,7 @@ Flags:
 | `--advertise-h3=`| (unset)     | Advertise HTTP/3 on this UDP port via the `Alt-Svc` header |
 | `--http3`        | off         | Co-locate HTTP/3 (QUIC) on the same port; auto-advertises via `Alt-Svc` (needs `--dev` or `--tls-cert`/`--tls-key`) |
 | `--https`        | off         | Terminate TLS on the HTTP/1.1 (TCP) listener (needs `--dev` or `--tls-cert`/`--tls-key`) |
+| `--proxy=`       | (unset)     | Reverse-proxy route `/(prefix)=http://host:port[,http://host2:port]` (repeatable, round-robin) |
 | `--idle-timeout=`| `120`       | Keep-alive idle timeout in seconds (slowloris defense) |
 | `--max-body=`    | `10485760`  | Max request body in bytes (`413` beyond this) |
 
@@ -115,6 +116,20 @@ Fetch h3 directly with the vendored H3 client:
 cd third_party/dart_quiche
 dart run bin/interop_h3_get.dart 127.0.0.1 4433 localhost /
 ```
+
+## Reverse proxy & load balancing
+
+Forward matching request paths to one or more upstreams (round-robin), streaming
+request/response bodies with back-pressure and adding `X-Forwarded-*`. Routes
+work for both HTTPS/1.1 and HTTP/3. `--proxy` is repeatable; longest prefix wins:
+
+```sh
+dart run bin/dart_apache.dart --root=./public --port=8080 \
+    --proxy=/api=http://10.0.0.11:9000,http://10.0.0.12:9000 \
+    --proxy=/=http://127.0.0.1:9099
+```
+
+A failed upstream returns `502 Bad Gateway`.
 
 ## Pure-Dart client with automatic HTTP/3 upgrade
 

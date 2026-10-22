@@ -39,6 +39,10 @@
   (`--tls-cert`/`--tls-key` or `--dev`), so the first hop is HTTPS and browsers
   can honor `Alt-Svc` to upgrade to HTTP/3. Client gains `allowInsecure` for
   self-signed dev certs.
+- Reverse proxy with round-robin load balancing (`--proxy=/prefix=url[,url]`):
+  streaming request/response with back-pressure, hop-by-hop stripping,
+  `X-Forwarded-*` headers, and `502` on upstream failure. Works for both
+  HTTPS/1.1 and HTTP/3 (shared pipeline).
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.

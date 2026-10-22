@@ -412,8 +412,9 @@ class _H3Exchange implements ServerExchange {
           _method = value;
         case ':path':
           _target = value;
-        case ':scheme':
         case ':authority':
+          _authority = value;
+        case ':scheme':
         case ':protocol':
           break; // pseudo-headers are not CGI/request headers
         default:
@@ -429,6 +430,7 @@ class _H3Exchange implements ServerExchange {
   final Map<String, String> _headers = {};
   String _method = 'GET';
   String _target = '/';
+  String _authority = '';
 
   @override
   String get method => _method;
@@ -441,6 +443,9 @@ class _H3Exchange implements ServerExchange {
 
   @override
   String get scheme => 'https';
+
+  @override
+  String get authority => _authority;
 
   @override
   String get protocol => 'h3';

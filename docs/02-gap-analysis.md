@@ -31,8 +31,8 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | **HTTP/2** | ❌ out of scope (`dart:io` can't serve h2) | — (use HTTPS/1.1 + h3 upgrade instead) |
 | **HTTP/3 / QUIC** | ✅ experimental PoC: static + PHP over h3 (`dart_quiche`) | Harden, integrate into main pipeline, conformance |
 | **TLS** | ✅ HTTPS on h1 (TCP) + TLS 1.3 on h3; `--dev` or PEM | SNI multi-cert, OCSP stapling, ACME, cert rotation |
-| **Reverse proxy** | None | HTTP/FastCGI/SCGI upstreams, keep-alive pools |
-| **Load balancing** | None | round-robin, least-conn, hashing, health checks |
+| **Reverse proxy** | ✅ HTTP/1.1 upstreams, streaming, `X-Forwarded-*` | Keep-alive pools tuning, retries, circuit breaking |
+| **Load balancing** | ✅ round-robin across upstreams | least-conn, hashing, health checks |
 | **WebSocket** | None | Origin upgrade (RFC 6455/8441) + proxy passthrough (Phase 2–3) |
 | **WebTransport** | None | Origin over HTTP/3 via `dart_quiche` (Phase 4) |
 | **PHP integration** | ✅ CGI (`php-cgi`) **and** FastCGI (PHP-FPM) | Connection pooling to FPM |

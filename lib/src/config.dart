@@ -1,5 +1,14 @@
 import 'dart:io';
 
+/// A reverse-proxy route: requests whose path starts with [pathPrefix] are
+/// forwarded to one of [upstreams] (round-robin). Upstreams are base URLs like
+/// `http://127.0.0.1:9000`.
+class ProxyRoute {
+  const ProxyRoute(this.pathPrefix, this.upstreams);
+  final String pathPrefix;
+  final List<String> upstreams;
+}
+
 /// Server configuration, mirroring the handful of Apache directives that matter
 /// for serving files and running PHP: `Listen`, `DocumentRoot`,
 /// `DirectoryIndex`, and the CGI handler binary.
@@ -21,6 +30,7 @@ class ServerConfig {
     this.tlsEnabled = false,
     this.idleTimeout = const Duration(seconds: 120),
     this.maxRequestBodyBytes = 10 * 1024 * 1024,
+    this.proxyRoutes = const [],
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
         workers = (workers == null || workers < 1)
@@ -85,6 +95,9 @@ class ServerConfig {
   /// `413 Payload Too Large`.
   final int maxRequestBodyBytes;
 
+  /// Reverse-proxy routes, checked (longest prefix first) before static/PHP.
+  final List<ProxyRoute> proxyRoutes;
+
   /// The `Alt-Svc` header value advertising HTTP/3, or null if disabled.
   String? get altSvcHeader => altSvcH3Port == null
       ? null
@@ -114,6 +127,25 @@ class ServerConfig {
     // browsers to honor Alt-Svc; --https enables HTTPS on h1 without h3.
     final tlsEnabled = http3 || args.contains('--https');
 
+    // Repeatable: --proxy=/prefix=http://host:port[,http://host2:port].
+    final proxyRoutes = <ProxyRoute>[];
+    for (final arg in args) {
+      if (!arg.startsWith('--proxy=')) continue;
+      final spec = arg.substring('--proxy='.length);
+      final eq = spec.indexOf('=');
+      if (eq <= 0) continue;
+      final prefix = spec.substring(0, eq);
+      final upstreams = spec
+          .substring(eq + 1)
+          .split(',')
+          .map((u) => u.trim())
+          .where((u) => u.isNotEmpty)
+          .toList();
+      if (upstreams.isNotEmpty) proxyRoutes.add(ProxyRoute(prefix, upstreams));
+    }
+    // Longest prefix first so more specific routes win.
+    proxyRoutes.sort((a, b) => b.pathPrefix.length.compareTo(a.pathPrefix.length));
+
     return ServerConfig(
       address: map['address'] ?? '127.0.0.1',
       port: port,
@@ -131,6 +163,7 @@ class ServerConfig {
       ),
       maxRequestBodyBytes:
           int.tryParse(map['max-body'] ?? '') ?? 10 * 1024 * 1024,
+      proxyRoutes: proxyRoutes,
       workers: int.tryParse(map['workers'] ?? ''),
     );
   }

@@ -54,6 +54,40 @@ void main() {
     });
   });
 
+  group('reverse proxy routes', () {
+    test('parses repeatable --proxy flags, longest prefix first', () {
+      final config = ServerConfig.fromArgs([
+        '--proxy=/=http://a:9000',
+        '--proxy=/api=http://b:9000,http://c:9000',
+      ]);
+      expect(config.proxyRoutes.length, 2);
+      // Longest prefix sorts first.
+      expect(config.proxyRoutes.first.pathPrefix, '/api');
+      expect(config.proxyRoutes.first.upstreams, ['http://b:9000', 'http://c:9000']);
+      expect(config.proxyRoutes.last.pathPrefix, '/');
+    });
+
+    test('routeFor matches the longest prefix', () {
+      final handler = ReverseProxyHandler(const [
+        ProxyRoute('/api', ['http://b:9000']),
+        ProxyRoute('/', ['http://a:9000']),
+      ]);
+      expect(handler.routeFor('/api/users')?.pathPrefix, '/api');
+      expect(handler.routeFor('/index.html')?.pathPrefix, '/');
+    });
+
+    test('round-robins across upstreams', () {
+      final handler = ReverseProxyHandler(const [
+        ProxyRoute('/', ['http://a:1', 'http://b:1', 'http://c:1']),
+      ]);
+      final route = handler.routeFor('/x')!;
+      final picks = [
+        for (var i = 0; i < 4; i++) handler.nextUpstream(route),
+      ];
+      expect(picks, ['http://a:1', 'http://b:1', 'http://c:1', 'http://a:1']);
+    });
+  });
+
   group('backoffDelay', () {
     test('first restart is immediate', () {
       expect(backoffDelay(1), Duration.zero);

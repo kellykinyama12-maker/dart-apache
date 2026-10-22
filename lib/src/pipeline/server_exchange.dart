@@ -20,6 +20,9 @@ abstract interface class ServerExchange {
   /// `http` or `https`.
   String get scheme;
 
+  /// Request authority (`host[:port]`), from `Host` / `:authority`.
+  String get authority;
+
   /// Transport label used in logs/metrics (`h3`, `http/1.1`).
   String get protocol;
 
