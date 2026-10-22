@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:dart_quiche/dart_quiche.dart' show TrustStore;
+
 import 'alt_svc.dart';
 import 'client_response.dart';
 import 'h3_client.dart';
@@ -14,19 +16,38 @@ class AltSvcHttpClient {
     this.userAgent = 'dart-apache-client/1.0',
     this.verbose = false,
     bool allowInsecure = false,
-  }) : _h3 = H3Client(userAgent: userAgent) {
-    if (allowInsecure) {
-      // Accept self-signed certs (dev TLS). Never enable in production.
-      _http.badCertificateCallback = (_, _, _) => true;
-    }
-  }
+    String? caBundlePem,
+  })  : _h3 = H3Client(
+          userAgent: userAgent,
+          trustStore:
+              caBundlePem != null ? (TrustStore()..addPem(caBundlePem)) : null,
+        ),
+        _http = _buildHttpClient(allowInsecure, caBundlePem);
 
   final String userAgent;
   final bool verbose;
 
-  final HttpClient _http = HttpClient();
+  final HttpClient _http;
   final H3Client _h3;
   final Map<String, H3AltService> _altSvc = {};
+
+  /// Builds the HTTP/1.1 client: a private [caBundlePem] is added to a trusting
+  /// [SecurityContext]; [allowInsecure] accepts any cert (dev only).
+  static HttpClient _buildHttpClient(bool allowInsecure, String? caBundlePem) {
+    HttpClient client;
+    if (caBundlePem != null) {
+      final ctx = SecurityContext(withTrustedRoots: true)
+        ..setTrustedCertificatesBytes(caBundlePem.codeUnits);
+      client = HttpClient(context: ctx);
+    } else {
+      client = HttpClient();
+    }
+    if (allowInsecure) {
+      // Accept self-signed certs (dev TLS). Never enable in production.
+      client.badCertificateCallback = (_, _, _) => true;
+    }
+    return client;
+  }
 
   /// Fetches [url], automatically using HTTP/3 if it has been discovered for
   /// this origin. [forceH1] forces an HTTP/1.1 request (e.g. to re-discover).

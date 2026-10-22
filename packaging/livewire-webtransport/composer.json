@@ -4,6 +4,16 @@
     "type": "library",
     "keywords": ["laravel", "livewire", "webtransport", "http3", "quic"],
     "license": "MIT",
+    "homepage": "https://github.com/dartapache/dart-apache",
+    "support": {
+        "issues": "https://github.com/dartapache/dart-apache/issues",
+        "source": "https://github.com/dartapache/dart-apache"
+    },
+    "authors": [
+        {
+            "name": "dart-apache contributors"
+        }
+    ],
     "require": {
         "php": "^8.2",
         "illuminate/support": "^11.0 || ^12.0 || ^13.0"

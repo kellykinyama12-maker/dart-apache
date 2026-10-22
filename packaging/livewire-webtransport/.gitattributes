@@ -1,0 +1,6 @@
+# Git attributes for a lean Composer dist archive: exclude dev-only paths from
+# `composer require` tarballs (they remain in the source repo).
+/.gitattributes export-ignore
+/.github      export-ignore
+/tests        export-ignore
+/phpunit.xml  export-ignore

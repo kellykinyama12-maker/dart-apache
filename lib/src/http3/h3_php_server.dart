@@ -337,6 +337,12 @@ class Http3PhpServer implements WorkerServer {
     // Capture the Cookie the browser sent on the WebTransport CONNECT so the
     // bridge can forward the Laravel session / XSRF-TOKEN to PHP.
     session.cookie = _headerValue(he.headers, 'cookie');
+    session.wtConnect = WtConnect(
+      path: path ?? wtPath,
+      authority: _headerValue(he.headers, ':authority') ?? '',
+      cookie: session.cookie,
+      headers: _wtHeadersMap(he.headers),
+    );
     _openWtGreetingStream(session, wt);
     _log('WebTransport session accepted on $wtPath (stream ${he.streamId})');
     return true;
@@ -743,6 +749,20 @@ class Http3PhpServer implements WorkerServer {
     return null;
   }
 
+  /// Collects non-pseudo request headers into a lower-cased map (duplicate
+  /// values joined with `, `), for the WebTransport CONNECT context.
+  Map<String, String> _wtHeadersMap(List<H3Header> headers) {
+    final out = <String, String>{};
+    for (final h in headers) {
+      final name = String.fromCharCodes(h.name);
+      if (name.startsWith(':')) continue;
+      final value = String.fromCharCodes(h.value);
+      final existing = out[name];
+      out[name] = existing == null ? value : '$existing, $value';
+    }
+    return out;
+  }
+
   /// Handles one completed request by adapting it to a [ServerExchange] and
   /// running the shared pipeline, then flushing any resulting QUIC packets.
   Future<void> _dispatch(_Session session, int streamId, _ReqState req) async {
@@ -849,6 +869,11 @@ class _WtSessionImpl implements WtSession {
   final int? _bidiStreamId;
 
   @override
+  WtConnect get connect =>
+      _session.wtConnect ??
+      const WtConnect(path: '', authority: '', headers: {});
+
+  @override
   void send(List<int> bytes) {
     final bidi = _bidiStreamId;
     if (bidi != null) {
@@ -900,6 +925,10 @@ class _Session {
 
   /// Active WebTransport session on this connection, if any.
   WebTransportSession? wt;
+
+  /// The Extended CONNECT context for [wt] (path, authority, cookie, headers),
+  /// captured at accept time and surfaced to a native WtHandler.
+  WtConnect? wtConnect;
 
   /// Cookie header sent by the browser on the WebTransport CONNECT (used by the
   /// bridge to forward the Laravel session / XSRF-TOKEN to PHP).

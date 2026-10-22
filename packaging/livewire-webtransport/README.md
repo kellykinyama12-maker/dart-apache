@@ -77,6 +77,24 @@ update endpoint (`/livewire/update` or Livewire 4's randomized
 body with a short header preamble (CSRF token + session ticket), and reconstructs
 a real `Response` from the server's framed reply. Everything else is untouched.
 
+## Publishing
+
+This package lives in the dart-apache monorepo under
+`packaging/livewire-webtransport`. To release it on Packagist:
+
+1. Mirror this directory to its own public repo (or use a
+   [git subtree split](https://www.subtreesplit.com/)).
+2. Validate and tag a semver release:
+   ```bash
+   composer validate --strict
+   git tag v0.1.0 && git push --tags
+   ```
+3. Submit the repo URL once at <https://packagist.org/packages/submit>; a
+   webhook then auto-updates Packagist on each new tag.
+
+Consumers then `composer require dartapache/livewire-webtransport`. Until then,
+use a path repository (see **Server** above).
+
 ## License
 
 MIT

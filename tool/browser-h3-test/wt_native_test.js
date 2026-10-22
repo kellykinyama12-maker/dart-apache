@@ -78,7 +78,7 @@ function findBrowser() {
     }, `https://${origin}${WTPATH}`);
 
     console.log(JSON.stringify({ reply: result }, null, 2));
-    const pass = result === 'wt-native:client-bidi-hello';
+    const pass = result === 'wt-native:/wt:client-bidi-hello';
     process.exit(pass ? 0 : 1);
   } finally {
     await browser.close();

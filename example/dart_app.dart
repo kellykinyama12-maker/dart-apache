@@ -29,9 +29,10 @@ DartApp buildApp(ServerConfig config) => DartApp(
         }, methods: {'POST'}),
       ],
       // Native WebTransport echo — no PHP, no subprocess. Replies on the same
-      // bidi stream, or a fresh uni stream, with a marker prefix.
+      // bidi stream (or a fresh uni stream) with the CONNECT path + a marker.
       wt: (session, message) {
-        session.send([...'wt-native:'.codeUnits, ...message.data]);
+        final tag = 'wt-native:${session.connect.path}:';
+        session.send([...tag.codeUnits, ...message.data]);
       },
     );
 

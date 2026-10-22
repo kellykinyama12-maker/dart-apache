@@ -9,15 +9,29 @@ import 'package:dart_apache/src/client/client_response.dart';
 ///
 ///   dart run bin/dart_apache_client.dart http://127.0.0.1:8080/
 ///   dart run bin/dart_apache_client.dart https://127.0.0.1:8080/ --insecure
+///   dart run bin/dart_apache_client.dart https://host/ --ca-bundle=roots.pem
 Future<void> main(List<String> arguments) async {
   final positional = arguments.where((a) => !a.startsWith('--')).toList();
   final target =
       positional.isNotEmpty ? positional[0] : 'http://127.0.0.1:8080/';
   final url = Uri.parse(target);
 
+  // --ca-bundle=<pem> enables chain-to-root validation (h3 + h1); otherwise
+  // trust is pin/transcript based (use --insecure for dev self-signed certs).
+  String? caBundlePem;
+  final caArg = arguments.firstWhere(
+    (a) => a.startsWith('--ca-bundle='),
+    orElse: () => '',
+  );
+  if (caArg.isNotEmpty) {
+    final path = caArg.substring('--ca-bundle='.length);
+    caBundlePem = File(path).readAsStringSync();
+  }
+
   final client = AltSvcHttpClient(
     verbose: true,
     allowInsecure: arguments.contains('--insecure'),
+    caBundlePem: caBundlePem,
   );
   try {
     stdout.writeln('=== Request 1 (discovery) ===');

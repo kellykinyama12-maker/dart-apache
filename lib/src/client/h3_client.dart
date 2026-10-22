@@ -26,10 +26,16 @@ class H3Client {
   H3Client({
     this.userAgent = 'dart-apache-client/1.0',
     this.timeout = const Duration(seconds: 5),
+    this.trustStore,
   });
 
   final String userAgent;
   final Duration timeout;
+
+  /// When set, the handshake validates the server certificate chain to a
+  /// trusted anchor (and the hostname/SAN). When null, trust is pin/transcript
+  /// based only (dev / behind a trusted terminator).
+  final TrustStore? trustStore;
 
   Future<ClientResponse> get({
     required InternetAddress address,
@@ -51,8 +57,12 @@ class H3Client {
         isServer: false,
       );
     final driver =
-        TlsClientDriver(conn: conn, hostname: sni, verifyHostname: false)
-          ..start();
+        TlsClientDriver(
+          conn: conn,
+          hostname: sni,
+          verifyHostname: trustStore != null,
+          trustStore: trustStore,
+        )..start();
 
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     final inbox = <Datagram>[];

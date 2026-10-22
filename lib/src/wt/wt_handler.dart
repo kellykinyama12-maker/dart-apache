@@ -29,6 +29,10 @@ class WtMessage {
 
 /// The means to reply within a WebTransport session from a [WtHandler].
 abstract interface class WtSession {
+  /// The Extended CONNECT request that opened this session (path, authority,
+  /// cookie, headers) — e.g. to route by WT path or recover a session cookie.
+  WtConnect get connect;
+
   /// Replies on the originating stream: the same bidirectional stream when the
   /// message arrived on one, otherwise a fresh server unidirectional stream.
   void send(List<int> bytes);
@@ -39,6 +43,28 @@ abstract interface class WtSession {
   /// Sends a WebTransport datagram (dropped with a log if too large or
   /// disabled by the peer).
   void sendDatagram(List<int> bytes);
+}
+
+/// The Extended CONNECT request that established a WebTransport session.
+class WtConnect {
+  const WtConnect({
+    required this.path,
+    required this.authority,
+    required this.headers,
+    this.cookie,
+  });
+
+  /// The `:path` the client connected to (matches `--wt-path`).
+  final String path;
+
+  /// The `:authority` (host[:port]) of the CONNECT.
+  final String authority;
+
+  /// The `Cookie` header sent on the CONNECT, if any (e.g. the session cookie).
+  final String? cookie;
+
+  /// All non-pseudo request headers (lower-cased names, values joined).
+  final Map<String, String> headers;
 }
 
 /// A native, in-process WebTransport session handler. When registered (via
