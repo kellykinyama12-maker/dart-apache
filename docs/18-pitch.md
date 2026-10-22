@@ -24,6 +24,7 @@ install*.
 | Capability | Apache | nginx | dart-apache |
 |---|:--:|:--:|:--:|
 | Static (types, ETag, conditional 304, byte ranges, HEAD) | ✅ | ✅ | ✅ |
+| Transparent gzip (`Vary`, size threshold) | ✅ | ✅ | ✅ |
 | PHP via php-cgi **and** FastCGI/php-fpm | ✅ | ✅ | ✅ |
 | Reverse proxy + load balancing + health checks | ✅ | ✅ | ✅ |
 | TLS 1.3, SNI, front-controller (`try_files`) | ✅ | ✅ | ✅ |

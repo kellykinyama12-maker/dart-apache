@@ -189,8 +189,54 @@ class RequestPipeline {
       await response.close();
       return;
     }
+
+    // Transparent gzip for compressible text assets above a threshold (nginx
+    // `gzip`/`gzip_vary`). Compressed in memory so Content-Length stays exact;
+    // huge files are streamed uncompressed. Never combined with a byte range.
+    final contentType = mimeTypeFor(filePath);
+    if (_isCompressible(contentType)) {
+      response.setHeader(HttpHeaders.varyHeader, 'Accept-Encoding');
+    }
+    if (_isCompressible(contentType) &&
+        length >= _gzipMinBytes &&
+        length <= _gzipMaxBytes &&
+        _acceptsGzip(reqHeaders)) {
+      final compressed = gzip.encode(await file.readAsBytes());
+      response
+        ..setHeader(HttpHeaders.contentEncodingHeader, 'gzip')
+        // Weak ETag: the gzip representation differs from identity, but weak
+        // comparison still lets a conditional request revalidate to 304.
+        ..setHeader(HttpHeaders.etagHeader, 'W/$etag')
+        ..setHeader(HttpHeaders.contentLengthHeader, '${compressed.length}');
+      await response.addStream(Stream<List<int>>.value(compressed));
+      await response.close();
+      return;
+    }
+
     await response.addStream(file.openRead());
     await response.close();
+  }
+
+  static const int _gzipMinBytes = 1024;
+  static const int _gzipMaxBytes = 10 * 1024 * 1024;
+  static const Set<String> _compressibleTypes = {
+    'application/json',
+    'application/javascript',
+    'application/xml',
+    'application/rss+xml',
+    'application/manifest+json',
+    'application/wasm',
+    'image/svg+xml',
+  };
+
+  bool _isCompressible(String contentType) {
+    final ct = contentType.split(';').first.trim().toLowerCase();
+    return ct.startsWith('text/') || _compressibleTypes.contains(ct);
+  }
+
+  bool _acceptsGzip(Map<String, String> headers) {
+    final ae = headers[HttpHeaders.acceptEncodingHeader];
+    return ae != null && ae.toLowerCase().contains('gzip');
   }
 
   /// Strong entity-tag from size + mtime (nginx-style `"<mtime>-<size>"`).

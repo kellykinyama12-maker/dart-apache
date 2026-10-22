@@ -13,15 +13,18 @@ void main() {
     setUp(() {
       dir = Directory.systemTemp.createTempSync('da_static_');
       File('${dir.path}/data.txt').writeAsStringSync('0123456789');
+      File('${dir.path}/big.txt').writeAsStringSync('abcdefgh' * 300); // 2400 B
+      File('${dir.path}/small.txt').writeAsStringSync('tiny');
       pipeline = RequestPipeline(ServerConfig(documentRoot: dir.path));
     });
     tearDown(() => dir.deleteSync(recursive: true));
 
     Future<_FakeResponse> req(
       String method, {
+      String path = '/data.txt',
       Map<String, String> headers = const {},
     }) async {
-      final ex = _FakeExchange(method, Uri.parse('/data.txt'), headers);
+      final ex = _FakeExchange(method, Uri.parse(path), headers);
       await pipeline.serve(ex);
       return ex.response;
     }
@@ -97,6 +100,41 @@ void main() {
           headers: {'range': 'bytes=0-3', 'if-range': '"stale-etag"'});
       expect(r.statusCode, 200);
       expect(utf8.decode(r.body), '0123456789');
+    });
+
+    test('gzip: compressible asset + Accept-Encoding -> encoded + weak ETag',
+        () async {
+      final r = await req('GET',
+          path: '/big.txt', headers: {'accept-encoding': 'gzip, deflate'});
+      expect(r.statusCode, 200);
+      expect(r.headers['content-encoding'], 'gzip');
+      expect(r.headers['vary'], 'Accept-Encoding');
+      expect(r.headers['etag'], startsWith('W/'));
+      expect(int.parse(r.headers['content-length']!), r.body.length);
+      expect(utf8.decode(gzip.decode(r.body)), 'abcdefgh' * 300);
+    });
+
+    test('gzip: no Accept-Encoding -> identity but Vary advertised', () async {
+      final r = await req('GET', path: '/big.txt');
+      expect(r.headers['content-encoding'], isNull);
+      expect(r.headers['vary'], 'Accept-Encoding');
+      expect(utf8.decode(r.body), 'abcdefgh' * 300);
+    });
+
+    test('gzip: below the size threshold stays identity', () async {
+      final r = await req('GET',
+          path: '/small.txt', headers: {'accept-encoding': 'gzip'});
+      expect(r.headers['content-encoding'], isNull);
+      expect(utf8.decode(r.body), 'tiny');
+    });
+
+    test('gzip: a range request is never compressed', () async {
+      final r = await req('GET',
+          path: '/big.txt',
+          headers: {'accept-encoding': 'gzip', 'range': 'bytes=0-7'});
+      expect(r.statusCode, 206);
+      expect(r.headers['content-encoding'], isNull);
+      expect(utf8.decode(r.body), 'abcdefgh');
     });
   });
 }
