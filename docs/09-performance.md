@@ -20,36 +20,43 @@ tools, not absolute numbers.
 
 ## Measured baseline — 2026-10-22 (WSL2 Ubuntu 24.04, ext4, loopback, `wrk`)
 
-Harness: `tool/bench_static.sh` and `tool/bench_cache.sh`. `wrk -t4 -c<N> -d<T>`,
-4 workers each, access logging off on both servers (nginx `access_log off`,
-dart-apache `--no-access-log`). Loopback/WSL inflates nginx's small-file numbers
-(near loopback-limited); treat these as **ratios**, not hardware limits.
+Harness: `tool/bench_static.sh`, `tool/bench_cache.sh` (`wrk`, 4 workers each,
+access logging off on both). Loopback inflates absolute numbers — read the
+**"× faster"** column, not the raw rates.
 
-| Scenario (4 threads / 64 conns) | req/s | avg latency |
-| --- | ---: | ---: |
-| **nginx** — static 1 KiB | ~948,000 | 83 µs |
-| **nginx** — static 100 KiB | ~958,000 | 60 µs |
-| **dart-apache** — static 1 KiB | ~20,200 | 3.2 ms |
-| **dart-apache** — static 100 KiB | ~14,600 | 4.4 ms |
+**TL;DR**
+- Serving **static files?** → use nginx (it's ~45–65× faster). dart-apache isn't
+  built to beat C + `sendfile`; put it behind nginx/a CDN for pure static.
+- Serving **cacheable dynamic (PHP)?** → dart-apache's `--cache` is **~176×
+  faster** than re-running PHP every request (and 166× lower latency).
 
-| PHP endpoint (4 threads / 16 conns) | req/s | avg latency | |
+### Static files — dart-apache vs nginx (same file, same `wrk` run)
+
+| File size | nginx | dart-apache | Result |
 | --- | ---: | ---: | --- |
-| **dart-apache** — php-cgi, **no cache** | ~740 | 21.6 ms | spawns php-cgi/req |
-| **dart-apache** — php-cgi, **`--cache`** | ~129,900 | 130 µs | `X-Cache: HIT` |
+| 1 KiB | **948k** req/s · 83 µs | 20k req/s · 3.2 ms | 🔴 nginx **~47× faster** |
+| 100 KiB | **958k** req/s · 60 µs | 15k req/s · 4.4 ms | 🔴 nginx **~65× faster** |
 
-**Honest reading:**
-- **Raw static is nginx's game.** nginx is ~45× faster on small static files —
-  hand-tuned C + `sendfile`/zero-copy vs `dart:io`'s `HttpServer`. dart-apache
-  is **not** a static-file speed demon; front it with nginx/a CDN for that, or
-  use the cache.
-- **The built-in cache is the dynamic win.** `--cache` turns a cacheable PHP
-  response from **740 → ~130,000 req/s (~176×)** and drops p-avg latency from
-  21.6 ms to 130 µs — the `fastcgi_cache` value, in-process.
-- **In-memory serving is fast.** The cache-HIT path (~130k req/s) is ~6× faster
-  than dart-apache's own static-file path, which pays a `stat()` + ETag + gzip
-  check per request — a known optimization target for the static hot path.
-- WebTransport/HTTP-3 numbers (WT ~40–50% cheaper/request than fetch-over-h3)
-  are in the hardening work; see [15-webtransport-hardening-plan.md](15-webtransport-hardening-plan.md).
+### Dynamic PHP — cache OFF vs ON (same endpoint, same dart-apache)
+
+| Mode | Throughput | Latency | vs. OFF |
+| --- | ---: | ---: | --- |
+| OFF — php-cgi every request | 740 req/s | 21.6 ms | baseline |
+| ON — `--cache` (`X-Cache: HIT`) | **130k** req/s | **130 µs** | 🟢 **~176× faster** |
+
+### What the numbers say
+
+- **Raw static is nginx's game** — hand-tuned C + zero-copy `sendfile` vs
+  `dart:io`'s `HttpServer`. Not a close race; don't pitch dart-apache as a
+  static speed demon.
+- **The built-in cache is the headline** — it makes slow dynamic content fast
+  (740 → 130k req/s), in-process, no sidecar. This is the `fastcgi_cache` win.
+- **Room on the static path** — a cache HIT (~130k req/s) is ~6× faster than
+  dart-apache's *own* static serving (~20k), because the static path pays a
+  `stat()` + ETag + gzip check per request. Optimizing it could lift static
+  toward that ~130k ceiling.
+- **HTTP/3 + WebTransport**: WT is ~40–50% cheaper per request than
+  fetch-over-h3 (see [15-webtransport-hardening-plan.md](15-webtransport-hardening-plan.md)).
 
 ## Design levers
 
