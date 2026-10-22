@@ -43,6 +43,7 @@ Future<void> main(List<String> arguments) async {
           wtPath: config.wtPath,
           wtBridgePath: config.wtBridgePath,
           spaFallback: config.spaFallback,
+          frontController: config.frontController,
         )
       : config;
 

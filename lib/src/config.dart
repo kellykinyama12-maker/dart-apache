@@ -34,6 +34,7 @@ class ServerConfig {
     this.wtPath,
     this.wtBridgePath,
     this.spaFallback,
+    this.frontController,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
         workers = (workers == null || workers < 1)
@@ -120,6 +121,13 @@ class ServerConfig {
   /// (anything with a file extension) still `404`.
   final String? spaFallback;
 
+  /// When set (e.g. `/index.php`), a request that resolves to no file is routed
+  /// through this PHP front controller with the original `REQUEST_URI`
+  /// preserved — the nginx `try_files $uri /index.php?$query_string` pattern
+  /// that Laravel and other front-controller frameworks rely on (so routes like
+  /// `/livewire/update` reach the app router). Checked before [spaFallback].
+  final String? frontController;
+
   /// The `Alt-Svc` header value advertising HTTP/3, or null if disabled.
   String? get altSvcHeader => altSvcH3Port == null
       ? null
@@ -193,6 +201,7 @@ class ServerConfig {
       wtPath: map['wt-path'],
       wtBridgePath: map['wt-bridge-path'],
       spaFallback: spaFallback,
+      frontController: map['front-controller'],
       workers: int.tryParse(map['workers'] ?? ''),
     );
   }

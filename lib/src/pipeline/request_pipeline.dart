@@ -69,7 +69,8 @@ class RequestPipeline {
         case ResolutionKind.forbidden:
           await _serveError(response, HttpStatus.forbidden, 'Forbidden');
         case ResolutionKind.notFound:
-          if (!await _trySpaFallback(exchange, response)) {
+          if (!await _tryFrontController(exchange, response) &&
+              !await _trySpaFallback(exchange, response)) {
             await _serveError(response, HttpStatus.notFound, 'Not Found');
           }
       }
@@ -152,6 +153,32 @@ class RequestPipeline {
     }
     await response.addStream(php.body);
     await response.close();
+  }
+
+  /// Front-controller routing: when [ServerConfig.frontController] is set, run a
+  /// request that matched no file through that PHP script while preserving the
+  /// original request URI (so the app router sees the real path, e.g.
+  /// `/livewire/update`). Returns true if handled.
+  Future<bool> _tryFrontController(
+    ServerExchange exchange,
+    ServerResponse response,
+  ) async {
+    final fc = config.frontController;
+    if (fc == null) return false;
+    final res = _resolver.resolve(fc);
+    if (res.kind != ResolutionKind.phpScript) return false;
+    // Keep the original exchange (REQUEST_URI/QUERY_STRING) but point
+    // SCRIPT_FILENAME/SCRIPT_NAME at the front controller.
+    await _servePhp(
+      exchange,
+      response,
+      Resolution.phpScript(
+        filePath: res.filePath,
+        scriptName: res.scriptName,
+        pathInfo: '',
+      ),
+    );
+    return true;
   }
 
   /// Single-page-app rewrite: when [ServerConfig.spaFallback] is set, serve it
