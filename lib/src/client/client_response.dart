@@ -22,6 +22,13 @@ class ClientResponse {
   /// Decodes the body as UTF-8 text (lenient).
   String get text => utf8.decode(body, allowMalformed: true);
 
+  /// Decodes the body as JSON (`Map`, `List`, or scalar). Throws
+  /// [FormatException] if the body is not valid JSON.
+  dynamic get json => jsonDecode(text);
+
+  /// Whether the status code is in the 2xx success range.
+  bool get isSuccess => statusCode >= 200 && statusCode < 300;
+
   @override
   String toString() =>
       'ClientResponse($statusCode, $protocol, ${body.length} bytes)';
