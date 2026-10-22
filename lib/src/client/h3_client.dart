@@ -43,7 +43,35 @@ class H3Client {
     required String authority,
     required String sni,
     required String path,
+    Map<String, String> headers = const {},
+    bool acceptGzip = true,
+  }) =>
+      request(
+        method: 'GET',
+        address: address,
+        port: port,
+        authority: authority,
+        sni: sni,
+        path: path,
+        headers: headers,
+        acceptGzip: acceptGzip,
+      );
+
+  /// Performs a single HTTP/3 request of any [method] over QUIC, optionally
+  /// with a request [body] and custom [headers]. A gzip-encoded response is
+  /// decoded transparently when [acceptGzip] is set (the default).
+  Future<ClientResponse> request({
+    required String method,
+    required InternetAddress address,
+    required int port,
+    required String authority,
+    required String sni,
+    required String path,
+    Map<String, String> headers = const {},
+    List<int>? body,
+    bool acceptGzip = true,
   }) async {
+    final bodyBytes = body == null ? null : Uint8List.fromList(body);
     final rng = Random.secure();
     final dcid =
         Uint8List.fromList(List.generate(8, (_) => rng.nextInt(256)));
@@ -132,19 +160,33 @@ class H3Client {
       }
       while (h3.pollEvent() != null) {}
 
-      final reqStream = h3.sendRequest([
-        H3Header.fromString(':method', 'GET'),
+      final lowerKeys = {for (final k in headers.keys) k.toLowerCase()};
+      final reqHeaders = <H3Header>[
+        H3Header.fromString(':method', method),
         H3Header.fromString(':scheme', 'https'),
         H3Header.fromString(':authority', authority),
         H3Header.fromString(':path', path),
-        H3Header.fromString('user-agent', userAgent),
-      ], fin: true);
+      ];
+      if (!lowerKeys.contains('user-agent')) {
+        reqHeaders.add(H3Header.fromString('user-agent', userAgent));
+      }
+      if (acceptGzip && !lowerKeys.contains('accept-encoding')) {
+        reqHeaders.add(H3Header.fromString('accept-encoding', 'gzip'));
+      }
+      if (bodyBytes != null && !lowerKeys.contains('content-length')) {
+        reqHeaders.add(
+            H3Header.fromString('content-length', '${bodyBytes.length}'));
+      }
+      for (final e in headers.entries) {
+        reqHeaders.add(H3Header.fromString(e.key.toLowerCase(), e.value));
+      }
+      final reqStream = h3.sendRequest(reqHeaders, body: bodyBytes, fin: true);
       txAll();
 
       // Stage 4: collect the response.
-      final headers = <String, String>{};
+      final respHeaders = <String, String>{};
       var statusCode = 0;
-      final body = BytesBuilder(copy: false);
+      final respBody = BytesBuilder(copy: false);
       var done = false;
 
       final respDeadline = DateTime.now().add(timeout);
@@ -171,13 +213,13 @@ class H3Client {
                 if (name == ':status') {
                   statusCode = int.tryParse(value) ?? statusCode;
                 } else if (!name.startsWith(':')) {
-                  headers[name.toLowerCase()] = value;
+                  respHeaders[name.toLowerCase()] = value;
                 }
               }
               if (fin) done = true;
             case H3DataEvent(streamId: final sid, :final data, :final fin):
               if (sid != reqStream) break;
-              body.add(data);
+              respBody.add(data);
               if (fin) done = true;
             case H3FinishedEvent(streamId: final sid):
               if (sid == reqStream) done = true;
@@ -192,10 +234,18 @@ class H3Client {
       if (statusCode == 0) {
         throw H3ClientException('no HTTP/3 response headers received');
       }
+      var out = respBody.takeBytes();
+      if ((respHeaders['content-encoding'] ?? '')
+          .toLowerCase()
+          .contains('gzip')) {
+        out = Uint8List.fromList(gzip.decode(out));
+        respHeaders.remove('content-encoding');
+        respHeaders['content-length'] = '${out.length}';
+      }
       return ClientResponse(
         statusCode: statusCode,
-        headers: headers,
-        body: body.takeBytes(),
+        headers: respHeaders,
+        body: out,
         protocol: 'h3',
       );
     } finally {

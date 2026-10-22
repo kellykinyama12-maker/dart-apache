@@ -51,19 +51,56 @@ class AltSvcHttpClient {
 
   /// Fetches [url], automatically using HTTP/3 if it has been discovered for
   /// this origin. [forceH1] forces an HTTP/1.1 request (e.g. to re-discover).
-  Future<ClientResponse> get(Uri url, {bool forceH1 = false}) async {
+  Future<ClientResponse> get(
+    Uri url, {
+    bool forceH1 = false,
+    Map<String, String> headers = const {},
+    String? ifNoneMatch,
+    String? range,
+  }) =>
+      request(
+        'GET',
+        url,
+        forceH1: forceH1,
+        headers: headers,
+        ifNoneMatch: ifNoneMatch,
+        range: range,
+      );
+
+  /// Sends a [method] request to [url] over HTTP/3 when discovered (falling
+  /// back to HTTP/1.1), with an optional [body] and custom [headers].
+  /// [ifNoneMatch] and [range] are conveniences for conditional / range
+  /// requests. gzip responses are decoded transparently on both transports.
+  Future<ClientResponse> request(
+    String method,
+    Uri url, {
+    Map<String, String> headers = const {},
+    List<int>? body,
+    bool forceH1 = false,
+    String? ifNoneMatch,
+    String? range,
+  }) async {
+    final merged = <String, String>{
+      for (final e in headers.entries) e.key: e.value,
+    };
+    if (ifNoneMatch != null) merged['if-none-match'] = ifNoneMatch;
+    if (range != null) merged['range'] = range;
+
     final origin = '${url.host}:${url.port}';
     final alt = _altSvc[origin];
 
     if (!forceH1 && alt != null && alt.isFresh) {
       try {
-        _log('→ HTTP/3 ${alt.host}:${alt.port}${_target(url)}');
-        return await _h3.get(
+        _log('→ HTTP/3 $method ${alt.host}:${alt.port}${_target(url)}');
+        return await _h3.request(
+          method: method,
           address: (await InternetAddress.lookup(alt.host)).first,
           port: alt.port,
           authority: url.host,
           sni: url.host,
           path: _target(url),
+          headers: merged,
+          body: body,
         );
       } catch (e) {
         _log('HTTP/3 failed ($e); falling back to HTTP/1.1');
@@ -71,24 +108,37 @@ class AltSvcHttpClient {
       }
     }
 
-    return _getH1(url, origin);
+    return _requestH1(method, url, origin, merged, body);
   }
 
-  Future<ClientResponse> _getH1(Uri url, String origin) async {
-    _log('→ HTTP/1.1 ${url.host}:${url.port}${_target(url)}');
-    final request = await _http.getUrl(url);
+  Future<ClientResponse> _requestH1(
+    String method,
+    Uri url,
+    String origin,
+    Map<String, String> headers,
+    List<int>? body,
+  ) async {
+    _log('→ HTTP/1.1 $method ${url.host}:${url.port}${_target(url)}');
+    final request = await _http.openUrl(method, url);
     request.headers.set(HttpHeaders.userAgentHeader, userAgent);
+    headers.forEach((k, v) => request.headers.set(k, v));
+    if (body != null) {
+      // Set an explicit Content-Length so the CGI/FastCGI bridge forwards the
+      // body (dart:io would otherwise default to chunked transfer).
+      request.headers.contentLength = body.length;
+      request.add(body);
+    }
     final response = await request.close();
 
-    final body = <int>[];
-    await response.forEach(body.addAll);
+    final respBody = <int>[];
+    await response.forEach(respBody.addAll);
 
-    final headers = <String, String>{};
+    final respHeaders = <String, String>{};
     response.headers.forEach(
-      (name, values) => headers[name.toLowerCase()] = values.join(', '),
+      (name, values) => respHeaders[name.toLowerCase()] = values.join(', '),
     );
 
-    final altSvc = headers['alt-svc'];
+    final altSvc = respHeaders['alt-svc'];
     if (altSvc != null) {
       final discovered = parseAltSvcH3(altSvc, url.host);
       if (discovered != null) {
@@ -100,8 +150,8 @@ class AltSvcHttpClient {
 
     return ClientResponse(
       statusCode: response.statusCode,
-      headers: headers,
-      body: body,
+      headers: respHeaders,
+      body: respBody,
       protocol: 'http/1.1',
     );
   }
