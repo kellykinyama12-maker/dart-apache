@@ -31,7 +31,7 @@ flowchart LR
   S --- CA[(Proxy cache)]
 ```
 
-- **Upstream protocols**: HTTP/1.1 and HTTP/2 to backends; keep-alive
+- **Upstream protocols**: HTTP/1.1 to backends; keep-alive
   connection pools per upstream.
 - **Header handling**: `X-Forwarded-For`, `X-Forwarded-Proto`, `Forwarded`,
   `Host` override, hop-by-hop header stripping.
@@ -47,12 +47,11 @@ flowchart LR
 Two distinct jobs, each in two modes (origin = terminate here; proxy = pass
 through to a backend):
 
-### WebSocket (HTTP/1.1 and HTTP/2)
+### WebSocket (HTTP/1.1)
 
 - **Origin (serve):** detect `Connection: Upgrade` + `Upgrade: websocket`,
   complete the RFC 6455 handshake (`Sec-WebSocket-Accept`), and hand matched
-  locations to a WebSocket handler. On HTTP/2, support the `CONNECT` +
-  `:protocol=websocket` bootstrap (RFC 8441).
+  locations to a WebSocket handler.
 - **Proxy:** forward the `101 Switching Protocols` handshake to the upstream,
   then splice the two raw sockets **bidirectionally with back-pressure** until
   either side closes. Honors idle/handshake timeouts and connection limits.

@@ -28,7 +28,7 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | Area | Current | Target |
 | --- | --- | --- |
 | **Concurrency** | ✅ multi-isolate acceptors over a shared port | Add master supervisor + rolling restart |
-| **HTTP/2** | None | Full h2 (streams, HPACK, flow control, priorities) |
+| **HTTP/2** | ❌ out of scope (`dart:io` can't serve h2) | — (use HTTPS/1.1 + h3 upgrade instead) |
 | **HTTP/3 / QUIC** | ✅ experimental PoC: static + PHP over h3 (`dart_quiche`) | Harden, integrate into main pipeline, conformance |
 | **TLS** | ✅ HTTPS on h1 (TCP) + TLS 1.3 on h3; `--dev` or PEM | SNI multi-cert, OCSP stapling, ACME, cert rotation |
 | **Reverse proxy** | None | HTTP/FastCGI/SCGI upstreams, keep-alive pools |
@@ -46,12 +46,13 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 
 ## Key architectural decision
 
-`dart:io` `HttpServer` handles HTTP/1.1 well but does **not** expose HTTP/2 or
-HTTP/3. To reach the target we must own more of the stack:
+`dart:io` `HttpServer` handles HTTP/1.1 (incl. over TLS) but does **not** expose
+HTTP/2 or HTTP/3:
 
-- **HTTP/1.1 & HTTP/2:** terminate TLS with `dart:io` `SecureServerSocket`, read
-  the ALPN-selected protocol, and run our own h2 framing layer (or a vetted
-  package) on raw sockets. HTTP/1.1 can reuse `dart:io` parsing initially.
+- **HTTP/1.1:** served directly by `dart:io` `HttpServer` / `bindSecure`
+  (HTTPS). Good enough as the fallback transport.
+- **HTTP/2:** out of scope — not implemented (see
+  [01-vision-and-goals.md](01-vision-and-goals.md) non-goals).
 - **HTTP/3/QUIC:** QUIC runs over UDP and is not in `dart:io`. The plan adopts
   the pure-Dart **[`dart_quiche`](https://pub.dev/packages/dart_quiche)** stack
   (QUIC + HTTP/3 + QPACK, no FFI); options and caveats are evaluated in

@@ -18,7 +18,7 @@ Enforced before routing so abusive requests are cheap to reject:
 - Max request line / header count / total header bytes.
 - Max body size (global and per-location overrides).
 - Header and connection **timeouts** (slowloris defense).
-- HTTP/2 stream limits + RST-flood protection (Rapid Reset, CVE-2023-44487).
+- HTTP/3 stream and flow-control limits (QUIC); RST/stream-churn caps.
 - HTTP/3 stream and flow-control limits.
 - URI normalization and rejection of malformed/ambiguous targets (request
   smuggling defense: strict `Content-Length`/`Transfer-Encoding` handling).
@@ -54,7 +54,7 @@ Enforced before routing so abusive requests are cheap to reject:
   verify versions.
 - Run workers with least privilege; drop capabilities after binding low ports.
 - Reproducible builds; SBOM generation in CI.
-- Fuzzing of parsers (h1/h2/h3 framing, HPACK/QPACK, URI) — see
+- Fuzzing of parsers (h1/h3 framing, QPACK, URI) — see
   [11-testing-and-release.md](11-testing-and-release.md).
 
 ## Secrets

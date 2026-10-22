@@ -21,7 +21,7 @@ translate a subset of nginx `.conf` syntax.
 server:
   workers: auto            # one isolate per core
   listen:
-    - { address: "0.0.0.0", port: 443, tls: true, protocols: [h3, h2, http/1.1] }
+    - { address: "0.0.0.0", port: 443, tls: true, protocols: [h3, http/1.1] }
     - { address: "0.0.0.0", port: 80, redirect_to_https: true }
 
 tls:

@@ -3,7 +3,7 @@
 This document records **what has been built** for HTTP/3 and lays out a
 **dedicated plan to route HTTP/3 through the unified request pipeline**, with an
 explicit **HTTP/3-first** posture: QUIC + HTTP/3 is the primary, first-class
-transport, and HTTP/1.1/HTTP/2 are compatibility fallbacks rather than the
+transport, and HTTP/1.1 (over TLS) is the compatibility fallback rather than the
 center of gravity.
 
 Related: [03-architecture.md](03-architecture.md) (pipeline, isolates),
@@ -60,10 +60,10 @@ With `dart_quiche`'s H3 client
 ### Principle
 
 > One request pipeline, many transports. A request is a request regardless of
-> whether it arrived over h3, h2, or h1 — handlers never know the difference.
+> whether it arrived over h3 or h1 — handlers never know the difference.
 
-HTTP/3 is the **reference implementation** of the transport contract; h2/h1
-conform to the same contract.
+HTTP/3 is the **reference implementation** of the transport contract; HTTPS/1.1
+conforms to the same contract. (HTTP/2 is out of scope.)
 
 ### Target shape
 
@@ -75,13 +75,10 @@ flowchart TB
     P[(TCP :80)]
   end
   U --> H3[Http3Transport (dart_quiche)]
-  T --> ALPN{ALPN}
-  ALPN -->|h2| H2[Http2Transport]
-  ALPN -->|http/1.1| H1[Http1Transport]
+  T -->|http/1.1| H1[Http1Transport (HTTPS)]
   P -->|redirect/upgrade| H1
 
   H3 --> PIPE
-  H2 --> PIPE
   H1 --> PIPE
   PIPE[Unified request pipeline] --> R[Router / vhost]
   R --> STATIC[Static]
@@ -111,7 +108,7 @@ abstract interface class ServerExchange {
   ServerHeaders get headers;
   Stream<List<int>> get body;      // request body (back-pressure in)
   InternetAddress get remoteAddress;
-  String get protocol;             // "h3" | "h2" | "http/1.1"
+  String get protocol;             // "h3" | "http/1.1"
 
   ServerResponseSink respond(int status, ServerHeaders headers);
 }
@@ -143,7 +140,7 @@ This is the piece that turns the PoC's buffered `_send` into a true streaming
 
 ### Multi-core UDP acceptor (HTTP/3-first scaling)
 
-QUIC is connectionless at the socket layer, so the h1/h2 `shared: true` TCP
+QUIC is connectionless at the socket layer, so the h1 `shared: true` TCP
 accept model does not directly apply. Plan:
 
 - Bind one `RawDatagramSocket` **per worker isolate** with `reuseAddress` /
@@ -177,10 +174,10 @@ accept model does not directly apply. Plan:
 > `Alt-Svc: h3=":<port>"; ma=<ttl>` on every response (`--advertise-h3=PORT`,
 > [`ServerConfig.altSvcHeader`](../lib/src/config.dart)).
 
-- Run the TCP listener (h1/h2) primarily to **advertise** HTTP/3 via `Alt-Svc`
-  and to serve clients that cannot do QUIC yet.
-- Next: tie the advertised port to the actual running h3 listener, add `HSTS`,
-  and support `Alt-Svc` on the h2 path too.
+- Run the TCP listener (HTTPS/1.1) primarily to **advertise** HTTP/3 via
+  `Alt-Svc` and to serve clients that cannot do QUIC yet.
+- Next: tie the advertised port to the actual running h3 listener and add
+  `HSTS`.
 
 ### Observability
 
@@ -239,7 +236,8 @@ accept model does not directly apply. Plan:
 
 ## Definition of done (integration)
 
-HTTP/3 serves static + PHP **through the same pipeline and handlers** as h1/h2,
+HTTP/3 serves static + PHP **through the same pipeline and handlers** as
+HTTPS/1.1,
 streamed with back-pressure, across all cores, with graceful reload, real
 certs, Alt-Svc discovery, metrics/qlog, and passing interop — at which point
 HTTP/3 is the server's primary transport, not a side binary.

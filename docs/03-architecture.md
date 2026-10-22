@@ -52,7 +52,7 @@ sequenceDiagram
   participant W as Worker isolate
   participant P as Pipeline
   K->>W: new connection (TLS)
-  W->>W: ALPN -> h1 / h2 / h3
+  W->>W: h3 (QUIC) or HTTPS/1.1
   W->>P: parsed request + stream
   P->>P: route -> handler -> upstream
   P-->>W: response (streamed)
@@ -62,9 +62,9 @@ sequenceDiagram
 ## Connection lifecycle
 
 1. **Accept** raw socket (TCP) or QUIC connection (UDP).
-2. **TLS handshake** (TLS 1.3); negotiate protocol via **ALPN**
-   (`h3`, `h2`, `http/1.1`).
-3. **Protocol dispatch** to the matching engine (h1 / h2 / h3).
+2. **TLS handshake** (TLS 1.3); on TCP, ALPN advertises `http/1.1` (h3 is
+   discovered via `Alt-Svc`).
+3. **Protocol dispatch** to the matching engine (h1 or h3).
 4. **Request assembly**: method, target, headers, body stream.
 5. **Routing**: server-name (SNI/Host) + location match → handler.
 6. **Handler execution**: static, reverse proxy, or FastCGI.

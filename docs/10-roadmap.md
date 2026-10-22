@@ -10,13 +10,15 @@ timeline
   Phase 0 : Foundation & refactor
   Phase 1 : Core server + multi-core + TLS
   Phase 2 : Static + reverse proxy + LB
-  Phase 3 : HTTP/2
   Phase 4 : HTTP/3 (QUIC)
   Phase 5 : FastCGI / PHP-FPM + caching
   Phase 6 : Config, hot reload, lifecycle
   Phase 7 : Observability & security hardening
   Phase 8 : Performance, soak, GA
 ```
+
+> **HTTP/2 is out of scope** (`dart:io` cannot serve it). Phase 3 is removed;
+> HTTP/3 is the multiplexed transport and HTTPS/1.1 is the fallback.
 
 ## Phase 0 — Foundation & refactor
 **Goal:** reshape the prototype into the target module layout without behavior
@@ -30,11 +32,10 @@ loss.
 ## Phase 1 — Core server, multi-core, TLS
 **Goal:** production-shaped HTTP/1.1 core.
 - Isolate supervisor (master + worker-per-core) over shared sockets.
-- TLS 1.3 termination, SNI, ALPN scaffolding.
+- TLS 1.3 termination (HTTPS), SNI.
 - Owned/validated HTTP/1.1 engine with limits and timeouts.
 - Graceful start/stop.
-- **Exit:** multi-core HTTP/1.1 over TLS; limits enforced; h1 conformance tests
-  pass.
+- **Exit:** multi-core HTTPS/1.1; limits enforced; h1 conformance tests pass.
 
 ## Phase 2 — Static serving + reverse proxy + load balancing
 **Goal:** be a useful edge/proxy on h1.
@@ -44,13 +45,6 @@ loss.
   (forward `101` + bidirectional socket splice with back-pressure).
 - **Exit:** can front real backends; passes proxy correctness + static feature
   tests; WebSocket echo + proxy verified.
-
-## Phase 3 — HTTP/2
-**Goal:** modern multiplexed transport.
-- Framing, HPACK, streams, flow control, concurrency limits.
-- Rapid-Reset mitigation.
-- **WebSocket over HTTP/2** via `CONNECT` + `:protocol=websocket` (RFC 8441).
-- **Exit:** **h2spec** green; h2 reverse proxy and static verified under load.
 
 ## Phase 4 — HTTP/3 (QUIC)
 **Goal:** the headline capability.
@@ -71,7 +65,7 @@ loss.
 - Harden the dependency: pin/vendor the pre-1.0 package, add conformance gating,
   and validate TLS/cert handling for our server use.
 - **Exit:** **quic-interop** targets pass; `curl --http3` and browsers serve over
-  h3; graceful fallback to h2/h1.
+  h3; graceful fallback to HTTPS/1.1.
 
 ## Phase 5 — FastCGI / PHP-FPM + caching
 **Goal:** enterprise PHP + response/proxy cache.
@@ -108,7 +102,7 @@ loss.
 | --- | --- | --- |
 | QUIC via FFI complexity | Phase 4 slip | Use pure-Dart **`dart_quiche`** (no FFI); keep a clean `Http3Transport` seam; FFI/quiche or sidecar as fallback |
 | `dart_quiche` pre-1.0 maturity | h3 production readiness | Pin/vendor the version, add conformance gating, validate TLS/cert handling, contribute fixes upstream |
-| h2/h3 spec edge cases | Correctness | Conformance suites in CI from the start of each phase |
+| h3 spec edge cases | Correctness | Conformance suites in CI from the start of each phase |
 | GC/latency under load | Perf targets | Pooling, streaming, early event-loop-lag metric |
 | Native build/packaging | Distribution | Per-platform CI, pinned toolchains, SBOM |
 | Scope creep | Timeline | Strict per-phase exit criteria; non-goals in [01](01-vision-and-goals.md) |

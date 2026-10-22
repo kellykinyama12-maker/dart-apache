@@ -1,7 +1,8 @@
 # 04 — Protocols and Transport
 
-Goal: terminate HTTP/1.1, HTTP/2, and HTTP/3 with TLS 1.3 and ALPN-based
-negotiation, degrading gracefully for older clients.
+Goal: terminate HTTP/1.1 (over TLS) and HTTP/3 with TLS 1.3 and `Alt-Svc`-based
+upgrade. **HTTP/2 is out of scope** — `dart:io`'s server cannot speak it, and
+HTTP/3 is the primary transport; HTTPS/1.1 is the fallback.
 
 ## Negotiation overview
 
@@ -10,26 +11,24 @@ flowchart TD
   C[Client connects] --> Q{UDP :443 QUIC?}
   Q -- yes --> H3[HTTP/3 over QUIC]
   Q -- no --> T[TCP :443 TLS 1.3 handshake]
-  T --> A{ALPN}
-  A -- h2 --> H2[HTTP/2]
-  A -- http/1.1 --> H1[HTTP/1.1]
+  T --> H1[HTTP/1.1]
   H1 -. Alt-Svc .-> H3
-  H2 -. Alt-Svc .-> H3
 ```
 
-- Advertise HTTP/3 via the `Alt-Svc` header so clients upgrade from h1/h2 to h3
+- Advertise HTTP/3 via the `Alt-Svc` header so clients upgrade from h1 to h3
   on subsequent requests.
-- Keep a TCP listener (h1/h2) and a UDP listener (h3) on the same port (443).
+- Keep a TCP listener (h1) and a UDP listener (h3) on the same port (443).
 
 ## TLS
 
-- **TLS 1.3 required** for h2/h3; TLS 1.2 allowed only for legacy h1.
+- **TLS 1.3 required** for h3; TLS 1.2+ for HTTPS/1.1.
 - **SNI** for virtual-host certificate selection.
-- **ALPN** to select `h3` / `h2` / `http/1.1`.
+- **ALPN** advertises `http/1.1` on the TCP listener (h3 is discovered via
+  `Alt-Svc`, not ALPN).
 - **OCSP stapling**, session resumption (0-RTT carefully gated for h3).
 - **Certificate management**: hot reload on cert change; pluggable ACME
   (Let's Encrypt) client for automatic issuance/renewal (later phase).
-- Dart: `SecurityContext` + `SecureServerSocket` provide TLS and ALNP for
+- Dart: `SecurityContext` + `HttpServer.bindSecure` provide TLS and ALPN for
   TCP. For QUIC, TLS 1.3 is embedded in the QUIC library.
 
 ## HTTP/1.1
@@ -42,16 +41,9 @@ flowchart TD
 
 ## HTTP/2
 
-Owned implementation (or a vetted Dart h2 package wrapped behind our interface):
-
-- **Framing** layer (HEADERS, DATA, SETTINGS, WINDOW_UPDATE, RST_STREAM,
-  PING, GOAWAY, PRIORITY).
-- **HPACK** header compression (static + dynamic table, size limits).
-- **Stream multiplexing** with per-stream and connection **flow control**.
-- **Concurrency limits** (`SETTINGS_MAX_CONCURRENT_STREAMS`).
-- Defense against known abuse (Rapid Reset / CVE-2023-44487): cap stream
-  churn and RST floods.
-- Validate with **h2spec**.
+**Out of scope.** `dart:io`'s `HttpServer` does not implement HTTP/2, and we do
+not ship an owned h2 stack. HTTP/3 is the multiplexed transport; clients that
+cannot use QUIC fall back to HTTPS/1.1 and upgrade to h3 via `Alt-Svc`.
 
 ## HTTP/3 and QUIC
 
@@ -65,7 +57,7 @@ item.
 | --- | --- | --- | --- |
 | **`dart_quiche`** (recommended) | Pure-Dart port of Cloudflare's quiche: QUIC v1/v2, TLS 1.3, loss recovery, congestion control (Reno/CUBIC/BBRv2), HTTP/3 + QPACK, WebTransport — all in Dart on `pointycastle` | **No FFI, no BoringSSL, no native build/packaging**; single-language stack; RFC 9000/9001/9002/9114/9204 coverage; qlog tooling | Early stage (`0.1.0-dev.x`); no PKI chain-to-root validation yet; unverified publisher — needs vetting/hardening for production |
 | **FFI to a C QUIC lib** | Bind Cloudflare **quiche**, **ngtcp2+nghttp3**, or **msquic** via `dart:ffi` | Battle-tested C cores | FFI complexity, per-platform native builds, buffer marshaling cost |
-| **Sidecar** | Run a QUIC terminator process, proxy to our h1/h2 core | Fast bootstrap | Extra hop/process; not a true single-server story |
+| **Sidecar** | Run a QUIC terminator process, proxy to our h1 core | Fast bootstrap | Extra hop/process; not a true single-server story |
 
 **Plan:** adopt **[`dart_quiche`](https://pub.dev/packages/dart_quiche)** — a
 pure-Dart QUIC + HTTP/3 stack (no FFI, no native dependencies) — behind a clean

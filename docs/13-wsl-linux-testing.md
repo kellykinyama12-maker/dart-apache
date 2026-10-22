@@ -81,7 +81,7 @@ multi-isolate UDP acceptor once implemented (see
 [12-http3-integration-plan.md](12-http3-integration-plan.md)).
 
 ### 5. End-to-end Alt-Svc upgrade (HTTPS)
-Real browsers only honor `Alt-Svc` over **HTTPS**, so this needs the TLS h1/h2
+Real browsers only honor `Alt-Svc` over **HTTPS**, so this needs the TLS h1
 listener (Phase 1). Until then, verify with our Dart client
 (`bin/dart_apache_client.dart`), which upgrades over plain HTTP too.
 

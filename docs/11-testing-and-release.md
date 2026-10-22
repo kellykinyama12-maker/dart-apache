@@ -28,7 +28,7 @@ flowchart TB
 ## Protocol conformance (in CI)
 
 - **HTTP/1.1**: targeted request-smuggling and framing tests.
-- **HTTP/2**: **h2spec** must pass for implemented features.
+- **HTTP/1.1**: targeted request-smuggling and framing tests.
 - **HTTP/3/QUIC**: **quic-interop-runner** against reference clients/servers;
   `curl --http3` smoke tests.
 - Run these per-phase as soon as the protocol lands and keep them green.
@@ -48,7 +48,7 @@ flowchart TB
 
 ## Fuzzing
 
-- Fuzz all parsers: HTTP/1.1 request parser, HTTP/2 framing + HPACK, HTTP/3
+- Fuzz all parsers: HTTP/1.1 request parser, HTTP/3
   QPACK, URI normalizer, FastCGI record parser.
 - Corpus-driven, run continuously; crashes block release.
 
@@ -65,7 +65,7 @@ flowchart TB
 flowchart LR
   PR[Pull request] --> B[Build + analyze]
   B --> UT[Unit + integration]
-  UT --> CF[Conformance (h2spec, quic-interop)]
+  UT --> CF[Conformance (quic-interop)]
   CF --> PERF[Perf smoke + regression gate]
   PERF --> SEC[Security + SBOM]
   SEC --> ART[Signed artifacts]

@@ -7,11 +7,11 @@ baselining.
 
 | Workload | Metric | Target |
 | --- | --- | --- |
-| Static small file (1 KB), h2 | Requests/sec/core | ≥ 60% of nginx on same box |
-| Static large file (1 MB), h2 | Throughput | Line-rate / disk-bound, zero-copy |
+| Static small file (1 KB), HTTPS/1.1 | Requests/sec/core | ≥ 60% of nginx on same box |
+| Static large file (1 MB), HTTPS/1.1 | Throughput | Line-rate / disk-bound, zero-copy |
 | Reverse proxy (keep-alive) | Added p99 latency vs direct | ≤ 1 ms |
 | TLS 1.3 handshakes | Handshakes/sec/core | ≥ 50% of nginx |
-| HTTP/3 small file | Requests/sec/core | Within target factor of h2 |
+| HTTP/3 small file | Requests/sec/core | Within target factor of HTTPS/1.1 |
 | Idle memory | Resident per worker | Low, bounded |
 | 24h soak | Memory growth | ~0 (no leaks) |
 
@@ -31,7 +31,7 @@ tools, not absolute numbers.
 
 ## Measurement methodology
 
-- **Load tools**: `wrk`/`wrk2` (constant-rate for latency), `h2load` (h2/h3),
+- **Load tools**: `wrk`/`wrk2` (constant-rate for latency), `h2load` (h3),
   `vegeta`, and `quic-interop-runner` clients for h3.
 - **Profilers**: Dart DevTools CPU/alloc profiler; OS tools (`perf`, `bpftrace`)
   for syscalls and FFI boundaries.
@@ -49,7 +49,7 @@ tools, not absolute numbers.
 
 - Worker count, accept queue/backlog sizes.
 - Keep-alive timeouts and max requests per connection.
-- h2/h3 window sizes and max concurrent streams.
+- h3 window sizes and max concurrent streams.
 - Buffer sizes and pool limits.
 - UDP socket buffer sizes, GSO/GRO toggles, pacing (h3).
 - Compression level/min-size thresholds.

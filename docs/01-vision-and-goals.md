@@ -13,8 +13,9 @@ latency.
 ## Primary goals
 
 1. **HTTP/3-first protocol support** — QUIC + HTTP/3 over TLS 1.3 is the
-   primary, reference transport; HTTP/2 and HTTP/1.1 are conformant
-   compatibility fallbacks with ALPN negotiation and `Alt-Svc` discovery. See
+   primary, reference transport; **HTTP/1.1 over TLS (HTTPS)** is the
+   compatibility fallback, with `Alt-Svc` discovery to upgrade clients to h3.
+   HTTP/2 is a **non-goal** (see below). See
    [12-http3-integration-plan.md](12-http3-integration-plan.md).
 2. **Reverse proxy & load balancing** — upstream pools, health checks, multiple
    balancing strategies, connection reuse/keep-alive to upstreams.
@@ -30,6 +31,9 @@ latency.
 
 ## Non-goals (initially)
 
+- **HTTP/2.** `dart:io`'s server cannot speak h2, and HTTP/3 supersedes it for
+  our purposes. Clients that can't do h3 use HTTPS/1.1 and upgrade via
+  `Alt-Svc`; we do not implement h2.
 - Being a general application framework. It is a server and gateway, not a web
   app runtime.
 - Full nginx config-language compatibility. We will provide a clean, typed
@@ -39,8 +43,8 @@ latency.
 
 ## Success criteria
 
-- **Correctness:** passes HTTP/1.1, HTTP/2 (h2spec), and HTTP/3 (quic-interop)
-  conformance suites for implemented features.
+- **Correctness:** passes HTTP/1.1 and HTTP/3 (quic-interop) conformance suites
+  for implemented features.
 - **Performance:** within a defined factor of nginx for static file throughput
   and reverse-proxy latency on identical hardware (targets in
   [09-performance.md](09-performance.md)).

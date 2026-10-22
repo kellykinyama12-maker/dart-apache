@@ -11,7 +11,7 @@ path to **HTTP/3 (QUIC)**, TLS, reverse proxying, and horizontal scalability.
 | [01-vision-and-goals.md](01-vision-and-goals.md) | Product vision, non-goals, success criteria |
 | [02-gap-analysis.md](02-gap-analysis.md) | Where the prototype stands today vs. the target |
 | [03-architecture.md](03-architecture.md) | Core runtime: isolates, event loop, connection lifecycle |
-| [04-protocols.md](04-protocols.md) | HTTP/1.1, HTTP/2, HTTP/3 (QUIC), TLS, ALPN |
+| [04-protocols.md](04-protocols.md) | HTTP/1.1, HTTP/3 (QUIC), TLS, `Alt-Svc` (HTTP/2 is out of scope) |
 | [05-features.md](05-features.md) | Reverse proxy, load balancing, caching, FastCGI, static serving |
 | [06-configuration.md](06-configuration.md) | Declarative config model and hot reload |
 | [07-security.md](07-security.md) | TLS, hardening, rate limiting, WAF hooks |
@@ -45,7 +45,7 @@ Implemented in the prototype today:
 
 Planned (see [10-roadmap.md](10-roadmap.md)):
 
-- HTTP/2, HTTP/3 (QUIC via vendored `dart_quiche`), TLS 1.3.
+- HTTP/3 (QUIC via vendored `dart_quiche`), TLS 1.3. (HTTP/2 is out of scope.)
 - Reverse proxy + load balancing, WebSocket (origin + proxy), WebTransport.
 - Caching, declarative config, observability (metrics/tracing), security
   hardening, benchmarking/soak → GA.

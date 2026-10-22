@@ -7,7 +7,7 @@ Every subsystem must be measurable in production.
 - **Structured access logs** (JSON by default; CLF/combined for compatibility).
   Current CLF logging in [server.dart](../lib/src/server.dart) becomes one
   pluggable formatter.
-- Fields: timestamp, remote addr, host, method, target, protocol (h1/h2/h3),
+- Fields: timestamp, remote addr, host, method, target, protocol (h1/h3),
   status, bytes, durations (TTFB, total), upstream, cache status, request id.
 - **Error logs** with severity levels and sampling for repetitive errors.
 - **Correlation**: generate/propagate a request ID (`X-Request-Id`) and trace
@@ -25,7 +25,7 @@ Exposed on a dedicated endpoint (e.g., `127.0.0.1:9113/metrics`):
 - **Upstreams**: health state, connection pool usage, retries, ejections.
 - **Cache**: hit/miss/stale/bypass ratios, size, evictions.
 - **Resources**: isolate CPU/event-loop lag, memory, open FDs, buffer pool use.
-- **Protocol health**: h2/h3 stream counts, flow-control stalls, GOAWAYs,
+- **Protocol health**: h3 stream counts, flow-control stalls, GOAWAYs,
   QUIC loss/retransmit stats.
 
 ## Tracing (OpenTelemetry)
