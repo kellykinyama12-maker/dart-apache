@@ -107,6 +107,24 @@ class H3WebTransportUniStreamEvent extends H3Event {
   });
 }
 
+/// Payload bytes arrived on an inbound (client-initiated) WebTransport
+/// bidirectional stream. [streamId] is the QUIC stream id, [sessionId]
+/// is the WT session parsed from the `varint(0x41) || varint(sessionId)`
+/// `WEBTRANSPORT_STREAM` prefix, and [data] is the WT stream payload
+/// after that prefix. [fin] mirrors the QUIC FIN flag. The application
+/// may write its reply back on the same [streamId].
+class H3WebTransportBidiStreamEvent extends H3Event {
+  final int sessionId;
+  final Uint8List data;
+  final bool fin;
+  const H3WebTransportBidiStreamEvent(
+    super.streamId,
+    this.sessionId,
+    this.data, {
+    required this.fin,
+  });
+}
+
 /// Per-bidi-stream parsing state held by [H3Connection]. Buffers raw
 /// bytes drained from the underlying `Connection` and chops them into
 /// H3 frames sequentially.
@@ -115,6 +133,15 @@ class _H3RequestStream {
   final List<int> _buf = <int>[];
   bool _fin = false;
   bool _headersDelivered = false;
+
+  /// WebTransport bidi-stream classification. A client-initiated bidi
+  /// stream that starts with the `WEBTRANSPORT_STREAM` (0x41) frame
+  /// carries raw WT bytes, not H3 frames.
+  bool _wtClassified = false;
+  bool isWtBidi = false;
+  int? wtSessionId;
+  bool _wtPrefixParsed = false;
+  bool _wtFinEmitted = false;
 
   _H3RequestStream(this.id);
 
@@ -192,6 +219,9 @@ class _H3UniStream {
 
 /// WebTransport unidirectional stream-type id (`varint(0x54)`).
 const int _wtUniStreamTypeId = 0x54;
+
+/// WebTransport `WEBTRANSPORT_STREAM` bidi frame type (`varint(0x41)`).
+const int _wtBidiFrameTypeId = 0x41;
 
 /// HTTP/3 connection layer wrapping a QUIC [Connection].
 class H3Connection {
@@ -874,6 +904,30 @@ class H3Connection {
 
   void _parseRequestStreams() {
     for (final s in _reqStreams.values) {
+      // Classify the bidi stream on its first varint. A
+      // `WEBTRANSPORT_STREAM` (0x41) prefix marks a client-opened WT
+      // bidi stream carrying raw bytes rather than H3 frames.
+      if (!s._wtClassified) {
+        if (s._buf.isEmpty) continue;
+        final needed = 1 << (s._buf[0] >> 6);
+        if (s._buf.length < needed) continue; // await the full varint
+        final b = Octets.withSlice(Uint8List.fromList(s._buf));
+        final int ty;
+        try {
+          ty = b.getVarint();
+        } on Object {
+          continue;
+        }
+        // Peek only — leave bytes for the H3 frame parser / WT prefix.
+        s._wtClassified = true;
+        s.isWtBidi = ty == _wtBidiFrameTypeId;
+      }
+
+      if (s.isWtBidi) {
+        _parseWtBidiStream(s);
+        continue;
+      }
+
       while (true) {
         final parsed = s.tryParseFrame();
         if (parsed == null) break;
@@ -913,6 +967,39 @@ class H3Connection {
           _events.add(H3FinishedEvent(s.id));
         }
       }
+    }
+  }
+
+  /// Peel the `varint(0x41) || varint(sessionId)` WEBTRANSPORT_STREAM
+  /// prefix off an inbound WT bidi stream, then surface remaining
+  /// payload bytes as [H3WebTransportBidiStreamEvent]s.
+  void _parseWtBidiStream(_H3RequestStream s) {
+    if (!s._wtPrefixParsed) {
+      if (s._buf.isEmpty) return;
+      final b = Octets.withSlice(Uint8List.fromList(s._buf));
+      final int sid;
+      try {
+        b.getVarint(); // 0x41 (already classified)
+        sid = b.getVarint();
+      } on Object {
+        return; // await the full prefix
+      }
+      s._buf.removeRange(0, b.off);
+      s.wtSessionId = sid;
+      s._wtPrefixParsed = true;
+    }
+    if (s._buf.isNotEmpty || (s.isFin && !s._wtFinEmitted)) {
+      final data = Uint8List.fromList(s._buf);
+      s._buf.clear();
+      if (s.isFin) s._wtFinEmitted = true;
+      _events.add(
+        H3WebTransportBidiStreamEvent(
+          s.id,
+          s.wtSessionId!,
+          data,
+          fin: s.isFin,
+        ),
+      );
     }
   }
 

@@ -101,8 +101,23 @@ function findBrowser() {
           echoUni += new TextDecoder().decode(chunk.value);
         }
 
+        // Client-initiated bidirectional stream: the browser opens a WT
+        // bidi stream, writes to it, and the server echoes the payload
+        // back on the same stream (observed on its readable side).
+        const bidi = await wt.createBidirectionalStream();
+        const bw = bidi.writable.getWriter();
+        await bw.write(new TextEncoder().encode('client-bidi-hello'));
+        await bw.close();
+        const br = bidi.readable.getReader();
+        let echoBidi = '';
+        for (;;) {
+          const chunk = await Promise.race([br.read(), timeout(8000)]);
+          if (chunk.done) break;
+          echoBidi += new TextDecoder().decode(chunk.value);
+        }
+
         wt.close();
-        return { ok: true, echoed, greeting: greeting.trim(), echoUni };
+        return { ok: true, echoed, greeting: greeting.trim(), echoUni, echoBidi };
       } catch (e) {
         return { ok: false, error: String(e && e.message ? e.message : e) };
       }

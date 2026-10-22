@@ -229,6 +229,7 @@ Future<void> main(List<String> args) async {
           case H3MaxPushIdEvent():
           case H3CancelPushEvent():
           case H3PriorityUpdateEvent():
+          case H3WebTransportUniStreamEvent():
             break;
           case null:
             break;

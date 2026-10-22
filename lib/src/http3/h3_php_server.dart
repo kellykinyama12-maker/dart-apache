@@ -292,6 +292,13 @@ class Http3PhpServer implements WorkerServer {
           :final fin,
         ):
           _echoWtUniStream(session, sessionId, data, fin);
+        case H3WebTransportBidiStreamEvent(
+          :final streamId,
+          :final sessionId,
+          :final data,
+          :final fin,
+        ):
+          _echoWtBidiStream(session, streamId, sessionId, data, fin);
         default:
           break;
       }
@@ -362,6 +369,24 @@ class Http3PhpServer implements WorkerServer {
     _log(
       'WebTransport uni stream echo: ${data.length} bytes '
       '(session $sessionId, fin=$fin)',
+    );
+  }
+
+  /// Echoes an inbound (client-initiated) WebTransport bidirectional stream
+  /// back on the same stream, so the browser observes the reply on the
+  /// bidi stream's readable side.
+  void _echoWtBidiStream(
+    _Session session,
+    int streamId,
+    int sessionId,
+    Uint8List data,
+    bool fin,
+  ) {
+    if (session.wt == null || data.isEmpty) return;
+    session.conn.streamSend(streamId, data, fin: true);
+    _log(
+      'WebTransport bidi stream echo: ${data.length} bytes '
+      '(stream $streamId, session $sessionId, fin=$fin)',
     );
   }
 
