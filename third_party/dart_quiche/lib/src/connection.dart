@@ -1836,6 +1836,12 @@ class Connection {
     return s != null && s.isReadable();
   }
 
+  /// Ids of every stream the QUIC layer currently tracks (either
+  /// direction). Lets higher layers discover peer-opened streams —
+  /// including high-id WebTransport uni/bidi streams — without having
+  /// to blindly probe a fixed id range.
+  Iterable<int> get streamIds => _streams.keys;
+
   /// Drive the RFC 9002 loss-detection timer forward. Call this when
   /// the application's scheduler decides the timer has expired (the
   /// `recovery` instance does not own a real-time clock). On a true

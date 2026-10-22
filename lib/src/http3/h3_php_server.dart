@@ -286,6 +286,12 @@ class Http3PhpServer implements WorkerServer {
         case H3FinishedEvent(:final streamId):
           final req = session.reqs[streamId];
           if (req != null) _dispatch(session, streamId, req);
+        case H3WebTransportUniStreamEvent(
+          :final sessionId,
+          :final data,
+          :final fin,
+        ):
+          _echoWtUniStream(session, sessionId, data, fin);
         default:
           break;
       }
@@ -334,6 +340,29 @@ class Http3PhpServer implements WorkerServer {
     for (Uint8List? dg = wt.recvDatagram(); dg != null; dg = wt.recvDatagram()) {
       wt.sendDatagram(dg);
     }
+  }
+
+  /// Echoes an inbound (client-initiated) WebTransport unidirectional stream
+  /// back to the browser on a fresh server-initiated WT uni stream, so the
+  /// round trip is observable via `incomingUnidirectionalStreams`.
+  void _echoWtUniStream(
+    _Session session,
+    int sessionId,
+    Uint8List data,
+    bool fin,
+  ) {
+    if (session.wt == null || data.isEmpty) return;
+    final uniId = session.h3!.allocLocalUniStreamId();
+    final prefix = encodeWtUniStreamPrefix(sessionId);
+    session.conn.streamSend(
+      uniId,
+      Uint8List.fromList([...prefix, ...data]),
+      fin: true,
+    );
+    _log(
+      'WebTransport uni stream echo: ${data.length} bytes '
+      '(session $sessionId, fin=$fin)',
+    );
   }
 
   String? _headerValue(List<H3Header> headers, String name) {

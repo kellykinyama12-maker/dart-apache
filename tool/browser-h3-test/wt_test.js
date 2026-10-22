@@ -83,8 +83,26 @@ function findBrowser() {
           greeting += new TextDecoder().decode(chunk.value);
         }
 
+        // Client-initiated unidirectional stream: the browser opens an
+        // outbound WT uni stream and writes to it; the server reads it
+        // and echoes the payload back on a fresh server-initiated uni
+        // stream (the next item from incomingUnidirectionalStreams).
+        const outUni = await wt.createUnidirectionalStream();
+        const uw = outUni.getWriter();
+        await uw.write(new TextEncoder().encode('client-uni-hello'));
+        await uw.close();
+
+        const sres2 = await Promise.race([uds.read(), timeout(8000)]);
+        const sreader2 = sres2.value.getReader();
+        let echoUni = '';
+        for (;;) {
+          const chunk = await Promise.race([sreader2.read(), timeout(8000)]);
+          if (chunk.done) break;
+          echoUni += new TextDecoder().decode(chunk.value);
+        }
+
         wt.close();
-        return { ok: true, echoed, greeting: greeting.trim() };
+        return { ok: true, echoed, greeting: greeting.trim(), echoUni };
       } catch (e) {
         return { ok: false, error: String(e && e.message ? e.message : e) };
       }

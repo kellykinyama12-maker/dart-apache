@@ -90,6 +90,23 @@ class H3PriorityUpdateEvent extends H3Event {
   }) : super(-1);
 }
 
+/// Payload bytes arrived on an inbound (client-initiated) WebTransport
+/// unidirectional stream. [streamId] is the QUIC stream id, [sessionId]
+/// is the WT session (the CONNECT stream id) parsed from the
+/// `varint(0x54) || varint(sessionId)` prefix, and [data] is the WT
+/// stream payload after that prefix. [fin] mirrors the QUIC FIN flag.
+class H3WebTransportUniStreamEvent extends H3Event {
+  final int sessionId;
+  final Uint8List data;
+  final bool fin;
+  const H3WebTransportUniStreamEvent(
+    super.streamId,
+    this.sessionId,
+    this.data, {
+    required this.fin,
+  });
+}
+
 /// Per-bidi-stream parsing state held by [H3Connection]. Buffers raw
 /// bytes drained from the underlying `Connection` and chops them into
 /// H3 frames sequentially.
@@ -152,13 +169,29 @@ class _H3UniStream {
   H3StreamType? type;
   bool _typeParsed = false;
   bool _settingsParsed = false;
+  bool _fin = false;
+
+  /// Raw stream-type varint value (set once [_typeParsed]). Needed for
+  /// types outside the [H3StreamType] enum, e.g. the WebTransport uni
+  /// stream type 0x54.
+  int? typeVarint;
+
+  /// WebTransport session id parsed from the `varint(0x54) ||
+  /// varint(sessionId)` prefix of an inbound WT uni stream.
+  int? wtSessionId;
+  bool _wtPrefixParsed = false;
+  bool _wtFinEmitted = false;
 
   _H3UniStream(this.id);
 
-  void append(Uint8List bytes) {
+  void append(Uint8List bytes, bool fin) {
     _buf.addAll(bytes);
+    if (fin) _fin = true;
   }
 }
+
+/// WebTransport unidirectional stream-type id (`varint(0x54)`).
+const int _wtUniStreamTypeId = 0x54;
 
 /// HTTP/3 connection layer wrapping a QUIC [Connection].
 class H3Connection {
@@ -294,9 +327,11 @@ class H3Connection {
       maxFieldSectionSize: 1 << 16,
       h3Datagram: 1,
       connectProtocolEnabled: 1,
-      // SETTINGS_WT_MAX_SESSIONS (draft-ietf-webtrans-http3): browsers require
-      // this > 0 to open a WebTransport session.
-      additionalSettings: const [(0x2b603742, 1)],
+      // WebTransport over HTTP/3 (draft-ietf-webtrans-http3). Browsers
+      // require BOTH:
+      //   0x2b603742 = SETTINGS_ENABLE_WEBTRANSPORT (must be 1)
+      //   0x14e9cd29 = SETTINGS_WT_MAX_SESSIONS   (must be > 0)
+      additionalSettings: const [(0x2b603742, 1), (0x14e9cd29, 1)],
     );
     final scratch = Uint8List(256);
     final n = settings.toBytes(Octets.withSlice(scratch));
@@ -625,6 +660,13 @@ class H3Connection {
     for (final id in _uniStreams.keys) {
       touched.add(id);
     }
+    // Discover every stream the QUIC layer currently tracks — this
+    // surfaces peer-opened streams with arbitrary (high) ids, such as
+    // inbound WebTransport uni/bidi streams, which the fixed-range
+    // probe below would miss.
+    for (final id in conn.streamIds) {
+      touched.add(id);
+    }
     // Probe a small range of low stream ids that the peer could have
     // opened. This isn't pretty but works for tests where the peer's
     // uni-stream ids are well-known.
@@ -653,7 +695,7 @@ class H3Connection {
           s.append(bytes, fin);
         } else {
           final s = _uniStreams.putIfAbsent(id, () => _H3UniStream(id));
-          s.append(bytes);
+          s.append(bytes, fin);
         }
         if (fin || n < scratch.length) break;
       }
@@ -662,13 +704,62 @@ class H3Connection {
 
   void _parseUniStreams() {
     for (final s in _uniStreams.values) {
-      // First byte → stream type varint (always 1 byte for the
-      // well-known types we support).
+      // First varint → stream type. Well-known H3 types (control,
+      // qpack encoder/decoder) are 1-byte varints; the WebTransport
+      // uni stream type 0x54 is a 2-byte varint, so decode the full
+      // varint rather than a single byte.
       if (!s._typeParsed && s._buf.isNotEmpty) {
-        final tyByte = s._buf.removeAt(0);
-        s.type = H3StreamType.deserialize(tyByte);
+        final needed = 1 << (s._buf[0] >> 6);
+        if (s._buf.length < needed) continue; // await the full varint
+        final b = Octets.withSlice(Uint8List.fromList(s._buf));
+        final int ty;
+        try {
+          ty = b.getVarint();
+        } on Object {
+          continue;
+        }
+        s._buf.removeRange(0, b.off);
+        s.typeVarint = ty;
+        s.type = H3StreamType.deserialize(ty);
         s._typeParsed = true;
       }
+
+      // Inbound (client-initiated) WebTransport unidirectional stream.
+      // Peel the `varint(sessionId)` that follows the 0x54 type, then
+      // surface payload bytes as events for the application to consume
+      // (e.g. echo back on a server-initiated WT uni stream).
+      if (s._typeParsed && s.typeVarint == _wtUniStreamTypeId) {
+        if (!s._wtPrefixParsed) {
+          if (s._buf.isEmpty) continue;
+          final needed = 1 << (s._buf[0] >> 6);
+          if (s._buf.length < needed) continue;
+          final b = Octets.withSlice(Uint8List.fromList(s._buf));
+          final int sid;
+          try {
+            sid = b.getVarint();
+          } on Object {
+            continue;
+          }
+          s._buf.removeRange(0, b.off);
+          s.wtSessionId = sid;
+          s._wtPrefixParsed = true;
+        }
+        if (s._buf.isNotEmpty || (s._fin && !s._wtFinEmitted)) {
+          final data = Uint8List.fromList(s._buf);
+          s._buf.clear();
+          if (s._fin) s._wtFinEmitted = true;
+          _events.add(
+            H3WebTransportUniStreamEvent(
+              s.id,
+              s.wtSessionId!,
+              data,
+              fin: s._fin,
+            ),
+          );
+        }
+        continue;
+      }
+
       if (s.type == H3StreamType.control && !s._settingsParsed) {
         // Try to peel one SETTINGS frame.
         if (s._buf.length < 2) continue;
