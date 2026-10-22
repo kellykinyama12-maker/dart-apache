@@ -8,6 +8,41 @@ execution to the `php-cgi` binary over the CGI/1.1 protocol: request metadata is
 passed as environment variables, the request body is piped to the interpreter's
 stdin, and the response (headers + body) is read back from its stdout.
 
+## Why dart-apache?
+
+**TL;DR** — Reach for it when you want **modern transport + an embedded Dart app
+server in one binary**. Keep nginx when you just need to blast static files fast.
+
+What makes it different (not just "another webserver"):
+
+- **HTTP/3 + WebTransport in pure Dart — no C library.** The whole QUIC / HTTP/3
+  / WebTransport stack is pure Dart (no OpenSSL, no `quiche.so`, no FFI).
+  Bidirectional streams and datagrams work out of the box, auto-upgraded from
+  HTTP/1.1 via `Alt-Svc`.
+- **Native WebTransport ↔ Livewire bridge.** A drop-in Composer package lets
+  browser WebTransport frames drive a Laravel/Livewire backend — a capability
+  Apache and nginx don't offer at all. Measured ~40–50% cheaper per request than
+  fetch-over-h3.
+- **One binary: embed *or* serve.** A single executable serves PHP + static like
+  a classic webserver **or** hosts native in-process Dart handlers
+  (`DartApp`/`DartRoute`, optional Shelf bridge) — the same handler runs over h3
+  and h1. No PHP-FPM pool or reverse-proxy sidecar for Dart apps.
+- **`--cache` — ~176× on cacheable dynamic content.** An RFC 9111-style shared
+  cache with stale-while-revalidate took a cacheable PHP endpoint from ~740 to
+  ~130,000 req/s.
+- **Standards-correct static serving.** ETags, conditional `304`, byte ranges
+  (`206`/`416`), `If-Range`, gzip with `Vary`, ~70 MIME types, dotfile denial,
+  directory `301`, method gating (`405`/`OPTIONS`), `413`/`414` limits.
+- **PHP compatibility that doesn't break.** Byte-identical `php-cgi` behavior
+  with front-controller / SPA fallback.
+
+Honest trade-offs (so the pros stay credible):
+
+- **Static throughput is ~47–65× slower than nginx** — we don't beat C +
+  `sendfile`. If your workload is "serve static files fast," use nginx.
+- **It's young** — no disk-backed cache, no `/metrics` observability yet, no
+  YAML config / hot-reload (only `SIGHUP` reload today).
+
 ## Features (Apache equivalents)
 
 - **DocumentRoot** — serves static files with correct `Content-Type` (MIME) and

@@ -5,6 +5,20 @@ HTTP/1.1). **dart-apache is HTTP/3-first**, so WebTransport and low-latency
 real-time are the *native* path — not a bolt-on — while static files and PHP
 still "just work."
 
+## Pros at a glance
+
+| What | Why it matters | Verdict |
+|---|---|---|
+| HTTP/3 + WebTransport in **pure Dart** | No OpenSSL / `quiche.so` / FFI; streams + datagrams out of the box | 🟢 incumbents can't match easily |
+| **Livewire over WebTransport** (drop-in) | Real-time Laravel with no WebSocket server/rewrite | 🟢 unique wedge (~40–50% cheaper/req) |
+| **One binary: embed *or* serve** | Same Dart handler over h3 + h1, no sidecar | 🟢 unique |
+| `--cache` on dynamic content | RFC 9111 shared cache + stale-while-revalidate | 🟢 ~176× faster (740→130k req/s) |
+| Standards-correct static serving | ETag/304/ranges/gzip/MIME/method-gating | ⚪ on par with nginx |
+| Raw static throughput | C + `sendfile` wins | 🔴 ~47–65× slower than nginx |
+
+**Reach for it** when you want modern transport + an embedded Dart app server in
+one pure-Dart binary. **Keep nginx** when you just need to blast static files.
+
 ## The wedge: a killer app the incumbents can't do easily
 
 **Livewire over WebTransport.** A real Laravel 13 + Livewire 4 app runs its
