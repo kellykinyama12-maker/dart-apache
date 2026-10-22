@@ -14,12 +14,21 @@
   var CONFIG = {
     // WebTransport session endpoint on the server (matches --wt-path).
     wtUrl: (window.LIVEWIRE_WT_URL || ('https://' + location.host + '/wt')),
-    // Livewire update endpoint to intercept (Livewire v3 default).
-    endpoint: (window.LIVEWIRE_WT_ENDPOINT || '/livewire/update'),
+    // Livewire update endpoint to intercept. Livewire 3 uses /livewire/update;
+    // Livewire 4 uses a randomized prefix /livewire-<hash>/update. Override the
+    // whole match with window.LIVEWIRE_WT_ENDPOINT (substring) if needed.
+    endpoint: (window.LIVEWIRE_WT_ENDPOINT || null),
   };
 
   // Graceful enhancement: without WebTransport, leave fetch untouched.
   if (typeof window.WebTransport === 'undefined') return;
+
+  var UPDATE_RE = /\/livewire[\w-]*\/update(\?|$)/;
+  function isLivewireUpdate(url, method) {
+    if (!url || String(method).toUpperCase() !== 'POST') return false;
+    if (CONFIG.endpoint) return url.indexOf(CONFIG.endpoint) !== -1;
+    return UPDATE_RE.test(url);
+  }
 
   var wt = null;
   var ready = null;
@@ -45,11 +54,14 @@
     return meta ? meta.getAttribute('content') : null;
   }
 
-  async function sendOverWt(bodyText, token) {
+  async function sendOverWt(bodyText, token, uriPath) {
     var conn = await connect();
     var stream = await conn.createBidirectionalStream();
     var w = stream.writable.getWriter();
     var preamble = '';
+    // Tell the bridge which app route to deliver this to (so the server need
+    // not hard-code Livewire's randomized endpoint prefix).
+    if (uriPath) preamble += 'X-Bridge-Uri: ' + uriPath + '\r\n';
     if (token) preamble += 'X-CSRF-TOKEN: ' + token + '\r\n';
     // Forward readable cookies (session + XSRF-TOKEN) for session continuity,
     // since WebTransport sends no cookies on its handshake. Requires the app's
@@ -76,8 +88,7 @@
       var url = typeof input === 'string' ? input : (input && input.url);
       var method = (init && init.method) ||
                    (typeof input !== 'string' && input && input.method) || 'GET';
-      if (url && url.indexOf(CONFIG.endpoint) !== -1 &&
-          String(method).toUpperCase() === 'POST') {
+      if (isLivewireUpdate(url, method)) {
         var headers = (init && init.headers)
           ? Object.fromEntries(new Headers(init.headers).entries())
           : {};
@@ -87,7 +98,12 @@
             ? init.body
             : await new Response(init.body).text();
         }
-        var text = await sendOverWt(body, csrfToken(headers));
+        var u;
+        try { u = new URL(url, location.href); } catch (e) { u = null; }
+        var uriPath = u ? (u.pathname + u.search) : url;
+        var text = await sendOverWt(body, csrfToken(headers), uriPath);
+        // Observable marker: proves the update traveled over WebTransport.
+        window.__livewireWtUsed = (window.__livewireWtUsed || 0) + 1;
         return new Response(text, {
           status: 200,
           headers: { 'Content-Type': 'application/json' },

@@ -548,10 +548,17 @@ class Http3PhpServer implements WorkerServer {
   /// line) is parsed off and forwarded, so the client can carry credentials.
   Future<_WtBridgeResponse?> _runWtBridge(
     _Session session,
-    String path,
+    String defaultPath,
     Uint8List message,
   ) async {
     final (preamble, body) = _parseWtPreamble(message);
+    // The client may target a specific app route (e.g. Livewire's randomized
+    // /livewire-<hash>/update) via X-Bridge-Uri; otherwise use the configured
+    // bridge path. Always an absolute path, routed like any other request.
+    final override = preamble['x-bridge-uri'];
+    final path = (override != null && override.startsWith('/'))
+        ? override
+        : defaultPath;
     final headers = _bridgeHeaders(session, preamble);
     session.inFlight++;
     final response = _WtBridgeResponse();

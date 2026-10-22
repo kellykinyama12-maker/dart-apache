@@ -136,7 +136,12 @@ class RequestPipeline {
     response.setStatus(php.statusCode, php.reasonPhrase);
     var sawContentType = false;
     php.headers.forEach((name, values) {
-      if (name.toLowerCase() == 'content-type') sawContentType = true;
+      final lower = name.toLowerCase();
+      if (lower == 'content-type') sawContentType = true;
+      // Drop the CGI-declared Content-Length: our streaming parser may strip a
+      // leaked startup preamble, so the body length can differ from what PHP
+      // declared. Let the transport frame the body (chunked / h3 DATA) instead.
+      if (lower == 'content-length') return;
       for (final value in values) {
         response.setHeader(name, value);
       }
