@@ -51,6 +51,11 @@
     var w = stream.writable.getWriter();
     var preamble = '';
     if (token) preamble += 'X-CSRF-TOKEN: ' + token + '\r\n';
+    // Forward readable cookies (session + XSRF-TOKEN) for session continuity,
+    // since WebTransport sends no cookies on its handshake. Requires the app's
+    // session cookie to be readable (dev: SESSION_HTTP_ONLY=false) or a
+    // ticket-based scheme in production.
+    if (document.cookie) preamble += 'Cookie: ' + document.cookie + '\r\n';
     preamble += 'Content-Type: application/json\r\n\r\n';
     await w.write(new TextEncoder().encode(preamble + (bodyText || '')));
     await w.close();
