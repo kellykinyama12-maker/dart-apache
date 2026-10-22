@@ -4,3 +4,6 @@
 
 # Compiled binaries / build output
 build/
+
+# Node deps for tool/browser-h3-test
+node_modules/

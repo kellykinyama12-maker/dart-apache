@@ -1,0 +1,12 @@
+{
+  "name": "dart-apache-browser-h3-test",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Drives an installed Edge/Chrome via playwright-core to verify the browser connects to dart-apache over HTTP/3 (QUIC).",
+  "scripts": {
+    "test:h3": "node h3_test.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.47.0"
+  }
+}
