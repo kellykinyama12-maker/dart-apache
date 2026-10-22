@@ -28,6 +28,9 @@
 - HTTP/3 runs multi-core under the supervisor: N worker isolates share the UDP
   port via `reusePort` (SO_REUSEPORT), with respawn/backoff and reload; each
   worker tags its connection IDs with its worker id (routing groundwork).
+- HTTP/3 sessions routed by Destination Connection ID (migration-safe: a client
+  that changes address keeps its session); graceful shutdown sends GOAWAY, drains
+  in-flight requests, then CONNECTION_CLOSE.
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.

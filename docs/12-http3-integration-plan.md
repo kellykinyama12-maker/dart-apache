@@ -200,17 +200,20 @@ accept model does not directly apply. Plan:
 | H3-4 ✅ | **Streaming** h3 responses (per-chunk DATA + flush) | Large static (200 KB) + PHP streamed over h3 without full-body buffering |
 | H3-5 ✅ | Real certs + SNI + `--dev` self-signed; silence cert debug | PEM cert/key loaded (`--tls-cert`/`--tls-key`); `--dev` self-signed; vendored cert/TLS debug output silenced |
 | H3-6 🟡 | Multi-isolate UDP acceptor + CID affinity via supervisor | h3 runs N workers on a shared UDP port (SO_REUSEPORT) under the supervisor; CID worker-tag in place; cross-worker forwarding for migration pending |
-| H3-7 | GOAWAY drain, migration, Alt-Svc advertisement | Zero-dropped-stream reload; `Alt-Svc` upgrades clients |
+| H3-7 🟡 | GOAWAY drain, migration, Alt-Svc advertisement | Sessions routed by DCID (migration-safe, address adopted); graceful drain sends GOAWAY + waits for in-flight + CONNECTION_CLOSE; Alt-Svc↔listener coupling still needs a unified h1+h3 process |
 | H3-8 | quic-interop + load/soak; qlog + metrics | Interop targets pass; metrics/qlog available |
 
-> **Status:** H3-1..H3-5 done; **H3-6 in progress** — HTTP/3 now runs under the
-> shared [`ServerSupervisor`](../lib/src/supervisor.dart) as N worker isolates
-> (`--workers`), each binding the UDP port with `reusePort` (SO_REUSEPORT on
-> Linux/BSD) for kernel 4-tuple load-balancing, with respawn/backoff and reload.
-> Each worker tags its connection IDs with its worker id. Remaining H3-6:
-> cross-worker datagram **forwarding** (for client migration / kernel
-> mis-steer) and SO_REUSEPORT is Linux-only (Windows runs a single effective
-> acceptor).
+> **Status:** H3-1..H3-5 done; **H3-6 and H3-7 in progress**. HTTP/3 runs under
+> the shared [`ServerSupervisor`](../lib/src/supervisor.dart) as N worker
+> isolates (`--workers`), each binding the UDP port with `reusePort`
+> (SO_REUSEPORT on Linux/BSD). Sessions are keyed by **Destination Connection
+> ID** (not source address), so a migrating client keeps its session and its new
+> address is adopted. Graceful `stop` sends **GOAWAY**, waits for in-flight
+> requests (bounded), then **CONNECTION_CLOSE**. Remaining: cross-worker
+> datagram **forwarding** after migration (a migrated datagram may land on a
+> different worker via SO_REUSEPORT), and tying the advertised `Alt-Svc` port to
+> an actually-running h3 listener (needs h1+h3 in one process). SO_REUSEPORT is
+> Linux-only; Windows runs a single effective acceptor.
 
 > **Status:** H3-1..H3-5 are **done**. HTTP/3 loads a real PEM certificate
 > (`--tls-cert`/`--tls-key`) or a generated self-signed one (`--dev`), and the

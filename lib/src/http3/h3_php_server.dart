@@ -34,6 +34,12 @@ class Http3PhpServer implements WorkerServer {
   /// so datagrams can later be routed to the owning worker.
   int _workerId = 0;
 
+  /// Our connection-ID length (bytes), needed to parse short-header DCIDs.
+  static const int _cidLength = 8;
+
+  /// True once a graceful drain has started (no new connections accepted).
+  bool _draining = false;
+
   /// A forked zone that swallows `print()` so the vendored `dart_quiche` cert
   /// and TLS code don't spam stdout. Our own logging uses `stdout.writeln`,
   /// which bypasses the zone's print handler and is unaffected.
@@ -74,8 +80,30 @@ class Http3PhpServer implements WorkerServer {
 
   @override
   Future<void> stop({bool graceful = false}) async {
-    // QUIC is connectionless at the socket layer; closing the socket stops new
-    // datagrams. (GOAWAY-based draining is tracked as H3-7.)
+    final socket = _socket;
+    if (graceful && socket != null) {
+      _draining = true;
+      final active = _sessions.values.toSet();
+      // GOAWAY: ask clients to stop opening new request streams.
+      for (final session in active) {
+        final h3 = session.h3;
+        if (h3 != null) {
+          h3.sendGoAway(session.maxStreamId < 0 ? 0 : session.maxStreamId + 4);
+          _txAll(session);
+        }
+      }
+      // Let in-flight requests finish (bounded drain window).
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (DateTime.now().isBefore(deadline) &&
+          active.any((s) => s.inFlight > 0)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      // CONNECTION_CLOSE (H3_NO_ERROR) on each connection.
+      for (final session in active) {
+        session.conn.closeApplication(appErrorCode: 0x100, reason: 'shutdown');
+        _txAll(session);
+      }
+    }
     _socket?.close();
     _socket = null;
     _sessions.clear();
@@ -107,10 +135,22 @@ class Http3PhpServer implements WorkerServer {
     final datagram = socket.receive();
     if (datagram == null) return;
 
-    final key = '${datagram.address.address}:${datagram.port}';
-    var session = _sessions[key];
-    session ??= _acceptNewSession(datagram, key);
-    if (session == null) return;
+    // Route by Destination Connection ID (not source address): a client that
+    // migrates to a new address/port keeps the same DCID, so it stays on the
+    // same session.
+    final dcid = _routeDcid(datagram.data);
+    var session = dcid == null ? null : _sessions[_hex(dcid)];
+    if (session == null) {
+      if (_draining) return; // refuse new connections while draining
+      session = _acceptNewSession(datagram);
+      if (session == null) return;
+    } else if (session.addr.address != datagram.address.address ||
+        session.port != datagram.port) {
+      _log('connection migrated to '
+          '${datagram.address.address}:${datagram.port}');
+      session.addr = datagram.address;
+      session.port = datagram.port;
+    }
 
     try {
       session.conn.recvDatagram(datagram.data);
@@ -124,22 +164,45 @@ class Http3PhpServer implements WorkerServer {
       session.driver.poll();
     } catch (e) {
       _log('driver poll threw: $e');
-      _sessions.remove(key);
+      _removeSession(session);
       return;
     }
 
     if (session.driver.handshakeComplete) {
-      if (session.h3 == null) {
-        _log('handshake complete with $key');
-        session.h3 = H3Connection.server(session.conn);
-      }
+      session.h3 ??= H3Connection.server(session.conn);
       _pumpH3(session);
     }
 
     _txAll(session);
   }
 
-  _Session? _acceptNewSession(Datagram datagram, String key) {
+  /// Extracts the Destination Connection ID used to route a datagram to its
+  /// session: from the long-header DCID field, or the fixed-length short-header
+  /// DCID.
+  Uint8List? _routeDcid(List<int> data) {
+    if (data.isEmpty) return null;
+    if ((data[0] & 0x80) != 0) {
+      // Long header: first, version(4), dcidLen(1), dcid...
+      if (data.length < 6) return null;
+      final len = data[5];
+      if (len == 0 || data.length < 6 + len) return null;
+      return Uint8List.fromList(data.sublist(6, 6 + len));
+    }
+    // Short header: dcid is our fixed CID length right after the first byte.
+    if (data.length < 1 + _cidLength) return null;
+    return Uint8List.fromList(data.sublist(1, 1 + _cidLength));
+  }
+
+  String _hex(List<int> bytes) =>
+      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+  void _removeSession(_Session session) {
+    for (final cid in session.cids) {
+      _sessions.remove(cid);
+    }
+  }
+
+  _Session? _acceptNewSession(Datagram datagram) {
     final badVersion = Connection.unsupportedInitialVersion(datagram.data);
     if (badVersion != null) {
       final hdr = Header.fromBytes(Octets.withSlice(datagram.data), 0);
@@ -192,8 +255,14 @@ class Http3PhpServer implements WorkerServer {
       addr: datagram.address,
       port: datagram.port,
     );
-    _sessions[key] = session;
-    _log('new session $key');
+    // Register under the client's initial DCID (matches Initial retransmits)
+    // and our SCID (matches Handshake / 1-RTT packets).
+    session.cids
+      ..add(_hex(clientDcid))
+      ..add(_hex(serverScid));
+    _sessions[_hex(clientDcid)] = session;
+    _sessions[_hex(serverScid)] = session;
+    _log('new session ${_hex(serverScid)}');
     return session;
   }
 
@@ -202,6 +271,7 @@ class Http3PhpServer implements WorkerServer {
     while ((event = session.h3!.pollEvent()) != null) {
       switch (event) {
         case H3HeadersEvent(:final streamId, :final headers, :final fin):
+          if (streamId > session.maxStreamId) session.maxStreamId = streamId;
           final req = session.reqs.putIfAbsent(streamId, _ReqState.new);
           req.headers = headers;
           if (fin) _dispatch(session, streamId, req);
@@ -223,12 +293,15 @@ class Http3PhpServer implements WorkerServer {
   Future<void> _dispatch(_Session session, int streamId, _ReqState req) async {
     if (req.responded) return;
     req.responded = true;
+    session.inFlight++;
 
     final exchange = _H3Exchange(this, session, streamId, req);
     try {
       await _pipeline.serve(exchange);
     } catch (e) {
       _log('request error: $e');
+    } finally {
+      session.inFlight--;
     }
     _txAll(session);
   }
@@ -306,10 +379,19 @@ class _Session {
 
   final Connection conn;
   final TlsServerDriver driver;
-  final InternetAddress addr;
-  final int port;
+  InternetAddress addr;
+  int port;
   H3Connection? h3;
   final Map<int, _ReqState> reqs = {};
+
+  /// CID keys this session is registered under (client DCID + our SCID).
+  final List<String> cids = [];
+
+  /// Requests currently being served (for graceful-drain accounting).
+  int inFlight = 0;
+
+  /// Highest request stream id seen (for the GOAWAY cutoff).
+  int maxStreamId = -1;
 }
 
 class _ReqState {
