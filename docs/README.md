@@ -22,6 +22,7 @@ path to **HTTP/3 (QUIC)**, TLS, reverse proxying, and horizontal scalability.
 | [12-http3-integration-plan.md](12-http3-integration-plan.md) | **HTTP/3-first**: status of the h3 PoC + plan to route HTTP/3 through the unified pipeline |
 | [13-wsl-linux-testing.md](13-wsl-linux-testing.md) | What must be verified on WSL/Linux (FastCGI, SIGHUP reload, h3) |
 | [14-livewire-webtransport.md](14-livewire-webtransport.md) | **Livewire over WebTransport**: what the WT→PHP bridge means for the next Livewire, and what it would need to adopt it |
+| [15-webtransport-hardening-plan.md](15-webtransport-hardening-plan.md) | **Hardening plan**: sequenced phases to take Livewire-over-WebTransport from prototype to shippable (response contract, benchmark, coverage, packaging, transport, CI) |
 
 ## Reading order
 
