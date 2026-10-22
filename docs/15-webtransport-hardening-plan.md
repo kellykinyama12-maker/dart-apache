@@ -88,6 +88,13 @@ Decide whether this is worth productionizing.
 results table. **Decision gate:** if WT shows no benefit even under loss, stop
 here and record the finding; otherwise proceed.
 
+**Status: DONE — proceed.** `tool/browser-h3-test/bench_wt_vs_fetch.js` +
+[09-performance.md](09-performance.md): on loopback WebTransport is reproducibly
+**~40–50% cheaper per request** than `fetch` over HTTP/3 (seq p50 ~2.5ms vs
+~5.1ms; burst×15 p50 ~23ms vs ~47ms). The run also **surfaced a blocking bug**
+(no `MAX_STREAMS` replenishment — stalls after 16 requests), now folded into
+Phase 3. Packet-loss emulation is still TODO (loopback measures CPU/framing only).
+
 **Risk:** medium (network emulation fiddly on Windows; WSL `tc netem` is the fallback).
 
 ---
@@ -96,6 +103,16 @@ here and record the finding; otherwise proceed.
 
 Shake out real-app behavior beyond a counter.
 
+0. **QUIC stream flow control (surfaced by Phase 2, highest priority).** The
+   vendored stack advertises `initial_max_streams_bidi` and never emits
+   `MAX_STREAMS`, so a connection stalls once the budget is spent (one bidi
+   stream per request). Mitigated by raising the grant to 65 536; the real fixes:
+   (a) emit `MAX_STREAMS_BIDI/UNI` as peer streams close (RFC 9000 §4.6), and
+   (b) collect fully-closed streams from `Connection._streams` so cost/memory
+   don't grow with cumulative stream count. Alternative: reuse one persistent
+   bidi stream with message framing (sidesteps both). Also handle a client
+   `STOP_SENDING` mid-response gracefully in `_H3ResponseSink` (the caught
+   `QuicError(StreamStopped)` 500 noted in Phase 1).
 1. **Coverage app** in `livewire-wt`: a form with `wire:model`, server-side
    validation (error bag), a `wire:navigate` link, and a `wire:poll` component.
 2. **Reconnect** in the shim: on `wt.closed`, reset and lazily reconnect on the

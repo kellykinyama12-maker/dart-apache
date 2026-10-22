@@ -60,3 +60,40 @@ tools, not absolute numbers.
   native buffers.
 - **TLS handshake CPU**: session resumption, ticket reuse, hardware AES.
 - **GC pauses**: pooling and streaming to keep allocations flat under load.
+
+## WebTransport vs fetch (Phase 2 benchmark)
+
+Measured with [`tool/browser-h3-test/bench_wt_vs_fetch.js`](../tool/browser-h3-test/bench_wt_vs_fetch.js):
+Edge over HTTP/3 to the server on **loopback** (RTT ≈ 0, so this isolates
+per-request CPU/framing overhead, not network). 434-byte JSON payload, 200
+sequential round-trips + a 15-wide concurrent burst. WT = a bidi-stream echo;
+fetch = a `POST` to a same-size static file. Both ride the same warm QUIC
+connection.
+
+| Metric | WebTransport | fetch (HTTP/3) | WT vs fetch |
+| --- | --- | --- | --- |
+| seq p50 | ~2.5–2.8 ms | ~5.1–5.8 ms | **~−51%** |
+| seq p95 | ~4.8–6.0 ms | ~7.3–9.8 ms | ~−35–39% |
+| burst×15 p50 | ~23–28 ms | ~47–54 ms | **~−48–50%** |
+
+**Finding:** WebTransport is reproducibly **~40–50 % cheaper per request** than
+`fetch` over HTTP/3. A Livewire update carries a small JSON body, so the HTTP/3
+request/response machinery (QPACK encode/decode, HEADERS/DATA framing, header
+processing) is a large fraction of the cost that WT's raw bidi stream skips. On
+a real network the absolute latency is dominated by RTT (both pay ~1 RTT), so
+the *relative* win shrinks — but the CPU saving is real and improves server
+throughput and high-frequency interactivity. **Decision gate: proceed.**
+
+### Critical finding surfaced by the benchmark
+
+The run initially **stalled after ~16 requests**: the server advertised
+`initial_max_streams_bidi = 16` and the vendored QUIC **does not emit
+`MAX_STREAMS` to replenish credit** as streams close. Every request — WT bidi
+*and* HTTP/3 fetch (an HTTP/3 request is itself a client bidi stream) — consumes
+one unit, so both paths exhausted the budget and blocked. Mitigated by raising
+the initial grant to 65 536 (ample for a session). The **real fixes are Phase 3**:
+(1) emit `MAX_STREAMS_BIDI/UNI` as peer streams close (RFC 9000 §4.6), and
+(2) collect fully-closed streams from `Connection._streams` so state doesn't grow
+with cumulative stream count. A long-lived "new bidi stream per update" design
+needs both; an alternative is reusing a persistent stream with message framing.
+

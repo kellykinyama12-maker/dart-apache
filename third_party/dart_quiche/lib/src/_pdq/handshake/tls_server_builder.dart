@@ -224,8 +224,12 @@ Uint8List buildQuicTransportParameters({
     ..._tp(tpInitialMaxStreamDataBidiLocal, 1 << 18),
     ..._tp(tpInitialMaxStreamDataBidiRemote, 1 << 18),
     ..._tp(tpInitialMaxStreamDataUni, 1 << 18),
-    ..._tp(tpInitialMaxStreamsBidi, 16),
-    ..._tp(tpInitialMaxStreamsUni, 16),
+    // The stack does not yet emit MAX_STREAMS to replenish credit as streams
+    // close, so grant a large initial budget — one bidi stream is consumed per
+    // request (e.g. a Livewire update). 64k is ample for a session; the real
+    // fix (MAX_STREAMS replenishment + stream collection) is tracked in docs/15.
+    ..._tp(tpInitialMaxStreamsBidi, 65536),
+    ..._tp(tpInitialMaxStreamsUni, 65536),
   ]);
 }
 
