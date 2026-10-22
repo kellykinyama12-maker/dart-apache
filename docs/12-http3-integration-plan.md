@@ -198,10 +198,16 @@ accept model does not directly apply. Plan:
 | H3-2 ✅ | Port static + PHP handlers to the contract | `RequestPipeline` serves static + PHP; HTTP/1.1 runs via it; tests green |
 | H3-3 ✅ | HTTP/3 server adapts `dart_quiche` to the contract | h3 serves static + PHP through the **same** pipeline (verified) |
 | H3-4 ✅ | **Streaming** h3 responses (per-chunk DATA + flush) | Large static (200 KB) + PHP streamed over h3 without full-body buffering |
-| H3-5 | Real certs + SNI + `--dev` self-signed; silence cert debug | TLS cert loaded from file; no stray stdout |
+| H3-5 ✅ | Real certs + SNI + `--dev` self-signed; silence cert debug | PEM cert/key loaded (`--tls-cert`/`--tls-key`); `--dev` self-signed; vendored cert/TLS debug output silenced |
 | H3-6 | Multi-isolate UDP acceptor + CID affinity via supervisor | h3 served across all cores; respawn/reload work |
 | H3-7 | GOAWAY drain, migration, Alt-Svc advertisement | Zero-dropped-stream reload; `Alt-Svc` upgrades clients |
 | H3-8 | quic-interop + load/soak; qlog + metrics | Interop targets pass; metrics/qlog available |
+
+> **Status:** H3-1..H3-5 are **done**. HTTP/3 loads a real PEM certificate
+> (`--tls-cert`/`--tls-key`) or a generated self-signed one (`--dev`), and the
+> vendored cert/TLS debug `print()` noise is suppressed via a forked zone.
+> Remaining for H3-5: **SNI-based multi-certificate selection** (one cert per
+> hostname) — currently a single server certificate is used.
 
 > **Status:** H3-1..H3-4 are **done** — both HTTP/1.1 and HTTP/3 run through the
 > single [`RequestPipeline`](../lib/src/pipeline/request_pipeline.dart), and the

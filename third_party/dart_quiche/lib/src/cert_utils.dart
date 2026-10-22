@@ -21,6 +21,18 @@ export 'package:dart_quiche/src/_pdq/cipher/cert_utils.dart'
 /// Subject CN is `127.0.0.1` and the SAN includes `127.0.0.1` + `localhost`.
 cu.EcdsaCert generateSelfSignedP256Cert() => cu.generateSelfSignedCertificate();
 
+/// Loads an ECDSA P-256 certificate + private key from PEM strings into an
+/// [cu.EcdsaCert] (DER cert + raw keys), for serving real certificates.
+/// PEMs are trimmed so trailing newlines (common in real files) are tolerated.
+cu.EcdsaCert loadEcdsaCertFromPem({
+  required String certPem,
+  required String keyPem,
+}) =>
+    cu.loadEcdsaCertFromPemStrings(
+      certPem: certPem.trim(),
+      privateKeyPem: keyPem.trim(),
+    );
+
 /// Verifies an ECDSA P-256 (DER) signature over [message] using the raw
 /// uncompressed (`0x04 || X || Y`) public key.
 bool verifyEcdsaP256({

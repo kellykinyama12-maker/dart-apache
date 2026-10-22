@@ -5,7 +5,9 @@ import 'package:dart_apache/src/http3/h3_php_server.dart';
 
 /// Experimental HTTP/3 (QUIC) entry point serving static files and PHP.
 ///
-///   dart run bin/dart_apache_h3.dart --root=./public --port=4433 [--verbose]
+///   dart run bin/dart_apache_h3.dart --root=./public --port=4433 --dev
+///   dart run bin/dart_apache_h3.dart --root=./public --tls-cert=cert.pem \
+///       --tls-key=key.pem
 Future<void> main(List<String> arguments) async {
   final config = ServerConfig.fromArgs(arguments);
   final verbose = arguments.contains('--verbose');
@@ -23,9 +25,18 @@ Future<void> main(List<String> arguments) async {
           port: 4433,
           documentRoot: config.documentRoot,
           phpCgiPath: config.phpCgiPath,
+          phpFpm: config.phpFpm,
           serverName: config.serverName,
+          tlsCertPath: config.tlsCertPath,
+          tlsKeyPath: config.tlsKeyPath,
+          devMode: config.devMode,
         )
       : config;
 
-  await Http3PhpServer(effective, verbose: verbose).start();
+  try {
+    await Http3PhpServer(effective, verbose: verbose).start();
+  } on StateError catch (e) {
+    stderr.writeln(e.message);
+    exitCode = 2;
+  }
 }

@@ -36,6 +36,24 @@ void main() {
     });
   });
 
+  group('TLS / dev config', () {
+    test('dev mode and cert paths default off', () {
+      final config = ServerConfig(documentRoot: '.');
+      expect(config.devMode, isFalse);
+      expect(config.tlsCertPath, isNull);
+      expect(config.tlsKeyPath, isNull);
+    });
+
+    test('parses --dev and --tls-cert/--tls-key flags', () {
+      final config = ServerConfig.fromArgs(
+        ['--dev', '--tls-cert=c.pem', '--tls-key=k.pem'],
+      );
+      expect(config.devMode, isTrue);
+      expect(config.tlsCertPath, 'c.pem');
+      expect(config.tlsKeyPath, 'k.pem');
+    });
+  });
+
   group('backoffDelay', () {
     test('first restart is immediate', () {
       expect(backoffDelay(1), Duration.zero);

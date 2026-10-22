@@ -68,10 +68,22 @@ dart compile exe bin/dart_apache.dart -o build/dart_apache
 
 A proof-of-concept HTTP/3 (QUIC) server serves the same static files and PHP
 over the pure-Dart [`dart_quiche`](third_party/dart_quiche) transport (QUIC +
-TLS 1.3, self-signed cert):
+TLS 1.3). It requires a TLS certificate: pass a real PEM cert/key, or `--dev`
+for a generated self-signed one.
 
 ```sh
-dart run bin/dart_apache_h3.dart --root=./public --port=4433
+# dev: generated self-signed cert
+dart run bin/dart_apache_h3.dart --root=./public --port=4433 --dev
+
+# real certificate
+dart run bin/dart_apache_h3.dart --root=./public --port=4433 \
+    --tls-cert=cert.pem --tls-key=key.pem
+```
+
+Generate a local self-signed `cert.pem` / `key.pem` (no openssl needed):
+
+```sh
+dart run tool/gen_dev_cert.dart .
 ```
 
 Advertise it from the HTTP/1.1 server so clients discover and upgrade to QUIC

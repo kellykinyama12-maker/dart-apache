@@ -15,6 +15,9 @@ class ServerConfig {
     this.serverSoftware = 'dart-apache/1.0.0',
     this.altSvcH3Port,
     this.altSvcMaxAge = 86400,
+    this.tlsCertPath,
+    this.tlsKeyPath,
+    this.devMode = false,
     this.idleTimeout = const Duration(seconds: 120),
     this.maxRequestBodyBytes = 10 * 1024 * 1024,
     int? workers,
@@ -61,6 +64,15 @@ class ServerConfig {
   /// `ma` (max-age) seconds for the advertised `Alt-Svc` entry.
   final int altSvcMaxAge;
 
+  /// PEM certificate file for TLS (HTTP/3). Required unless [devMode].
+  final String? tlsCertPath;
+
+  /// PEM private-key file matching [tlsCertPath].
+  final String? tlsKeyPath;
+
+  /// When true, HTTP/3 may use a generated self-signed certificate.
+  final bool devMode;
+
   /// How long an idle keep-alive connection may stay open (slowloris defense).
   final Duration idleTimeout;
 
@@ -96,6 +108,9 @@ class ServerConfig {
       phpFpm: map['php-fpm'],
       serverName: map['server-name'] ?? 'localhost',
       altSvcH3Port: int.tryParse(map['advertise-h3'] ?? ''),
+      tlsCertPath: map['tls-cert'],
+      tlsKeyPath: map['tls-key'],
+      devMode: args.contains('--dev'),
       idleTimeout: Duration(
         seconds: int.tryParse(map['idle-timeout'] ?? '') ?? 120,
       ),

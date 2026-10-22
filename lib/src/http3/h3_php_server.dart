@@ -25,11 +25,19 @@ class Http3PhpServer {
   final RequestPipeline _pipeline;
 
   late final RawDatagramSocket _socket;
-  late final _cert = generateSelfSignedP256Cert();
+  late final EcdsaCert _cert;
   final Map<String, _Session> _sessions = {};
   final Random _rng = Random.secure();
 
+  /// A forked zone that swallows `print()` so the vendored `dart_quiche` cert
+  /// and TLS code don't spam stdout. Our own logging uses `stdout.writeln`,
+  /// which bypasses the zone's print handler and is unaffected.
+  late final Zone _quietZone = Zone.current.fork(
+    specification: ZoneSpecification(print: (_, _, _, _) {}),
+  );
+
   Future<void> start() async {
+    _cert = _quietZone.run(_buildCert);
     _socket = await RawDatagramSocket.bind(
       InternetAddress(config.address),
       config.port,
@@ -40,7 +48,27 @@ class Http3PhpServer {
         '(QUIC/UDP)');
     stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
 
-    _socket.listen(_onSocketEvent);
+    // Run the datagram handler in the quiet zone so handshake debug prints are
+    // suppressed (callbacks inherit the zone active at listen() time).
+    _quietZone.run(() => _socket.listen(_onSocketEvent));
+  }
+
+  /// Builds the server certificate: a real PEM cert/key when configured, or a
+  /// generated self-signed cert in `--dev` mode.
+  EcdsaCert _buildCert() {
+    final certPath = config.tlsCertPath;
+    final keyPath = config.tlsKeyPath;
+    if (certPath != null && keyPath != null) {
+      return loadEcdsaCertFromPem(
+        certPem: File(certPath).readAsStringSync(),
+        keyPem: File(keyPath).readAsStringSync(),
+      );
+    }
+    if (config.devMode) return generateSelfSignedP256Cert();
+    throw StateError(
+      'HTTP/3 requires a TLS certificate: pass --tls-cert and --tls-key, '
+      'or --dev to use a generated self-signed certificate.',
+    );
   }
 
   void _onSocketEvent(RawSocketEvent event) {
