@@ -99,15 +99,21 @@ class ServerConfig {
     }
 
     final root = map['root'] ?? Directory.current.path;
+    final port = int.tryParse(map['port'] ?? '') ?? 8080;
+    // `--http3` co-locates an h3 listener on the same port, so advertise it
+    // automatically unless an explicit --advertise-h3 was given.
+    final http3 = args.contains('--http3');
+    final altSvcH3Port =
+        int.tryParse(map['advertise-h3'] ?? '') ?? (http3 ? port : null);
 
     return ServerConfig(
       address: map['address'] ?? '127.0.0.1',
-      port: int.tryParse(map['port'] ?? '') ?? 8080,
+      port: port,
       documentRoot: Directory(root).absolute.path,
       phpCgiPath: map['php-cgi'] ?? 'php-cgi',
       phpFpm: map['php-fpm'],
       serverName: map['server-name'] ?? 'localhost',
-      altSvcH3Port: int.tryParse(map['advertise-h3'] ?? ''),
+      altSvcH3Port: altSvcH3Port,
       tlsCertPath: map['tls-cert'],
       tlsKeyPath: map['tls-key'],
       devMode: args.contains('--dev'),

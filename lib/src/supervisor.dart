@@ -5,10 +5,11 @@ import 'dart:isolate';
 import 'config.dart';
 import 'http3/h3_php_server.dart';
 import 'server.dart';
+import 'unified_server.dart';
 import 'worker_server.dart';
 
-/// Which transport a supervised worker serves.
-enum WorkerKind { http1, http3 }
+/// Which transport(s) a supervised worker serves.
+enum WorkerKind { http1, http3, unified }
 
 /// Supervises worker isolates, each running an independent, non-blocking
 /// [WorkerServer] bound to a shared listening socket (shared-nothing,
@@ -36,11 +37,20 @@ class ServerSupervisor {
 
   /// Spawns the configured number of workers and begins serving.
   Future<void> start() async {
-    final scheme = kind == WorkerKind.http3 ? 'https' : 'http';
-    final transport = kind == WorkerKind.http3 ? ' (QUIC/UDP)' : '';
     stdout.writeln('dart-apache serving "${config.documentRoot}"');
-    stdout.writeln(
-        'Listening on $scheme://${config.address}:${config.port}/$transport');
+    switch (kind) {
+      case WorkerKind.unified:
+        stdout.writeln('Listening on http://${config.address}:${config.port}/ '
+            '(HTTP/1.1) and https://${config.address}:${config.port}/ '
+            '(HTTP/3, QUIC/UDP)');
+      case WorkerKind.http3:
+        stdout.writeln(
+            'Listening on https://${config.address}:${config.port}/ '
+            '(QUIC/UDP)');
+      case WorkerKind.http1:
+        stdout.writeln(
+            'Listening on http://${config.address}:${config.port}/');
+    }
     stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
     stdout.writeln('Workers: ${config.workers} isolate(s)');
 
@@ -206,9 +216,11 @@ class _WorkerArgs {
 /// Entry point run inside each worker isolate.
 Future<void> _workerMain(_WorkerArgs args) async {
   final control = ReceivePort();
-  final WorkerServer server = args.kind == WorkerKind.http3
-      ? Http3PhpServer(args.config)
-      : ApacheServer(args.config);
+  final WorkerServer server = switch (args.kind) {
+    WorkerKind.http3 => Http3PhpServer(args.config),
+    WorkerKind.unified => UnifiedServer(args.config),
+    WorkerKind.http1 => ApacheServer(args.config),
+  };
   await server.start(workerId: args.id);
 
   // Signal readiness by handing the supervisor our control port.

@@ -4,8 +4,8 @@ import 'package:dart_apache/dart_apache.dart';
 
 /// Entry point. Usage:
 ///
-///   dart run dart_apache \
-///     --root=./public --port=8080 --php-cgi=php-cgi --server-name=localhost
+///   dart run dart_apache --root=./public --port=8080
+///   dart run dart_apache --root=./public --port=443 --http3 --dev
 Future<void> main(List<String> arguments) async {
   final config = ServerConfig.fromArgs(arguments);
 
@@ -15,7 +15,25 @@ Future<void> main(List<String> arguments) async {
     return;
   }
 
-  final server = ServerSupervisor(config);
+  // `--http3` co-locates an HTTP/3 (QUIC) listener with HTTP/1.1 in one
+  // process, which requires a TLS certificate.
+  final http3 = arguments.contains('--http3');
+  if (http3) {
+    final hasCert = config.tlsCertPath != null && config.tlsKeyPath != null;
+    if (!hasCert && !config.devMode) {
+      stderr.writeln(
+        'HTTP/3 requires a TLS certificate: pass --tls-cert and --tls-key, '
+        'or --dev to use a generated self-signed certificate.',
+      );
+      exitCode = 2;
+      return;
+    }
+  }
+
+  final server = ServerSupervisor(
+    config,
+    kind: http3 ? WorkerKind.unified : WorkerKind.http1,
+  );
 
   // Graceful shutdown on Ctrl+C (and SIGTERM on POSIX).
   ProcessSignal.sigint.watch().listen((_) async {

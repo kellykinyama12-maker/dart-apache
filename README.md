@@ -46,6 +46,7 @@ Flags:
 | `--server-name=` | `localhost` | `ServerName`      |
 | `--workers=`     | CPU count   | `worker_processes` (one isolate per core, shared socket) |
 | `--advertise-h3=`| (unset)     | Advertise HTTP/3 on this UDP port via the `Alt-Svc` header |
+| `--http3`        | off         | Co-locate HTTP/3 (QUIC) on the same port; auto-advertises via `Alt-Svc` (needs `--dev` or `--tls-cert`/`--tls-key`) |
 | `--idle-timeout=`| `120`       | Keep-alive idle timeout in seconds (slowloris defense) |
 | `--max-body=`    | `10485760`  | Max request body in bytes (`413` beyond this) |
 
@@ -66,10 +67,16 @@ dart compile exe bin/dart_apache.dart -o build/dart_apache
 
 ## HTTP/3 (experimental)
 
-A proof-of-concept HTTP/3 (QUIC) server serves the same static files and PHP
-over the pure-Dart [`dart_quiche`](third_party/dart_quiche) transport (QUIC +
-TLS 1.3). It requires a TLS certificate: pass a real PEM cert/key, or `--dev`
-for a generated self-signed one.
+Run HTTP/1.1 and HTTP/3 together in **one process on one port** (`--http3`). The
+HTTP/1.1 responses automatically advertise the co-located HTTP/3 listener via
+`Alt-Svc`, so clients discover and upgrade to QUIC. Requires a TLS certificate
+(`--dev` for a generated self-signed one, or `--tls-cert`/`--tls-key`):
+
+```sh
+dart run bin/dart_apache.dart --root=./public --port=8080 --http3 --dev
+```
+
+The standalone HTTP/3-only server is also available:
 
 ```sh
 # dev: generated self-signed cert

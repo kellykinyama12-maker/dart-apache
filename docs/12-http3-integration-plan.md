@@ -200,7 +200,7 @@ accept model does not directly apply. Plan:
 | H3-4 ✅ | **Streaming** h3 responses (per-chunk DATA + flush) | Large static (200 KB) + PHP streamed over h3 without full-body buffering |
 | H3-5 ✅ | Real certs + SNI + `--dev` self-signed; silence cert debug | PEM cert/key loaded (`--tls-cert`/`--tls-key`); `--dev` self-signed; vendored cert/TLS debug output silenced |
 | H3-6 🟡 | Multi-isolate UDP acceptor + CID affinity via supervisor | h3 runs N workers on a shared UDP port (SO_REUSEPORT) under the supervisor; CID worker-tag in place; cross-worker forwarding for migration pending |
-| H3-7 🟡 | GOAWAY drain, migration, Alt-Svc advertisement | Sessions routed by DCID (migration-safe, address adopted); graceful drain sends GOAWAY + waits for in-flight + CONNECTION_CLOSE; Alt-Svc↔listener coupling still needs a unified h1+h3 process |
+| H3-7 🟡 | GOAWAY drain, migration, Alt-Svc advertisement | Sessions routed by DCID (migration-safe, address adopted); graceful drain sends GOAWAY + waits for in-flight + CONNECTION_CLOSE; **Alt-Svc↔listener coupling done** via the unified process |
 | H3-8 | quic-interop + load/soak; qlog + metrics | Interop targets pass; metrics/qlog available |
 
 > **Status:** H3-1..H3-5 done; **H3-6 and H3-7 in progress**. HTTP/3 runs under

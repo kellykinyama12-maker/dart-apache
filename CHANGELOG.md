@@ -31,6 +31,9 @@
 - HTTP/3 sessions routed by Destination Connection ID (migration-safe: a client
   that changes address keeps its session); graceful shutdown sends GOAWAY, drains
   in-flight requests, then CONNECTION_CLOSE.
+- Unified listener: `--http3` runs HTTP/1.1 (TCP) and HTTP/3 (UDP/QUIC) in one
+  process on one port; HTTP/1.1 auto-advertises the co-located h3 listener via
+  `Alt-Svc`, so discovery points at a listener that is actually running.
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.
