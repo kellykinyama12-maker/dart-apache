@@ -1,0 +1,53 @@
+name: Browser WebTransport suite
+
+# The HTTP/3 + WebTransport browser tests drive Microsoft Edge with QUIC
+# enabled and a pinned dev certificate. GitHub-hosted runners cannot reliably
+# run QUIC/Edge, so this suite is manual and targets a self-hosted runner that
+# has Edge, Node, PHP, and a Laravel checkout available.
+#
+# Label a self-hosted runner `[self-hosted, windows, edge]` and dispatch this
+# workflow from the Actions tab. See docs/16-deploy.md and
+# tool/browser-h3-test/README.md for the per-test server configuration.
+
+on:
+  workflow_dispatch:
+    inputs:
+      port:
+        description: Port to serve the test app on
+        default: "8443"
+        required: false
+
+jobs:
+  browser:
+    name: Edge HTTP/3 + WebTransport
+    runs-on: [self-hosted, windows, edge]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: "3.13.4"
+
+      - name: Install deps
+        run: dart pub get
+
+      - name: Generate dev certificate
+        run: dart run tool/gen_dev_cert.dart build
+
+      - name: Install Node deps for the browser harness
+        working-directory: tool/browser-h3-test
+        run: npm ci || npm install
+
+      # The server + each *.js test need coordinated flags; the harness
+      # scripts carry their required server config in a header comment.
+      # Run them against a server started out-of-band on the chosen port.
+      - name: Run WebTransport echo + Livewire suite
+        working-directory: tool/browser-h3-test
+        shell: pwsh
+        run: |
+          $port = "${{ github.event.inputs.port }}"
+          foreach ($t in @('wt_test.js','wt_response_test.js','wt_csrf_test.js','wt_ticket_test.js')) {
+            Write-Host "== $t =="
+            node $t --port $port --cert ..\..\build\cert.pem
+            if ($LASTEXITCODE -ne 0) { throw "$t failed" }
+          }

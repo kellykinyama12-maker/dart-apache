@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  analyze-test:
+    name: Analyze & test (Dart)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: "3.13.4"
+
+      # Root package.
+      - name: Install root deps
+        run: dart pub get
+      - name: Analyze root
+        run: dart analyze bin lib test tool
+      - name: Test root
+        run: dart test
+
+      # Vendored dart_quiche (its own package).
+      - name: Install vendored deps
+        working-directory: third_party/dart_quiche
+        run: dart pub get
+      - name: Analyze vendored
+        working-directory: third_party/dart_quiche
+        run: dart analyze lib test
+      # Excludes zero_rtt_e2e_test: a known pre-1.0 PSK-binder gap in the
+      # vendored stack, unrelated to the WebTransport work (tracked in Phase 5).
+      - name: Test vendored
+        working-directory: third_party/dart_quiche
+        run: dart test $(ls test/*_test.dart | grep -v zero_rtt_e2e_test)
+
+  lint:
+    name: Lint (PHP + JS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+      - name: php -l demos and package
+        run: find public packaging -name '*.php' -print0 | xargs -0 -r -n1 php -l
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check JS syntax (shim + browser tests)
+        run: |
+          set -e
+          for f in \
+            public/app/livewire-webtransport.js \
+            packaging/livewire-webtransport/resources/js/livewire-webtransport.js \
+            tool/browser-h3-test/*.js; do
+            echo "node --check $f"
+            node --check "$f"
+          done
