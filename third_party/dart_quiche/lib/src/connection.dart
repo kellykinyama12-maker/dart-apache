@@ -196,6 +196,27 @@ class Connection {
   int _peerMaxStreamsBidi = 0;
   int _peerMaxStreamsUni = 0;
 
+  /// Stream-count credit WE grant the peer (RFC 9000 §4.6). The
+  /// initial values MUST match the `initial_max_streams_*` the handshake
+  /// advertises — see
+  /// `_pdq/handshake/tls_server_builder.dart` and `client_hello_builder.dart`.
+  /// As the peer opens streams and headroom runs low, [send] raises these
+  /// and emits MAX_STREAMS so the peer can keep opening streams (one bidi
+  /// stream is consumed per HTTP/3 request or WebTransport bidi stream).
+  int _localMaxStreamsBidi = _initialLocalMaxStreams;
+  int _localMaxStreamsUni = _initialLocalMaxStreams;
+
+  /// Highest cumulative count of peer-initiated bidi/uni streams seen —
+  /// `max((id >> 2) + 1)` over peer-initiated streams of each type.
+  int _peerBidiOpened = 0;
+  int _peerUniOpened = 0;
+
+  /// Initial per-type stream grant (kept in lock-step with the handshake
+  /// transport parameters) and the headroom/step used to replenish it.
+  static const int _initialLocalMaxStreams = 128;
+  static const int _streamCreditLowWater = 32;
+  static const int _streamCreditStep = 128;
+
   /// Per-stream send credit initialised from the peer's
   /// `initial_max_stream_data_*` transport parameters (RFC 9000 §18.2).
   /// Currently informational — `_getOrCreateStream` does not yet use
@@ -1133,6 +1154,17 @@ class Connection {
         fcFrames.add(MaxDataFrame(next));
         _localFc.updateMaxData(now);
       }
+      // Stream-count credit (RFC 9000 §4.6) — raise the per-type limit
+      // and emit MAX_STREAMS before the peer runs out, so a long-lived
+      // connection can keep opening streams (one bidi stream per request).
+      if (_localMaxStreamsBidi - _peerBidiOpened < _streamCreditLowWater) {
+        _localMaxStreamsBidi = _peerBidiOpened + _streamCreditStep;
+        fcFrames.add(MaxStreamsBidiFrame(_localMaxStreamsBidi));
+      }
+      if (_localMaxStreamsUni - _peerUniOpened < _streamCreditLowWater) {
+        _localMaxStreamsUni = _peerUniOpened + _streamCreditStep;
+        fcFrames.add(MaxStreamsUniFrame(_localMaxStreamsUni));
+      }
       // PATH_RESPONSE echoes (RFC 9000 §8.2.2). These are not
       // ack-eliciting on their own per the spec but we still need to
       // get them on the wire — they piggyback on whatever else this
@@ -1710,6 +1742,16 @@ class Connection {
       seq: id,
     );
     _streams[id] = s;
+    // Track how many streams the peer has opened so [send] can replenish
+    // MAX_STREAMS credit before the peer exhausts it (RFC 9000 §4.6).
+    if (!isLocal) {
+      final opened = (id >> 2) + 1;
+      if (bidi) {
+        if (opened > _peerBidiOpened) _peerBidiOpened = opened;
+      } else {
+        if (opened > _peerUniOpened) _peerUniOpened = opened;
+      }
+    }
     return s;
   }
 
