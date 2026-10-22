@@ -270,11 +270,15 @@ class Http3PhpServer implements WorkerServer {
     H3Event? event;
     while ((event = session.h3!.pollEvent()) != null) {
       switch (event) {
-        case H3HeadersEvent(:final streamId, :final headers, :final fin):
-          if (streamId > session.maxStreamId) session.maxStreamId = streamId;
-          final req = session.reqs.putIfAbsent(streamId, _ReqState.new);
-          req.headers = headers;
-          if (fin) _dispatch(session, streamId, req);
+        case final H3HeadersEvent he:
+          // WebTransport Extended CONNECT (stream stays open, fin=false).
+          if (_tryWebTransport(session, he)) break;
+          if (he.streamId > session.maxStreamId) {
+            session.maxStreamId = he.streamId;
+          }
+          final req = session.reqs.putIfAbsent(he.streamId, _ReqState.new);
+          req.headers = he.headers;
+          if (he.fin) _dispatch(session, he.streamId, req);
         case H3DataEvent(:final streamId, :final data, :final fin):
           final req = session.reqs.putIfAbsent(streamId, _ReqState.new);
           req.body.add(data);
@@ -286,6 +290,45 @@ class Http3PhpServer implements WorkerServer {
           break;
       }
     }
+    _echoWebTransport(session);
+  }
+
+  /// Accepts a WebTransport session on the configured path, or rejects it on
+  /// another path. Returns true if [he] was an Extended CONNECT for
+  /// WebTransport (handled here, not as a normal request).
+  bool _tryWebTransport(_Session session, H3HeadersEvent he) {
+    final wtPath = config.wtPath;
+    if (wtPath == null) return false;
+    final wt = WebTransportSession.acceptIfWebTransport(session.h3!, he);
+    if (wt == null) return false;
+
+    final path = _headerValue(he.headers, ':path');
+    if (path != wtPath) {
+      wt.reject(status: 404);
+      return true;
+    }
+    wt.accept();
+    session.wt = wt;
+    _log('WebTransport session accepted on $wtPath (stream ${he.streamId})');
+    return true;
+  }
+
+  /// Echoes any received WebTransport datagrams back to the client.
+  void _echoWebTransport(_Session session) {
+    final wt = session.wt;
+    if (wt == null) return;
+    for (Uint8List? dg = wt.recvDatagram(); dg != null; dg = wt.recvDatagram()) {
+      wt.sendDatagram(dg);
+    }
+  }
+
+  String? _headerValue(List<H3Header> headers, String name) {
+    for (final h in headers) {
+      if (String.fromCharCodes(h.name) == name) {
+        return String.fromCharCodes(h.value);
+      }
+    }
+    return null;
   }
 
   /// Handles one completed request by adapting it to a [ServerExchange] and
@@ -383,6 +426,9 @@ class _Session {
   int port;
   H3Connection? h3;
   final Map<int, _ReqState> reqs = {};
+
+  /// Active WebTransport session on this connection, if any.
+  WebTransportSession? wt;
 
   /// CID keys this session is registered under (client DCID + our SCID).
   final List<String> cids = [];

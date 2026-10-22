@@ -48,3 +48,13 @@ which the browser uses to upgrade on a later connection.
   discovery) so we test the h3 datapath in one navigation.
 - `--ignore-certificate-errors-spki-list=<base64 SHA-256 of SPKI>` — trust our
   self-signed cert by pinning its public key.
+
+## WebTransport test
+
+With the server started with `--wt-path=/wt`, verify a browser opens a
+WebTransport session over HTTP/3 and echoes a datagram:
+
+```sh
+node wt_test.js --port 8443 --cert ../../build/cert.pem --path /wt
+# -> { "ok": true, "echoed": "ping-webtransport" }
+```

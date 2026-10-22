@@ -31,6 +31,7 @@ class ServerConfig {
     this.idleTimeout = const Duration(seconds: 120),
     this.maxRequestBodyBytes = 10 * 1024 * 1024,
     this.proxyRoutes = const [],
+    this.wtPath,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
         workers = (workers == null || workers < 1)
@@ -98,6 +99,10 @@ class ServerConfig {
   /// Reverse-proxy routes, checked (longest prefix first) before static/PHP.
   final List<ProxyRoute> proxyRoutes;
 
+  /// When set, HTTP/3 Extended CONNECT requests with `:protocol=webtransport`
+  /// on this path open a WebTransport session (datagram echo).
+  final String? wtPath;
+
   /// The `Alt-Svc` header value advertising HTTP/3, or null if disabled.
   String? get altSvcHeader => altSvcH3Port == null
       ? null
@@ -164,6 +169,7 @@ class ServerConfig {
       maxRequestBodyBytes:
           int.tryParse(map['max-body'] ?? '') ?? 10 * 1024 * 1024,
       proxyRoutes: proxyRoutes,
+      wtPath: map['wt-path'],
       workers: int.tryParse(map['workers'] ?? ''),
     );
   }

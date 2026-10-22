@@ -77,8 +77,11 @@ sequenceDiagram
 
 ### WebTransport (HTTP/3 only)
 
-- Requires the QUIC/HTTP/3 datapath; the vendored **`dart_quiche`** already
-  implements WebTransport over HTTP/3 (Extended `CONNECT` with
+> **Status:** **working** — the server accepts browser WebTransport sessions and
+> echoes datagrams (`--wt-path=/wt`), verified end-to-end with Chromium/Edge.
+
+- Requires the QUIC/HTTP/3 datapath; the vendored **`dart_quiche`** implements
+  WebTransport over HTTP/3 (Extended `CONNECT` with
   `:protocol=webtransport`, capsule framing, unidirectional `0x54` and
   bidirectional `WEBTRANSPORT_STREAM 0x41`).
 - **Origin:** route Extended CONNECT to a WebTransport session handler exposing

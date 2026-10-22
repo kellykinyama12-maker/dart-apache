@@ -40,6 +40,7 @@ Future<void> main(List<String> arguments) async {
           tlsKeyPath: config.tlsKeyPath,
           devMode: config.devMode,
           workers: config.workers,
+          wtPath: config.wtPath,
         )
       : config;
 

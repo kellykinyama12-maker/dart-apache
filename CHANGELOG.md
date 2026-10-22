@@ -43,6 +43,10 @@
   streaming request/response with back-pressure, hop-by-hop stripping,
   `X-Forwarded-*` headers, and `502` on upstream failure. Works for both
   HTTPS/1.1 and HTTP/3 (shared pipeline).
+- **WebTransport over HTTP/3** (`--wt-path`): accepts browser WebTransport
+  sessions (Extended CONNECT, `:protocol=webtransport`) and echoes datagrams.
+  Verified end-to-end with Chromium/Edge. Vendored `dart_quiche` now advertises
+  `SETTINGS_WT_MAX_SESSIONS` so browsers open sessions.
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.

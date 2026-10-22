@@ -294,6 +294,9 @@ class H3Connection {
       maxFieldSectionSize: 1 << 16,
       h3Datagram: 1,
       connectProtocolEnabled: 1,
+      // SETTINGS_WT_MAX_SESSIONS (draft-ietf-webtrans-http3): browsers require
+      // this > 0 to open a WebTransport session.
+      additionalSettings: const [(0x2b603742, 1)],
     );
     final scratch = Uint8List(256);
     final n = settings.toBytes(Octets.withSlice(scratch));
