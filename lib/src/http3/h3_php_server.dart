@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -323,6 +324,9 @@ class Http3PhpServer implements WorkerServer {
     }
     wt.accept();
     session.wt = wt;
+    // Capture the Cookie the browser sent on the WebTransport CONNECT so the
+    // bridge can forward the Laravel session / XSRF-TOKEN to PHP.
+    session.cookie = _headerValue(he.headers, 'cookie');
     _openWtGreetingStream(session, wt);
     _log('WebTransport session accepted on $wtPath (stream ${he.streamId})');
     return true;
@@ -538,17 +542,27 @@ class Http3PhpServer implements WorkerServer {
     _txAll(session);
   }
 
-  /// Runs [body] through the PHP pipeline as a synthetic `POST [path]` and
-  /// returns the captured response, or null on error.
+  /// Runs [message] through the PHP pipeline as a synthetic `POST [path]` and
+  /// returns the captured response, or null on error. An optional HTTP-style
+  /// header preamble in [message] (e.g. `X-CSRF-TOKEN: …` lines then a blank
+  /// line) is parsed off and forwarded, so the client can carry credentials.
   Future<_WtBridgeResponse?> _runWtBridge(
     _Session session,
     String path,
-    Uint8List body,
+    Uint8List message,
   ) async {
+    final (preamble, body) = _parseWtPreamble(message);
+    final headers = _bridgeHeaders(session, preamble);
     session.inFlight++;
     final response = _WtBridgeResponse();
-    final exchange =
-        _WtBridgeExchange(session, config.serverName, path, body, response);
+    final exchange = _WtBridgeExchange(
+      session,
+      config.serverName,
+      path,
+      headers,
+      body,
+      response,
+    );
     try {
       await _pipeline.serve(exchange);
       await response.done.future;
@@ -559,6 +573,100 @@ class Http3PhpServer implements WorkerServer {
     } finally {
       session.inFlight--;
     }
+  }
+
+  /// Splits a WebTransport message into an optional HTTP-style header preamble
+  /// (`Name: Value` lines terminated by a blank line) and the body. A message
+  /// whose first line is not a header (e.g. a JSON payload starting with `{`)
+  /// is returned verbatim as the body with no headers.
+  static final RegExp _headerLine = RegExp(r'^[A-Za-z][A-Za-z0-9-]*:');
+
+  (Map<String, String>, Uint8List) _parseWtPreamble(Uint8List msg) {
+    int sep = -1;
+    var sepLen = 0;
+    for (var i = 0; i + 1 < msg.length; i++) {
+      if (msg[i] == 0x0a && msg[i + 1] == 0x0a) {
+        sep = i;
+        sepLen = 2;
+        break;
+      }
+      if (i + 3 < msg.length &&
+          msg[i] == 0x0d &&
+          msg[i + 1] == 0x0a &&
+          msg[i + 2] == 0x0d &&
+          msg[i + 3] == 0x0a) {
+        sep = i;
+        sepLen = 4;
+        break;
+      }
+    }
+    if (sep < 0) return (const <String, String>{}, msg);
+    final head = utf8.decode(
+      Uint8List.sublistView(msg, 0, sep),
+      allowMalformed: true,
+    );
+    final lines = head.split(RegExp(r'\r?\n'));
+    if (lines.isEmpty || !_headerLine.hasMatch(lines.first)) {
+      return (const <String, String>{}, msg);
+    }
+    final headers = <String, String>{};
+    for (final line in lines) {
+      final idx = line.indexOf(':');
+      if (idx <= 0) continue;
+      headers[line.substring(0, idx).trim().toLowerCase()] =
+          line.substring(idx + 1).trim();
+    }
+    return (headers, Uint8List.fromList(Uint8List.sublistView(msg, sep + sepLen)));
+  }
+
+  /// Builds the header set forwarded to PHP for a bridged WebTransport message:
+  /// AJAX defaults, allowed client-supplied preamble headers, the Cookie from
+  /// the WT CONNECT, and a derived `X-XSRF-TOKEN` for Laravel stateful CSRF.
+  Map<String, String> _bridgeHeaders(
+    _Session session,
+    Map<String, String> preamble,
+  ) {
+    final h = <String, String>{
+      'content-type': 'application/json',
+      'x-requested-with': 'XMLHttpRequest',
+      'x-livewire': 'true',
+      'accept': 'application/json, text/html; q=0.9, */*; q=0.8',
+    };
+    const allowed = {
+      'x-csrf-token',
+      'x-xsrf-token',
+      'cookie',
+      'authorization',
+      'content-type',
+      'accept',
+    };
+    preamble.forEach((k, v) {
+      if (allowed.contains(k)) h[k] = v;
+    });
+    // Fall back to the cookie captured from the WT CONNECT handshake.
+    if (!h.containsKey('cookie') &&
+        (session.cookie?.isNotEmpty ?? false)) {
+      h['cookie'] = session.cookie!;
+    }
+    // Laravel stateful CSRF: echo the XSRF-TOKEN cookie as X-XSRF-TOKEN unless
+    // the client already supplied an explicit CSRF header.
+    if (!h.containsKey('x-xsrf-token') && !h.containsKey('x-csrf-token')) {
+      final xsrf = _cookieValue(h['cookie'], 'XSRF-TOKEN');
+      if (xsrf != null) h['x-xsrf-token'] = Uri.decodeComponent(xsrf);
+    }
+    return h;
+  }
+
+  /// Returns the value of cookie [name] in a `Cookie:` header string, or null.
+  String? _cookieValue(String? cookieHeader, String name) {
+    if (cookieHeader == null) return null;
+    for (final part in cookieHeader.split(';')) {
+      final kv = part.trim();
+      final eq = kv.indexOf('=');
+      if (eq <= 0) continue;
+      if (kv.substring(0, eq) == name) return kv.substring(eq + 1);
+    }
+    return null;
   }
 
   String? _headerValue(List<H3Header> headers, String name) {
@@ -669,6 +777,10 @@ class _Session {
   /// Active WebTransport session on this connection, if any.
   WebTransportSession? wt;
 
+  /// Cookie header sent by the browser on the WebTransport CONNECT (used by the
+  /// bridge to forward the Laravel session / XSRF-TOKEN to PHP).
+  String? cookie;
+
   /// Inbound WebTransport streams buffered until FIN, keyed by QUIC stream id.
   final Map<int, _WtInboundStream> wtInbound = {};
 
@@ -721,6 +833,7 @@ class _WtBridgeExchange implements ServerExchange {
     this._session,
     this._authority,
     this._path,
+    this._headers,
     this._bodyBytes,
     this._response,
   );
@@ -728,6 +841,7 @@ class _WtBridgeExchange implements ServerExchange {
   final _Session _session;
   final String _authority;
   final String _path;
+  final Map<String, String> _headers;
   final Uint8List _bodyBytes;
   final _WtBridgeResponse _response;
 
@@ -759,14 +873,11 @@ class _WtBridgeExchange implements ServerExchange {
   int get contentLength => _bodyBytes.length;
 
   @override
-  String? get contentType => 'application/json';
+  String? get contentType => _headers['content-type'];
 
   @override
   void forEachHeader(void Function(String name, String value) action) {
-    action('content-type', 'application/json');
-    action('x-requested-with', 'XMLHttpRequest');
-    action('x-livewire', 'true');
-    action('accept', 'application/json, text/html; q=0.9, */*; q=0.8');
+    _headers.forEach(action);
   }
 
   @override
