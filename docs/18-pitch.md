@@ -67,7 +67,10 @@ install*.
   (multiple ranges in one response) is a documented intentional fallback to a
   full 200. A dynamic-response **micro-cache** exists (`--cache`); disk-backed
   caching and stale-while-revalidate are still roadmap.
-- **Raw static throughput** at nginx's scale isn't proven yet.
+- **Raw static throughput** at nginx's scale: a loopback `wrk` benchmark
+  (`tool/bench_static.sh`) puts nginx ~**45× ahead** on small static files
+  (~948k vs ~20k req/s) — expected for hand-tuned C + `sendfile`. Front
+  dart-apache with nginx/a CDN for pure static, or lean on the cache.
 
 ## Who it's for (ICP)
 
@@ -83,6 +86,13 @@ Real Laravel/Livewire over WebTransport; **518 passing transport tests**;
 chain-to-root cert validation + parser fuzzing; a native-ext4 **multi-worker
 soak of 5,040 requests with 0 failures**; all six hardening phases complete
 (see [15-webtransport-hardening-plan.md](15-webtransport-hardening-plan.md)).
+
+**Benchmarked** (WSL2, ext4, loopback `wrk`; see
+[09-performance.md](09-performance.md)):
+- `--cache` turns a cacheable PHP endpoint from **~740 → ~130,000 req/s (~176×)**,
+  p-avg latency **21.6 ms → 130 µs** — the `fastcgi_cache` win, in-process.
+- In-memory cache HIT: **~130k req/s** (130 µs).
+- Honest trade: nginx is **~45×** faster on raw small static files.
 
 ---
 

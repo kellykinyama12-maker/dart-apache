@@ -43,6 +43,7 @@ class ServerConfig {
     Uint8List? wtTicketKey,
     this.cacheEnabled = false,
     this.cacheMaxBytes = 64 * 1024 * 1024,
+    this.accessLogEnabled = true,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],        wtTicketKey = wtTicketKey ?? WtTicket.generateKey(),        workers = (workers == null || workers < 1)
             ? Platform.numberOfProcessors
@@ -111,6 +112,10 @@ class ServerConfig {
 
   /// LRU byte budget for the response cache (`--cache-max-bytes`).
   final int cacheMaxBytes;
+
+  /// Whether a Common Log Format line is written per request (`--no-access-log`
+  /// disables it; off is meaningfully faster under load).
+  final bool accessLogEnabled;
 
   /// Reverse-proxy routes, checked (longest prefix first) before static/PHP.
   final List<ProxyRoute> proxyRoutes;
@@ -239,6 +244,7 @@ class ServerConfig {
       cacheEnabled: args.contains('--cache'),
       cacheMaxBytes:
           int.tryParse(map['cache-max-bytes'] ?? '') ?? 64 * 1024 * 1024,
+      accessLogEnabled: !args.contains('--no-access-log'),
       proxyRoutes: proxyRoutes,
       wtPath: wtPath,
       wtBridgePath: wtBridgePath,

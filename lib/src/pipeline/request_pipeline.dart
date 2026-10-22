@@ -654,6 +654,7 @@ class RequestPipeline {
   }
 
   void _log(ServerExchange exchange, int status) {
+    if (!config.accessLogEnabled) return;
     final now = HttpDate.format(DateTime.now());
     onAccessLog(
       '${exchange.remoteAddress} - - [$now] '
