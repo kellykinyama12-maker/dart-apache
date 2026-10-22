@@ -151,23 +151,36 @@ navigated: true, wtUsed: 9, errors: []}` (exit 0); server log all `200`, no 500s
 
 ---
 
-## Phase 4 — Packaging & deploy (closes G4)
+## Phase 4 — Packaging & deploy (closes G4)  ✅ DONE
 
 Make it adoptable without hand-wiring.
 
 1. **Laravel package** (`livewire-wt`, its own repo): publishes the shim asset,
    a Blade directive/`@webtransport` include that injects the `<meta>` + script,
    a config file (endpoint, ticket URL), and docs. Target `composer require`.
+   **Done:** `packaging/livewire-webtransport/` — composer package
+   `dartapache/livewire-webtransport` (auto-discovered provider), publishable
+   config `webtransport.php` + asset, and a `@webtransport` Blade directive.
 2. **Server deploy recipe.** Document the stable flags and **require a persistent
    `--wt-ticket-key`** (base64 32 bytes) so tickets survive restarts across all
    workers; a `systemd` unit for Linux; a native (non-`/mnt/c`) checkout.
+   **Done:** [16-deploy.md](16-deploy.md) — build, persistent key, flag table,
+   systemd unit (CAP_NET_BIND_SERVICE), `.env`, TLS note.
 3. **TLS.** Real certificate loading (already supported via `--tls-cert`); note
-   the dev self-signed path vs. production PKI (ties to Phase 5).
+   the dev self-signed path vs. production PKI (ties to Phase 5). **Done** in 16.
 4. **Config ergonomics.** Consider a single `--laravel=<public-dir>` convenience
    flag that implies `--front-controller=/index.php` + sensible WT defaults.
+   **Done:** `--laravel=<dir>` sets the root and implies `--front-controller=
+   /index.php`, `--wt-path=/wt`, `--wt-bridge-path=/livewire/update`,
+   `--wt-ticket-path=/wt-ticket` (explicit flags override). Unit-tested.
 
 **Acceptance:** from a clean Laravel app, `composer require` + one Blade include +
 the documented server command yields a working WT round-trip with no manual JS copy.
+**Verified (2026-10-22):** real Laravel 13 + Livewire 4 app — `composer require
+dartapache/livewire-webtransport` (path repo) + `vendor:publish` + `@webtransport`
+in the layout + `dart_apache --laravel=…/public --http3`. Counter 0→2 (wtUsed=2)
+and form/validation + `wire:poll`/`wire:navigate` coverage (wtUsed=6) both pass;
+shim served from `/vendor/livewire-webtransport/…`, all updates `200` over WT.
 
 **Risk:** medium (packaging/versioning surface; cross-repo).
 

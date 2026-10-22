@@ -54,6 +54,38 @@ void main() {
     });
   });
 
+  group('--laravel convenience flag', () {
+    test('implies front controller and Livewire WT bridge paths', () {
+      final config = ServerConfig.fromArgs(['--laravel=/srv/app/public']);
+      expect(config.documentRoot, Directory('/srv/app/public').absolute.path);
+      expect(config.frontController, '/index.php');
+      expect(config.wtPath, '/wt');
+      expect(config.wtBridgePath, '/livewire/update');
+      expect(config.wtTicketPath, '/wt-ticket');
+    });
+
+    test('explicit flags override the --laravel defaults', () {
+      final config = ServerConfig.fromArgs([
+        '--laravel=/srv/app/public',
+        '--root=/other',
+        '--front-controller=/public.php',
+        '--wt-bridge-path=/lw/update',
+      ]);
+      expect(config.documentRoot, Directory('/other').absolute.path);
+      expect(config.frontController, '/public.php');
+      expect(config.wtBridgePath, '/lw/update');
+      expect(config.wtPath, '/wt');
+    });
+
+    test('without --laravel the WT/front-controller paths stay null', () {
+      final config = ServerConfig.fromArgs(['--root=.']);
+      expect(config.frontController, isNull);
+      expect(config.wtPath, isNull);
+      expect(config.wtBridgePath, isNull);
+      expect(config.wtTicketPath, isNull);
+    });
+  });
+
   group('reverse proxy routes', () {
     test('parses repeatable --proxy flags, longest prefix first', () {
       final config = ServerConfig.fromArgs([

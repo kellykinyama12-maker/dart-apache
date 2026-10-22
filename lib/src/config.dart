@@ -164,7 +164,11 @@ class ServerConfig {
       }
     }
 
-    final root = map['root'] ?? Directory.current.path;
+    // --laravel=<public-dir> is a convenience bundle: serve a Laravel public/
+    // dir through a front controller and turn on the Livewire WebTransport
+    // bridge with conventional paths. Explicit flags below still override it.
+    final laravel = map['laravel'];
+    final root = map['root'] ?? laravel ?? Directory.current.path;
     final port = int.tryParse(map['port'] ?? '') ?? 8080;
     // `--http3` co-locates an h3 listener on the same port, so advertise it
     // automatically unless an explicit --advertise-h3 was given.
@@ -198,6 +202,15 @@ class ServerConfig {
     final spaFallback = map['spa-fallback'] ??
         (args.contains('--spa') ? '/index.html' : null);
 
+    // Convenience defaults implied by --laravel (explicit flags win).
+    final frontController =
+        map['front-controller'] ?? (laravel != null ? '/index.php' : null);
+    final wtPath = map['wt-path'] ?? (laravel != null ? '/wt' : null);
+    final wtBridgePath =
+        map['wt-bridge-path'] ?? (laravel != null ? '/livewire/update' : null);
+    final wtTicketPath =
+        map['wt-ticket-path'] ?? (laravel != null ? '/wt-ticket' : null);
+
     return ServerConfig(
       address: map['address'] ?? '127.0.0.1',
       port: port,
@@ -216,11 +229,11 @@ class ServerConfig {
       maxRequestBodyBytes:
           int.tryParse(map['max-body'] ?? '') ?? 10 * 1024 * 1024,
       proxyRoutes: proxyRoutes,
-      wtPath: map['wt-path'],
-      wtBridgePath: map['wt-bridge-path'],
+      wtPath: wtPath,
+      wtBridgePath: wtBridgePath,
       spaFallback: spaFallback,
-      frontController: map['front-controller'],
-      wtTicketPath: map['wt-ticket-path'],
+      frontController: frontController,
+      wtTicketPath: wtTicketPath,
       wtTicketKey: map['wt-ticket-key'] != null
           ? Uint8List.fromList(base64.decode(map['wt-ticket-key']!))
           : null,

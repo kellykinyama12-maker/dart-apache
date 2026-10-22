@@ -1,0 +1,25 @@
+{
+    "name": "dartapache/livewire-webtransport",
+    "description": "Transparent WebTransport (HTTP/3) transport for Livewire component updates, served by the dart-apache webserver bridge.",
+    "type": "library",
+    "keywords": ["laravel", "livewire", "webtransport", "http3", "quic"],
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "^11.0 || ^12.0 || ^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "DartApache\\LivewireWebTransport\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "DartApache\\LivewireWebTransport\\WebTransportServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
