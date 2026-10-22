@@ -51,6 +51,12 @@ void main() {
       final app = DartApp([DartRoute.prefix('/api', _noop)]);
       expect(app.match('GET', '/other'), isNull);
     });
+
+    test('wt handler defaults to null and is carried when provided', () {
+      expect(DartApp(const []).wt, isNull);
+      final app = DartApp(const [], wt: (session, message) {});
+      expect(app.wt, isNotNull);
+    });
   });
 
   group('RequestPipeline dispatch', () {

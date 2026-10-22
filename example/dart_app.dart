@@ -13,20 +13,27 @@ import 'package:dart_apache/dart_apache.dart';
 ///
 /// [buildApp] MUST be top-level so it can cross the worker-isolate boundary;
 /// it runs once inside each worker to build that isolate's route table.
-DartApp buildApp(ServerConfig config) => DartApp([
-      DartRoute.exact('/api/hello', (exchange, response) async {
-        final name = exchange.uri.queryParameters['name'] ?? 'world';
-        await response.writeJson({'hello': name, 'via': exchange.protocol});
-      }, methods: {'GET'}),
-      DartRoute.exact('/api/echo', (exchange, response) async {
-        final body = await exchange.body
-            .fold<List<int>>(<int>[], (a, b) => a..addAll(b));
-        await response.writeBytes(
-          body,
-          contentType: exchange.contentType ?? 'application/octet-stream',
-        );
-      }, methods: {'POST'}),
-    ]);
+DartApp buildApp(ServerConfig config) => DartApp(
+      [
+        DartRoute.exact('/api/hello', (exchange, response) async {
+          final name = exchange.uri.queryParameters['name'] ?? 'world';
+          await response.writeJson({'hello': name, 'via': exchange.protocol});
+        }, methods: {'GET'}),
+        DartRoute.exact('/api/echo', (exchange, response) async {
+          final body = await exchange.body
+              .fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+          await response.writeBytes(
+            body,
+            contentType: exchange.contentType ?? 'application/octet-stream',
+          );
+        }, methods: {'POST'}),
+      ],
+      // Native WebTransport echo — no PHP, no subprocess. Replies on the same
+      // bidi stream, or a fresh uni stream, with a marker prefix.
+      wt: (session, message) {
+        session.send([...'wt-native:'.codeUnits, ...message.data]);
+      },
+    );
 
 Future<void> main(List<String> arguments) async {
   final config = ServerConfig.fromArgs(arguments);

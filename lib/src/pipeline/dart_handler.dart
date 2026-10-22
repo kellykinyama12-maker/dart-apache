@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../config.dart';
+import '../wt/wt_handler.dart';
 import 'server_exchange.dart';
 
 /// An in-process request handler, native to the transport-agnostic
@@ -103,8 +104,11 @@ class DartRoute {
 /// A per-worker table of in-process [DartRoute]s. Exact routes win over prefix
 /// routes; among prefix routes the longest pattern wins (like the reverse
 /// proxy). Construct one from a [DartAppBuilder] inside each worker.
+///
+/// An optional [wt] handler owns native WebTransport sessions in-process (it
+/// takes precedence over the PHP bridge / echo when set).
 class DartApp {
-  DartApp(List<DartRoute> routes)
+  DartApp(List<DartRoute> routes, {this.wt})
       : routes = List.unmodifiable(
           [...routes]..sort((a, b) {
             if (a.exact != b.exact) return a.exact ? -1 : 1; // exact first
@@ -113,6 +117,9 @@ class DartApp {
         );
 
   final List<DartRoute> routes;
+
+  /// Optional native WebTransport session handler (null = PHP bridge / echo).
+  final WtHandler? wt;
 
   /// The first route matching [method] + [path] under the ordering above, or
   /// null when none match (the pipeline then falls through to static/PHP).

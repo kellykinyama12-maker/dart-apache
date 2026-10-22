@@ -22,3 +22,4 @@ export 'src/server.dart';
 export 'src/supervisor.dart';
 export 'src/unified_server.dart';
 export 'src/worker_server.dart';
+export 'src/wt/wt_handler.dart';

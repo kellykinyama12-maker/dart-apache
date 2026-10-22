@@ -15,6 +15,7 @@ import '../pipeline/request_pipeline.dart';
 import '../pipeline/server_exchange.dart';
 import '../worker_server.dart';
 import '../wt/ticket.dart';
+import '../wt/wt_handler.dart';
 
 /// An experimental HTTP/3 (QUIC) server that serves static files and runs PHP
 /// using the pure-Dart `dart_quiche` transport. It terminates QUIC + TLS 1.3,
@@ -22,11 +23,18 @@ import '../wt/ticket.dart';
 /// same handlers the HTTP/1.1 server uses.
 class Http3PhpServer implements WorkerServer {
   Http3PhpServer(this.config, {this.verbose = false, DartApp? app})
-      : _pipeline = RequestPipeline(config, app: app);
+      : _pipeline = RequestPipeline(config, app: app),
+        _wtHandler = app?.wt;
 
   final ServerConfig config;
   final bool verbose;
   final RequestPipeline _pipeline;
+
+  /// Optional native WebTransport handler. When set it owns every inbound WT
+  /// message, taking precedence over the PHP bridge / echo. Null (the default)
+  /// leaves the existing bridge/echo behavior byte-for-byte unchanged.
+  final WtHandler? _wtHandler;
+
 
   RawDatagramSocket? _socket;
   late final EcdsaCert _cert;
@@ -364,6 +372,20 @@ class Http3PhpServer implements WorkerServer {
   /// streams for state that must arrive. When [ServerConfig.wtBridgePath] is
   /// set the datagram is bridged through the PHP pipeline; otherwise echoed.
   void _handleWtDatagram(_Session session, Uint8List payload) {
+    final handler = _wtHandler;
+    if (handler != null) {
+      final sessionId = session.wt?.streamId;
+      if (sessionId == null) return;
+      handler(
+        _WtSessionImpl(this, session, sessionId, null),
+        WtMessage(
+          data: payload,
+          isDatagram: true,
+          sessionId: sessionId,
+        ),
+      );
+      return;
+    }
     final bridgePath = config.wtBridgePath;
     if (bridgePath != null) {
       unawaited(_bridgeWtDatagram(session, payload, bridgePath));
@@ -479,6 +501,19 @@ class Http3PhpServer implements WorkerServer {
     required int? bidiStreamId,
   }) {
     if (session.wt == null) return;
+    final handler = _wtHandler;
+    if (handler != null) {
+      handler(
+        _WtSessionImpl(this, session, sessionId, bidiStreamId),
+        WtMessage(
+          data: message,
+          isDatagram: false,
+          sessionId: sessionId,
+          bidiStreamId: bidiStreamId,
+        ),
+      );
+      return;
+    }
     final bridgePath = config.wtBridgePath;
     if (bridgePath != null) {
       unawaited(
@@ -803,6 +838,52 @@ class Http3PhpServer implements WorkerServer {
   }
 }
 
+/// Reply facade handed to a native [WtHandler] for one inbound WebTransport
+/// message; adapts [WtSession] onto the owning [_Session] and flushes.
+class _WtSessionImpl implements WtSession {
+  _WtSessionImpl(this._server, this._session, this._sessionId, this._bidiStreamId);
+
+  final Http3PhpServer _server;
+  final _Session _session;
+  final int _sessionId;
+  final int? _bidiStreamId;
+
+  @override
+  void send(List<int> bytes) {
+    final bidi = _bidiStreamId;
+    if (bidi != null) {
+      _session.conn.streamSend(bidi, Uint8List.fromList(bytes), fin: true);
+    } else {
+      _sendOnFreshUni(bytes);
+    }
+    _server._txAll(_session);
+  }
+
+  @override
+  void sendUni(List<int> bytes) {
+    _sendOnFreshUni(bytes);
+    _server._txAll(_session);
+  }
+
+  @override
+  void sendDatagram(List<int> bytes) {
+    _server._sendWtDatagram(_session, Uint8List.fromList(bytes));
+    _server._txAll(_session);
+  }
+
+  void _sendOnFreshUni(List<int> bytes) {
+    final h3 = _session.h3;
+    if (h3 == null) return;
+    final uniId = h3.allocLocalUniStreamId();
+    final prefix = encodeWtUniStreamPrefix(_sessionId);
+    _session.conn.streamSend(
+      uniId,
+      Uint8List.fromList([...prefix, ...bytes]),
+      fin: true,
+    );
+  }
+}
+
 class _Session {
   _Session({
     required this.conn,
@@ -810,7 +891,6 @@ class _Session {
     required this.addr,
     required this.port,
   });
-
   final Connection conn;
   final TlsServerDriver driver;
   InternetAddress addr;
