@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- Laravel renders this; the shim reads the token from here. -->
+  <meta name="csrf-token" content="meta-token-xyz" />
+  <title>Livewire over WebTransport — demo</title>
+  <script src="/app/livewire-webtransport.js"></script>
+</head>
+<body>
+  <h1>Livewire → WebTransport shim</h1>
+  <p>Simulates Livewire's update POST; the shim reroutes it over WebTransport.</p>
+  <pre id="out">…</pre>
+  <script type="module">
+    // This is exactly the call Livewire's core makes. The shim intercepts it,
+    // sends it over a WT bidi stream with the CSRF token, and returns the
+    // server's JSON as a normal Response — Livewire would be none the wiser.
+    const res = await fetch('/livewire/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': 'header-token-abc',
+        'X-Livewire': 'true',
+      },
+      body: JSON.stringify({ component: 'counter', calls: [{ method: 'increment' }] }),
+    });
+    document.getElementById('out').textContent = await res.text();
+  </script>
+</body>
+</html>
