@@ -13,6 +13,9 @@ enum ResolutionKind {
   /// A PHP script that should be handed to the CGI handler.
   phpScript,
 
+  /// A directory requested without a trailing slash: 301 to [Resolution.location].
+  redirect,
+
   /// The path escaped the DocumentRoot or hit a forbidden target (403).
   forbidden,
 
@@ -25,25 +28,36 @@ class Resolution {
   Resolution.staticFile(this.filePath)
       : kind = ResolutionKind.staticFile,
         scriptName = '',
-        pathInfo = '';
+        pathInfo = '',
+        location = '';
 
   Resolution.phpScript({
     required this.filePath,
     required this.scriptName,
     required this.pathInfo,
-  }) : kind = ResolutionKind.phpScript;
+  })  : kind = ResolutionKind.phpScript,
+        location = '';
+
+  /// A directory accessed without a trailing slash: redirect to [location].
+  Resolution.redirect(this.location)
+      : kind = ResolutionKind.redirect,
+        filePath = '',
+        scriptName = '',
+        pathInfo = '';
 
   Resolution.forbidden()
       : kind = ResolutionKind.forbidden,
         filePath = '',
         scriptName = '',
-        pathInfo = '';
+        pathInfo = '',
+        location = '';
 
   Resolution.notFound()
       : kind = ResolutionKind.notFound,
         filePath = '',
         scriptName = '',
-        pathInfo = '';
+        pathInfo = '',
+        location = '';
 
   final ResolutionKind kind;
 
@@ -55,6 +69,9 @@ class Resolution {
 
   /// For PHP: trailing path after the script (`PATH_INFO`).
   final String pathInfo;
+
+  /// For a redirect: the URL path to redirect to (e.g. `/dir/`).
+  final String location;
 }
 
 /// Translates request URL paths into filesystem targets the way Apache does:
@@ -73,7 +90,6 @@ class RequestResolver {
     // an existing `.php` file, treating the remainder as PATH_INFO.
     final segments =
         urlPath.split('/').where((s) => s.isNotEmpty).toList(growable: false);
-
     final consumed = <String>[];
     for (var i = 0; i < segments.length; i++) {
       final segment = segments[i];
@@ -105,6 +121,11 @@ class RequestResolver {
 
     final type = FileSystemEntity.typeSync(fullPath);
     if (type == FileSystemEntityType.directory) {
+      // Apache/nginx: a directory without a trailing slash 301s to `/dir/` so
+      // relative links in the index resolve correctly.
+      if (!urlPath.endsWith('/')) {
+        return Resolution.redirect('$urlPath/');
+      }
       return _resolveDirectoryIndex(segments, fullPath);
     }
     if (type == FileSystemEntityType.file) {

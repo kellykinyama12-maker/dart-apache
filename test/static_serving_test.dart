@@ -15,6 +15,8 @@ void main() {
       File('${dir.path}/data.txt').writeAsStringSync('0123456789');
       File('${dir.path}/big.txt').writeAsStringSync('abcdefgh' * 300); // 2400 B
       File('${dir.path}/small.txt').writeAsStringSync('tiny');
+      Directory('${dir.path}/pages').createSync();
+      File('${dir.path}/pages/index.html').writeAsStringSync('<h1>idx</h1>');
       pipeline = RequestPipeline(ServerConfig(documentRoot: dir.path));
     });
     tearDown(() => dir.deleteSync(recursive: true));
@@ -135,6 +137,35 @@ void main() {
       expect(r.statusCode, 206);
       expect(r.headers['content-encoding'], isNull);
       expect(utf8.decode(r.body), 'abcdefgh');
+    });
+
+    test('OPTIONS on a static file -> 204 with Allow', () async {
+      final r = await req('OPTIONS');
+      expect(r.statusCode, 204);
+      expect(r.headers['allow'], 'GET, HEAD, OPTIONS');
+      expect(r.body, isEmpty);
+    });
+
+    test('POST/PUT/DELETE on a static file -> 405 with Allow', () async {
+      for (final m in ['POST', 'PUT', 'DELETE']) {
+        final r = await req(m);
+        expect(r.statusCode, 405, reason: m);
+        expect(r.headers['allow'], 'GET, HEAD, OPTIONS', reason: m);
+      }
+    });
+
+    test('directory without trailing slash -> 301 to /dir/ (query kept)', () async {
+      final r = await req('GET', path: '/pages');
+      expect(r.statusCode, 301);
+      expect(r.headers['location'], '/pages/');
+
+      final q = await req('GET', path: '/pages?x=1');
+      expect(q.statusCode, 301);
+      expect(q.headers['location'], '/pages/?x=1');
+
+      final served = await req('GET', path: '/pages/');
+      expect(served.statusCode, 200);
+      expect(utf8.decode(served.body), '<h1>idx</h1>');
     });
   });
 }

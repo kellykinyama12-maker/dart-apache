@@ -90,7 +90,17 @@ class RequestPipeline {
       final resolution = _resolver.resolve(exchange.uri.path);
       switch (resolution.kind) {
         case ResolutionKind.staticFile:
-          await _serveStatic(exchange, response, resolution.filePath);
+          await _serveStaticResource(exchange, response, resolution.filePath);
+        case ResolutionKind.redirect:
+          final q = exchange.uri.query;
+          final location = q.isEmpty
+              ? resolution.location
+              : '${resolution.location}?$q';
+          response
+            ..setStatus(HttpStatus.movedPermanently)
+            ..setHeader(HttpHeaders.locationHeader, location)
+            ..setHeader(HttpHeaders.contentLengthHeader, '0');
+          await response.close();
         case ResolutionKind.phpScript:
           await _servePhp(exchange, response, resolution);
         case ResolutionKind.forbidden:
@@ -122,6 +132,33 @@ class RequestPipeline {
     } finally {
       _log(exchange, response.statusCode);
     }
+  }
+
+  /// Method gating for a static file (RFC 9110): `OPTIONS` -> 204 + `Allow`,
+  /// any method other than GET/HEAD -> 405 + `Allow`. PHP scripts are exempt —
+  /// the app owns its own methods.
+  Future<void> _serveStaticResource(
+    ServerExchange exchange,
+    ServerResponse response,
+    String filePath,
+  ) async {
+    const allow = 'GET, HEAD, OPTIONS';
+    final method = exchange.method;
+    if (method == 'OPTIONS') {
+      response
+        ..setStatus(HttpStatus.noContent)
+        ..setHeader(HttpHeaders.allowHeader, allow)
+        ..setHeader(HttpHeaders.contentLengthHeader, '0');
+      await response.close();
+      return;
+    }
+    if (method != 'GET' && method != 'HEAD') {
+      response.setHeader(HttpHeaders.allowHeader, allow);
+      await _serveError(
+          response, HttpStatus.methodNotAllowed, 'Method Not Allowed');
+      return;
+    }
+    await _serveStatic(exchange, response, filePath);
   }
 
   Future<void> _serveStatic(
@@ -439,6 +476,7 @@ class RequestPipeline {
       case ResolutionKind.phpScript:
         await _servePhp(exchange, response, fb);
         return true;
+      case ResolutionKind.redirect:
       case ResolutionKind.forbidden:
       case ResolutionKind.notFound:
         return false;
