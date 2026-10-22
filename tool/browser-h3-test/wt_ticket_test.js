@@ -89,7 +89,8 @@ function findBrowser() {
           const r = s.readable.getReader();
           let out = '';
           for (;;) { const c = await Promise.race([r.read(), timeout(8000)]); if (c.done) break; out += dec.decode(c.value); }
-          return JSON.parse(out);
+          const i = out.indexOf('\r\n\r\n'); // strip the status/header envelope
+          return JSON.parse(i >= 0 ? out.slice(i + 4) : out);
         }
 
         // 2) Carry ONLY the ticket over WT (no raw Cookie line).

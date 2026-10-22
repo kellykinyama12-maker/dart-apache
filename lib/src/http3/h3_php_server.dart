@@ -524,23 +524,37 @@ class Http3PhpServer implements WorkerServer {
   }) async {
     final response = await _runWtBridge(session, path, message);
     if (response == null || session.wt == null) return;
-    final body = response.take();
+    final framed = _frameBridgeReply(response);
     if (bidiStreamId != null) {
-      session.conn.streamSend(bidiStreamId, body, fin: true);
+      session.conn.streamSend(bidiStreamId, framed, fin: true);
     } else {
       final uniId = session.h3!.allocLocalUniStreamId();
       final prefix = encodeWtUniStreamPrefix(sessionId);
       session.conn.streamSend(
         uniId,
-        Uint8List.fromList([...prefix, ...body]),
+        Uint8List.fromList([...prefix, ...framed]),
         fin: true,
       );
     }
     _log(
-      'WebTransport bridge: ${message.length}B in -> ${body.length}B out '
+      'WebTransport bridge: ${message.length}B in -> ${framed.length}B out '
       '(${response.statusCode}) [$path]',
     );
     _txAll(session);
+  }
+
+  /// Frames a bridge reply as `status\r\nName: Value\r\n…\r\n\r\n<body>` so the
+  /// client can reconstruct a faithful Response (status, headers incl.
+  /// Set-Cookie/Location) rather than assuming 200.
+  Uint8List _frameBridgeReply(_WtBridgeResponse response) {
+    final head = StringBuffer()..write('${response.statusCode}\r\n');
+    response.headers.forEach((name, values) {
+      for (final v in values) {
+        head.write('$name: $v\r\n');
+      }
+    });
+    head.write('\r\n');
+    return Uint8List.fromList([...utf8.encode(head.toString()), ...response.take()]);
   }
 
   /// Runs [message] through the PHP pipeline as a synthetic `POST [path]` and

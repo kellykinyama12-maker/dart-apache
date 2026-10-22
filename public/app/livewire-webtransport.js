@@ -105,12 +105,57 @@
     await w.close();
     var r = stream.readable.getReader();
     var chunks = [];
+    var total = 0;
     for (;;) {
       var res = await r.read();
       if (res.done) break;
       chunks.push(res.value);
+      total += res.value.length;
     }
-    return await new Blob(chunks).text();
+    var out = new Uint8Array(total);
+    var off = 0;
+    for (var i = 0; i < chunks.length; i++) { out.set(chunks[i], off); off += chunks[i].length; }
+    return out;
+  }
+
+  // Locate the blank line separating the reply's status/header block from body.
+  function sepIndex(a) {
+    for (var i = 0; i + 3 < a.length; i++) {
+      if (a[i] === 13 && a[i + 1] === 10 && a[i + 2] === 13 && a[i + 3] === 10) return i;
+    }
+    return -1;
+  }
+
+  // Parse the bridge reply envelope: `status\r\nHeader: v\r\n…\r\n\r\n<body>`.
+  function parseReply(bytes) {
+    var sep = sepIndex(bytes);
+    if (sep < 0) return { status: 200, headers: {}, setCookies: [], body: bytes };
+    var head = new TextDecoder().decode(bytes.subarray(0, sep));
+    var body = bytes.subarray(sep + 4);
+    var lines = head.split('\r\n');
+    var status = parseInt(lines[0], 10) || 200;
+    var headers = {};
+    var setCookies = [];
+    for (var i = 1; i < lines.length; i++) {
+      var idx = lines[i].indexOf(':');
+      if (idx <= 0) continue;
+      var name = lines[i].slice(0, idx).trim();
+      var value = lines[i].slice(idx + 1).trim();
+      if (name.toLowerCase() === 'set-cookie') setCookies.push(value);
+      else headers[name] = value;
+    }
+    return { status: status, headers: headers, setCookies: setCookies, body: body };
+  }
+
+  // The browser does not apply Set-Cookie from a WT stream, so do it here.
+  // HttpOnly cookies are ignored by document.cookie; a session rotation
+  // invalidates the cached ticket so the next message re-syncs.
+  function applySetCookies(setCookies) {
+    if (!setCookies.length) return;
+    for (var i = 0; i < setCookies.length; i++) {
+      try { document.cookie = setCookies[i]; } catch (e) { /* HttpOnly etc. */ }
+    }
+    ticket = null; // force a ticket refresh on the next message
   }
 
   window.fetch = async function (input, init) {
@@ -131,13 +176,17 @@
         var u;
         try { u = new URL(url, location.href); } catch (e) { u = null; }
         var uriPath = u ? (u.pathname + u.search) : url;
-        var text = await sendOverWt(body, csrfToken(headers), uriPath);
+        var bytes = await sendOverWt(body, csrfToken(headers), uriPath);
+        var reply = parseReply(bytes);
+        applySetCookies(reply.setCookies);
         // Observable marker: proves the update traveled over WebTransport.
         window.__livewireWtUsed = (window.__livewireWtUsed || 0) + 1;
-        return new Response(text, {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        try {
+          return new Response(reply.body, { status: reply.status, headers: reply.headers });
+        } catch (e) {
+          // Some header the Response ctor rejects — fall back to body + status.
+          return new Response(reply.body, { status: reply.status });
+        }
       }
     } catch (e) {
       // Any WebTransport failure degrades to the normal HTTP path.

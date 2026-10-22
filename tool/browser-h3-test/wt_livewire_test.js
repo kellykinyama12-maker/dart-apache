@@ -87,7 +87,8 @@ function findBrowser() {
           if (c.done) break;
           raw += dec.decode(c.value);
         }
-        const bidiJson = JSON.parse(raw);
+        const bi = raw.indexOf('\r\n\r\n'); // strip the status/header envelope
+        const bidiJson = JSON.parse(bi >= 0 ? raw.slice(bi + 4) : raw);
 
         // --- Datagram bridge: same request, reply as a datagram ---
         const dw = wt.datagrams.writable.getWriter();

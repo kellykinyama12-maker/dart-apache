@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="csrf-token" content="tok-abc" />
+  <title>WT response-contract demo</title>
+  <script src="/app/livewire-webtransport.js"></script>
+</head>
+<body>
+  <h1>WebTransport response contract</h1>
+  <pre id="out">…</pre>
+  <script type="module">
+    // A Livewire-style update whose server handler returns 419. The shim must
+    // surface the real status + header, not a hard-coded 200.
+    const res = await fetch('/livewire-test/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': 'tok-abc' },
+      body: JSON.stringify({ component: 'x' }),
+    });
+    const body = await res.text();
+    document.getElementById('out').textContent = JSON.stringify({
+      status: res.status,
+      demoHeader: res.headers.get('X-Demo-Header'),
+      body: body,
+    });
+  </script>
+</body>
+</html>

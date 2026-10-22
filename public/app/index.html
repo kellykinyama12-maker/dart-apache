@@ -59,7 +59,8 @@
           if (done) break;
           raw += new TextDecoder().decode(value);
         }
-        outEl.textContent = raw;
+        const i = raw.indexOf('\r\n\r\n'); // strip the status/header envelope
+        outEl.textContent = i >= 0 ? raw.slice(i + 4) : raw;
         wt.close();
       } catch (e) {
         setStatus('error: ' + (e && e.message ? e.message : e), false);
