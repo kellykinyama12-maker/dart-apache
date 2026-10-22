@@ -77,8 +77,10 @@ sequenceDiagram
 
 ### WebTransport (HTTP/3 only)
 
-> **Status:** **working** — the server accepts browser WebTransport sessions and
-> echoes datagrams (`--wt-path=/wt`), verified end-to-end with Chromium/Edge.
+> **Status:** **working** — the server accepts browser WebTransport sessions,
+> echoes datagrams, and pushes a **server-initiated unidirectional stream**
+> (`--wt-path=/wt`), verified end-to-end with Chromium/Edge. Inbound
+> (client→server) streams are a `dart_quiche` follow-up.
 
 - Requires the QUIC/HTTP/3 datapath; the vendored **`dart_quiche`** implements
   WebTransport over HTTP/3 (Extended `CONNECT` with

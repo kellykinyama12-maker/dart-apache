@@ -34,7 +34,7 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | **Reverse proxy** | ✅ HTTP/1.1 upstreams, streaming, `X-Forwarded-*` | Keep-alive pools tuning, retries, circuit breaking |
 | **Load balancing** | ✅ round-robin across upstreams | least-conn, hashing, health checks |
 | **WebSocket** | None | Origin upgrade (RFC 6455/8441) + proxy passthrough (Phase 2–3) |
-| **WebTransport** | ✅ browser session + datagram echo over h3 (`--wt-path`) | uni/bidi WT streams, multi-session demux |
+| **WebTransport** | ✅ browser session + datagram echo + server→client uni stream (`--wt-path`) | inbound (client→server) streams, multi-session demux |
 | **PHP integration** | ✅ CGI (`php-cgi`) **and** FastCGI (PHP-FPM) | Connection pooling to FPM |
 | **Static perf** | `openRead` stream | zero-copy/sendfile, ranges, caching, compression |
 | **Caching** | None | Response cache + reverse-proxy cache |

@@ -64,13 +64,27 @@ function findBrowser() {
       try {
         const wt = new WebTransport(url);
         await Promise.race([wt.ready, timeout(8000)]);
+
+        // Datagram echo round-trip.
         const writer = wt.datagrams.writable.getWriter();
         await writer.write(new TextEncoder().encode('ping-webtransport'));
-        const reader = wt.datagrams.readable.getReader();
-        const { value } = await Promise.race([reader.read(), timeout(8000)]);
-        const echoed = new TextDecoder().decode(value);
+        const dgReader = wt.datagrams.readable.getReader();
+        const dg = await Promise.race([dgReader.read(), timeout(8000)]);
+        const echoed = new TextDecoder().decode(dg.value);
+
+        // Server-initiated unidirectional stream (greeting).
+        const uds = wt.incomingUnidirectionalStreams.getReader();
+        const sres = await Promise.race([uds.read(), timeout(8000)]);
+        const sreader = sres.value.getReader();
+        let greeting = '';
+        for (;;) {
+          const chunk = await Promise.race([sreader.read(), timeout(8000)]);
+          if (chunk.done) break;
+          greeting += new TextDecoder().decode(chunk.value);
+        }
+
         wt.close();
-        return { ok: true, echoed };
+        return { ok: true, echoed, greeting: greeting.trim() };
       } catch (e) {
         return { ok: false, error: String(e && e.message ? e.message : e) };
       }

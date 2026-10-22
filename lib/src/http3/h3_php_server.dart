@@ -309,8 +309,22 @@ class Http3PhpServer implements WorkerServer {
     }
     wt.accept();
     session.wt = wt;
+    _openWtGreetingStream(session, wt);
     _log('WebTransport session accepted on $wtPath (stream ${he.streamId})');
     return true;
+  }
+
+  /// Pushes a server-initiated unidirectional WebTransport stream carrying a
+  /// greeting, so the browser receives it via `incomingUnidirectionalStreams`.
+  void _openWtGreetingStream(_Session session, WebTransportSession wt) {
+    final uniId = session.h3!.allocLocalUniStreamId();
+    final prefix = encodeWtUniStreamPrefix(wt.streamId);
+    final payload = 'hello from dart-apache webtransport\n'.codeUnits;
+    session.conn.streamSend(
+      uniId,
+      Uint8List.fromList([...prefix, ...payload]),
+      fin: true,
+    );
   }
 
   /// Echoes any received WebTransport datagrams back to the client.
