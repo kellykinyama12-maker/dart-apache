@@ -12,6 +12,10 @@ import '../wt/ticket.dart';
 import 'dart_handler.dart';
 import 'server_exchange.dart';
 
+/// Outcome of parsing a `Range` header: whole body, a partial slice, or an
+/// unsatisfiable range (416).
+enum _RangeKind { full, partial, unsatisfiable }
+
 /// Transport-agnostic request handling: resolves a [ServerExchange] against the
 /// document root and serves static files, PHP (CGI/FastCGI), or an error —
 /// writing the result to the exchange's [ServerResponse]. Shared by every
@@ -126,22 +130,178 @@ class RequestPipeline {
     String filePath,
   ) async {
     final file = File(filePath);
-    final length = await file.length();
+    final stat = await file.stat();
+    final length = stat.size;
+    final modified = stat.modified;
+    final etag = _etagFor(stat);
+    final reqHeaders = _requestHeaders(exchange);
+
+    // Validators + range advertisement on every static response (RFC 9110).
+    response
+      ..setHeader(HttpHeaders.lastModifiedHeader, HttpDate.format(modified))
+      ..setHeader(HttpHeaders.etagHeader, etag)
+      ..setHeader(HttpHeaders.acceptRangesHeader, 'bytes');
+
+    // Conditional GET -> 304 Not Modified (RFC 9110 §13).
+    if (_isNotModified(reqHeaders, etag, modified)) {
+      response.setStatus(HttpStatus.notModified);
+      await response.close();
+      return;
+    }
+
+    response.setHeader(HttpHeaders.contentTypeHeader, mimeTypeFor(filePath));
+
+    // Range request (RFC 9110 §14) — single range; multi-range falls back to
+    // a full 200, which is a permitted conservative response.
+    final (kind, start, end) = _parseRange(
+      reqHeaders[HttpHeaders.rangeHeader],
+      length,
+      ifRange: reqHeaders[HttpHeaders.ifRangeHeader],
+      etag: etag,
+      modified: modified,
+    );
+    if (kind == _RangeKind.unsatisfiable) {
+      response
+        ..setStatus(HttpStatus.requestedRangeNotSatisfiable)
+        ..setHeader(HttpHeaders.contentRangeHeader, 'bytes */$length')
+        ..setHeader(HttpHeaders.contentLengthHeader, '0');
+      await response.close();
+      return;
+    }
+    if (kind == _RangeKind.partial) {
+      response
+        ..setStatus(HttpStatus.partialContent)
+        ..setHeader(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$length')
+        ..setHeader(HttpHeaders.contentLengthHeader, '${end - start + 1}');
+      if (exchange.method == 'HEAD') {
+        await response.close();
+        return;
+      }
+      await response.addStream(file.openRead(start, end + 1));
+      await response.close();
+      return;
+    }
+
     response
       ..setStatus(HttpStatus.ok)
-      ..setHeader(HttpHeaders.contentTypeHeader, mimeTypeFor(filePath))
-      ..setHeader(HttpHeaders.contentLengthHeader, '$length')
-      ..setHeader(
-        HttpHeaders.lastModifiedHeader,
-        HttpDate.format(file.lastModifiedSync()),
-      );
-
+      ..setHeader(HttpHeaders.contentLengthHeader, '$length');
     if (exchange.method == 'HEAD') {
       await response.close();
       return;
     }
     await response.addStream(file.openRead());
     await response.close();
+  }
+
+  /// Strong entity-tag from size + mtime (nginx-style `"<mtime>-<size>"`).
+  String _etagFor(FileStat stat) {
+    final mtime = stat.modified.millisecondsSinceEpoch ~/ 1000;
+    return '"${mtime.toRadixString(16)}-${stat.size.toRadixString(16)}"';
+  }
+
+  /// Collects request headers into a lower-cased map (duplicates joined).
+  Map<String, String> _requestHeaders(ServerExchange exchange) {
+    final h = <String, String>{};
+    exchange.forEachHeader((name, value) {
+      final k = name.toLowerCase();
+      final existing = h[k];
+      h[k] = existing == null ? value : '$existing, $value';
+    });
+    return h;
+  }
+
+  /// RFC 9110 §13.1: `If-None-Match` wins over `If-Modified-Since`.
+  bool _isNotModified(
+    Map<String, String> headers,
+    String etag,
+    DateTime modified,
+  ) {
+    final inm = headers[HttpHeaders.ifNoneMatchHeader];
+    if (inm != null) {
+      if (inm.trim() == '*') return true;
+      for (final raw in inm.split(',')) {
+        var tag = raw.trim();
+        if (tag.startsWith('W/')) tag = tag.substring(2); // weak comparison
+        if (tag == etag) return true;
+      }
+      return false;
+    }
+    final ims = headers[HttpHeaders.ifModifiedSinceHeader];
+    if (ims == null) return false;
+    try {
+      final since = HttpDate.parse(ims).toUtc();
+      final mod = DateTime.fromMillisecondsSinceEpoch(
+        (modified.millisecondsSinceEpoch ~/ 1000) * 1000,
+        isUtc: true,
+      );
+      return !mod.isAfter(since);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Parses a single byte range. Returns [_RangeKind.full] for no range or a
+  /// request we answer with the whole body, [_RangeKind.partial] with the
+  /// inclusive bounds, or [_RangeKind.unsatisfiable].
+  (_RangeKind, int, int) _parseRange(
+    String? rangeHeader,
+    int length, {
+    String? ifRange,
+    required String etag,
+    required DateTime modified,
+  }) {
+    if (rangeHeader == null) return (_RangeKind.full, 0, 0);
+    // If-Range: only honor the range when the validator still matches.
+    if (ifRange != null && !_ifRangeMatches(ifRange, etag, modified)) {
+      return (_RangeKind.full, 0, 0);
+    }
+    if (!rangeHeader.startsWith('bytes=')) return (_RangeKind.full, 0, 0);
+    final spec = rangeHeader.substring(6).trim();
+    if (spec.isEmpty || spec.contains(',')) return (_RangeKind.full, 0, 0);
+    final dash = spec.indexOf('-');
+    if (dash < 0) return (_RangeKind.full, 0, 0);
+    final startStr = spec.substring(0, dash).trim();
+    final endStr = spec.substring(dash + 1).trim();
+    int start;
+    int end;
+    if (startStr.isEmpty) {
+      final n = int.tryParse(endStr);
+      if (n == null || n <= 0) return (_RangeKind.full, 0, 0);
+      if (length == 0) return (_RangeKind.unsatisfiable, 0, 0);
+      start = n >= length ? 0 : length - n;
+      end = length - 1;
+    } else {
+      final s = int.tryParse(startStr);
+      if (s == null) return (_RangeKind.full, 0, 0);
+      start = s;
+      if (endStr.isEmpty) {
+        end = length - 1;
+      } else {
+        final e = int.tryParse(endStr);
+        if (e == null) return (_RangeKind.full, 0, 0);
+        end = e >= length ? length - 1 : e;
+      }
+      if (start >= length) return (_RangeKind.unsatisfiable, 0, 0);
+      if (end < start) return (_RangeKind.full, 0, 0);
+    }
+    return (_RangeKind.partial, start, end);
+  }
+
+  bool _ifRangeMatches(String ifRange, String etag, DateTime modified) {
+    final v = ifRange.trim();
+    if (v.startsWith('"') || v.startsWith('W/')) {
+      return (v.startsWith('W/') ? v.substring(2) : v) == etag;
+    }
+    try {
+      final d = HttpDate.parse(v).toUtc();
+      final mod = DateTime.fromMillisecondsSinceEpoch(
+        (modified.millisecondsSinceEpoch ~/ 1000) * 1000,
+        isUtc: true,
+      );
+      return !mod.isAfter(d);
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _servePhp(

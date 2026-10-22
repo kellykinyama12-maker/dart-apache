@@ -23,7 +23,7 @@ install*.
 
 | Capability | Apache | nginx | dart-apache |
 |---|:--:|:--:|:--:|
-| Static (types, ranges, conditional, HEAD) | ✅ | ✅ | ✅ |
+| Static (types, ETag, conditional 304, byte ranges, HEAD) | ✅ | ✅ | ✅ |
 | PHP via php-cgi **and** FastCGI/php-fpm | ✅ | ✅ | ✅ |
 | Reverse proxy + load balancing + health checks | ✅ | ✅ | ✅ |
 | TLS 1.3, SNI, front-controller (`try_files`) | ✅ | ✅ | ✅ |
@@ -54,9 +54,11 @@ install*.
 - **Ecosystem & config:** no `.htaccess`/mod_rewrite, no mod_security, no SSI,
   a smaller module surface, and a CLI-flag config (YAML + hot-reload is
   roadmapped).
-- **Not yet present:** response/proxy caching, HTTP/2 (intentionally skipped —
-  h3 is the multiplexed transport), and a few static niceties (ETag, multipart
-  byteranges) are open decisions.
+- **Not yet present:** response/proxy caching and HTTP/2 (intentionally
+  skipped — h3 is the multiplexed transport). Static serving now matches the
+  giants on **ETag, conditional GET (304), and single byte ranges (206/416)**;
+  only *multipart/byteranges* (multiple ranges in one response) is a documented
+  intentional fallback to a full 200.
 - **Raw static throughput** at nginx's scale isn't proven yet.
 
 ## Who it's for (ICP)
