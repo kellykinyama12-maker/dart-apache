@@ -125,11 +125,14 @@ full chain in the cert file). For local dev use
 `dart run tool/gen_dev_cert.dart build`.
 
 The vendored client/handshake path verifies the `CertificateVerify` signature
-over the transcript, the leaf SAN against the hostname, and the leaf validity
-window — but does **not** yet validate a full chain to a trusted root
-(issuer-signature verification + trust anchors). Until that lands (Phase 5),
-terminate TLS at a trusted front end or run on a trusted network for any
-untrusted-client exposure.
+over the transcript, the leaf SAN against the hostname, the leaf validity
+window, and — when a `TrustStore` is configured — full chain-to-root path
+validation (RFC 5280 §6 subset: name chaining, CA `basicConstraints`, per-cert
+validity, ECDSA/RSA signatures, termination at a trusted anchor). Without trust
+anchors configured, trust is pin/transcript based; terminate TLS at a trusted
+front end or run on a trusted network for that mode. Note: the chain validator
+requires a CA anchor, so a bare self-signed leaf must be pinned, not used as an
+anchor.
 
 ## Verify
 

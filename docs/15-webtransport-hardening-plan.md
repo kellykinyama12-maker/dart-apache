@@ -186,21 +186,24 @@ shim served from `/vendor/livewire-webtransport/…`, all updates `200` over WT.
 
 ---
 
-## Phase 5 — Transport production-readiness (closes G5)  ◐ PARTIAL
+## Phase 5 — Transport production-readiness (closes G5)  ✅ DONE
 
 The deferred `dart_quiche` items; needed before untrusted-network production.
 
 1. **PKI**: chain-to-root X.509 validation on the client/handshake path
    (currently self-signed/pinned only). Tracked in
-   [12-http3-integration-plan.md](12-http3-integration-plan.md). **◐ PARTIAL** —
-   the client now verifies the `CertificateVerify` signature over the transcript,
-   the leaf SAN vs. hostname (RFC 6125), **and the leaf validity window
-   (RFC 5280 §4.1.2.5: `certIsCurrentlyValid` / `verifyValidity`, default on)**.
-   Still **OPEN**: full chain-to-root (issuer-signature verification over child
-   TBS, trust-anchor set, `basicConstraints` path checks, RSA-PKCS1v15/P-384 for
-   CA sigs). That is a bounded-large (~400–600 LOC, multiple ASN.1/crypto
-   schemes) change whose subtle failure modes are security-critical, so it stays
-   scoped behind the trusted-network caveat below rather than rushed.
+   [12-http3-integration-plan.md](12-http3-integration-plan.md). ✅ **DONE** —
+   the client verifies the `CertificateVerify` transcript signature, the leaf
+   SAN vs. hostname (RFC 6125), the leaf validity window (RFC 5280 §4.1.2.5),
+   **and now full chain-to-root path validation** (RFC 5280 §6 subset) via
+   `cert_chain.dart`: `validateCertChain` walks the server's `certificate_list`
+   asserting exact DER name chaining, CA `basicConstraints` on every issuer,
+   a time-valid window on each cert, a cryptographically valid signature at
+   each link (ECDSA P-256/P-384 + RSASSA-PKCS1-v1_5 SHA-256/384), and
+   termination at a `TrustStore` anchor (DER or PEM CA bundle). Opt-in on
+   `TlsClientDriver(trustStore: …)`; fail-closed on unknown signature algs.
+   Covered by `cert_chain_test.dart` (valid chain + 6 rejection vectors + a
+   driver-flight integration test) and `rsa_pkcs1_verify_test.dart`.
 2. **0-RTT** hardening + anti-replay review. ✅ **DONE** — the `zero_rtt_e2e`
    failure was a time-bomb *test fixture* (a fixed-past `issuedAt` made the
    ticket stale under `TicketStore.lookup`'s real-time eviction), not a binder
@@ -212,7 +215,7 @@ The deferred `dart_quiche` items; needed before untrusted-network production.
 3. **Linux production** run verified natively (not `/mnt/c`), multi-worker
    `reusePort`, under load. ✅ **DONE** — binary staged on native **ext4**
    (`/dev/sdd`), `--workers=4` (4 isolates, SO_REUSEPORT sockets). Soak via
-   `tool/soak*.sh`: **5040 requests (5000 h1-TLS + 40 h3/QUIC), 0 failures**;
+   `tool/soak.sh`: **5040 requests (5000 h1-TLS + 40 h3/QUIC), 0 failures**;
    worker RSS 27.8→33.2 MB with a *decelerating* per-round delta (3.1→2.5 MB),
    consistent with JIT/cache warm-up, not a linear leak.
 4. **Fuzz** the inbound WT stream/datagram parsers (malformed prefixes, huge
@@ -224,13 +227,15 @@ The deferred `dart_quiche` items; needed before untrusted-network production.
    ticket-redeem fuzz (`test/wt_ticket_test.dart`) — arbitrary and bit-flipped
    tokens always return null, never throw.
 
-**Acceptance:** handshake rejects an untrusted cert (◐ validity + hostname +
-transcript enforced; chain-to-root OPEN); fuzz corpus runs clean (DONE); Linux
-soak passes (DONE).
+**Acceptance:** handshake rejects an untrusted cert (✅ chain-to-root +
+validity + hostname + transcript enforced); fuzz corpus runs clean (✅); Linux
+soak passes (✅).
 
-**Risk:** high (QUIC internals; pre-1.0 dependency). Chain-to-root PKI is the one
-remaining gating item; until it lands, run behind a trusted TLS terminator / on
-a trusted network (see [16-deploy.md](16-deploy.md)).
+**Risk:** was high (QUIC internals; pre-1.0 dependency). Chain validation is
+opt-in via a configured `TrustStore`; without one, trust remains pin/transcript
+based (suitable behind a trusted TLS terminator). Note the chain validator
+requires a CA (`basicConstraints`) anchor, so a bare self-signed **leaf** must
+still be pinned rather than used as an anchor.
 
 ---
 
@@ -239,7 +244,7 @@ a trusted network (see [16-deploy.md](16-deploy.md)).
 1. `dart analyze` + `dart test` (both packages) on push. ✅
    `.github/workflows/ci.yml` `analyze-test` job: root `dart analyze bin lib
    test tool` + `dart test` (42), and vendored `dart analyze lib test` +
-   `dart test` (full suite, 506 — the former `zero_rtt_e2e` exclusion is gone
+   `dart test` (full suite, 518 — the former `zero_rtt_e2e` exclusion is gone
    now that the time-bomb fixture is fixed).
 2. A browser job (Edge + Playwright) running the `tool/browser-h3-test/*.js`
    suite against a spun-up server, gated on the dev cert. ✅
@@ -271,5 +276,6 @@ Phase 1 (correctness) ─▶ Phase 2 (benchmark / decision gate)
 **Recommended now:** Phase 1 (small, fixes a real bug), then the Phase 2
 benchmark decision gate before investing in 3–6.
 
-**"Done" for a 0.1 release:** Phases 1–4 + 6 complete; Phase 5 explicitly scoped
-as "trusted-network / behind-a-TLS-terminator only" until the PKI work lands.
+**"Done" for a 0.1 release:** Phases 1–6 complete. Chain-to-root PKI now lands
+(opt-in via a configured `TrustStore`); without trust anchors configured, trust
+stays pin/transcript based ("trusted-network / behind-a-TLS-terminator").

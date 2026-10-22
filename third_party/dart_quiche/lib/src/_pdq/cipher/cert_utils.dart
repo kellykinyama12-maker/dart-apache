@@ -344,6 +344,68 @@ ASN1Sequence _algorithmIdentifierEcdsaSha256() {
     ..add(ASN1ObjectIdentifier.fromIdentifierString('1.2.840.10045.4.3.2'));
 }
 
+/// Test-only: issue a P-256 X.509 certificate for [subjectPublicKey] under
+/// [subjectDn], signed by [issuerPrivateKey] as [issuerDn]. A CA certificate
+/// when [isCa]; [sans] (if any) populate the subjectAltName. Returns DER.
+///
+/// Intended for building multi-level chains (root -> intermediate -> leaf)
+/// in tests; it exercises the same ASN.1 path as the self-signed generator.
+Uint8List issueEcCertificateDer({
+  required ECPrivateKey issuerPrivateKey,
+  required Map<String, String> issuerDn,
+  required ECPublicKey subjectPublicKey,
+  required Map<String, String> subjectDn,
+  required bool isCa,
+  List<String> sans = const [],
+  DateTime? notBefore,
+  Duration lifetime = const Duration(days: 13),
+  int serial = 1,
+}) {
+  final tbs = ASN1Sequence();
+
+  final version = ASN1Object(tag: 0xA0);
+  version.valueBytes = ASN1Integer.fromtInt(2).encode();
+  tbs.add(version);
+
+  tbs.add(ASN1Integer.fromtInt(serial));
+
+  final sigAlg = _algorithmIdentifierEcdsaSha256();
+  tbs.add(sigAlg);
+
+  tbs.add(_buildName(issuerDn));
+
+  final start = (notBefore ?? DateTime.now().toUtc()).toUtc();
+  final validity = ASN1Sequence()
+    ..add(ASN1UtcTime(start))
+    ..add(ASN1UtcTime(start.add(lifetime)));
+  tbs.add(validity);
+
+  tbs.add(_buildName(subjectDn));
+
+  final spkiDer =
+      decodePemToDer(CryptoUtils.encodeEcPublicKeyToPem(subjectPublicKey));
+  tbs.add(ASN1Parser(spkiDer).nextObject());
+
+  final extensions = ASN1Sequence();
+  if (sans.isNotEmpty) extensions.add(_buildSubjectAltNameExtension(sans));
+  extensions.add(_buildBasicConstraintsExtension(cA: isCa));
+  final extObj = ASN1Object(tag: 0xA3);
+  extObj.valueBytes = extensions.encode();
+  tbs.add(extObj);
+
+  final tbsDer = tbs.encode();
+  final digest = Uint8List.fromList(crypto.sha256.convert(tbsDer).bytes);
+  final rawPriv = encodeECPrivateKeyToRaw(issuerPrivateKey);
+  final sig = Uint8List.fromList(ecdsaSign(rawPriv, digest));
+  final derSig = _ensureDerEncodedEcdsaSignature(sig);
+
+  final cert = ASN1Sequence()
+    ..add(tbs)
+    ..add(sigAlg)
+    ..add(ASN1BitString(stringValues: derSig));
+  return Uint8List.fromList(cert.encode());
+}
+
 ASN1Sequence _buildName(Map<String, String> dn) {
   final seq = ASN1Sequence();
 

@@ -41,6 +41,14 @@ bool verifyEcdsaP256({
   required Uint8List signature,
 }) => ec.ecdsaVerify(rawPublicKey, message, signature);
 
+/// Verifies an ECDSA P-384 (DER) signature over the pre-hashed [digest]
+/// using the raw uncompressed (`0x04 || X || Y`) P-384 public key.
+bool verifyEcdsaP384({
+  required Uint8List rawPublicKey,
+  required Uint8List digest,
+  required Uint8List signature,
+}) => ec.ecdsaVerifyP384(rawPublicKey, digest, signature);
+
 /// Parsed RSA public key: ASN.1 `RSAPublicKey ::= SEQUENCE { modulus
 /// INTEGER, publicExponent INTEGER }`.
 class RsaPublicKey {
@@ -157,6 +165,46 @@ bool verifyRsaPssSha256({
     return false;
   }
 }
+
+/// Verifies an RSASSA-PKCS1-v1_5 signature over [message] under [pubKey],
+/// hashing [message] with SHA-256 (CA certs signed with
+/// `sha256WithRSAEncryption`, OID 1.2.840.113549.1.1.11).
+bool verifyRsaPkcs1Sha256({
+  required RsaPublicKey pubKey,
+  required Uint8List message,
+  required Uint8List signature,
+}) =>
+    _verifyRsaPkcs1(pubKey, message, signature, pc.SHA256Digest(),
+        '0609608648016503040201');
+
+/// Verifies an RSASSA-PKCS1-v1_5 signature over [message] under [pubKey],
+/// hashing [message] with SHA-384 (`sha384WithRSAEncryption`, OID
+/// 1.2.840.113549.1.1.12).
+bool verifyRsaPkcs1Sha384({
+  required RsaPublicKey pubKey,
+  required Uint8List message,
+  required Uint8List signature,
+}) =>
+    _verifyRsaPkcs1(pubKey, message, signature, pc.SHA384Digest(),
+        '0609608648016503040202');
+
+bool _verifyRsaPkcs1(
+  RsaPublicKey pubKey,
+  Uint8List message,
+  Uint8List signature,
+  pc.Digest digest,
+  String digestIdentifierHex,
+) {
+  final pcKey = pc.RSAPublicKey(pubKey.modulus, pubKey.exponent);
+  final signer = pc.RSASigner(digest, digestIdentifierHex)
+    ..init(false, pc.PublicKeyParameter<pc.RSAPublicKey>(pcKey));
+  try {
+    return signer.verifySignature(message, pc.RSASignature(signature));
+  } catch (_) {
+    return false;
+  }
+}
+
 
 /// All `subjectAltName` entries from an X.509 certificate DER, split
 /// into DNS names (lowercased) and raw IP-address byte strings (4 bytes

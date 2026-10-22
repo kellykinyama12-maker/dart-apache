@@ -13,6 +13,7 @@ import 'dart:typed_data';
 import 'package:dart_quiche/src/_pdq/buffer.dart' show QuicBuffer;
 import 'package:dart_quiche/src/_pdq/handshake/server_hello.dart' show ServerHello;
 
+import 'cert_chain.dart' show TrustStore, validateCertChain;
 import 'cert_utils.dart'
     show
         certIsCurrentlyValid,
@@ -396,6 +397,13 @@ class TlsClientDriver {
   /// `false`.
   final bool verifyValidity;
 
+  /// Optional set of trust anchors. When provided, the client performs
+  /// full chain-to-root path validation (RFC 5280 §6 subset) of the
+  /// server's certificate_list in addition to the transcript-signature,
+  /// hostname, and validity checks. When null, trust is pin/transcript
+  /// based only (suitable behind a trusted TLS terminator).
+  final TrustStore? trustStore;
+
   /// ALPN protocols offered in the ClientHello, in preference order.
   /// Defaults to `['h3']`. After the server's EncryptedExtensions has
   /// been processed, [negotiatedAlpn] holds the single protocol the
@@ -445,6 +453,7 @@ class TlsClientDriver {
     required this.hostname,
     this.verifyHostname = true,
     this.verifyValidity = true,
+    this.trustStore,
     this.alpns = const ['h3'],
     this.resumption,
     TlsClientHandshake? tls,
@@ -651,6 +660,14 @@ class TlsClientDriver {
           // `verifyValidity` is false (e.g. replaying a fixed fixture).
           if (verifyValidity) {
             _verifyLeafCertValidity(flightBytes: flightBytes);
+          }
+
+          // RFC 5280 §6 — when trust anchors are configured, validate the
+          // full certificate_list to a trusted root (names chain, issuers
+          // are CAs, every signature verifies, time-valid at now).
+          final anchors = trustStore;
+          if (anchors != null) {
+            _verifyCertChain(flightBytes: flightBytes, trust: anchors);
           }
 
           // RFC 9000 §7.4: ingest peer transport parameters from the
@@ -951,7 +968,40 @@ Uint8List _extractLeafCertDer(Uint8List certBody) {
   return Uint8List.sublistView(certBody, off, off + certLen);
 }
 
-/// RFC 8446 §4.4.3 — verifies the server `CertificateVerify` signature.
+/// Extracts every certificate DER (leaf first) from a TLS 1.3 Certificate
+/// message body, walking the `certificate_list` of `CertificateEntry`s.
+List<Uint8List> _extractCertChainDer(Uint8List certBody) {
+  if (certBody.isEmpty) throw StateError('empty Certificate body');
+  final ctxLen = certBody[0];
+  var off = 1 + ctxLen;
+  if (off + 3 > certBody.length) {
+    throw StateError('truncated certificate_list length');
+  }
+  final listLen =
+      (certBody[off] << 16) | (certBody[off + 1] << 8) | certBody[off + 2];
+  off += 3;
+  final end = off + listLen;
+  if (end > certBody.length) {
+    throw StateError('certificate_list exceeds Certificate body');
+  }
+  final out = <Uint8List>[];
+  while (off + 3 <= end) {
+    final certLen =
+        (certBody[off] << 16) | (certBody[off + 1] << 8) | certBody[off + 2];
+    off += 3;
+    if (off + certLen > end) {
+      throw StateError('cert_data exceeds certificate_list');
+    }
+    out.add(Uint8List.sublistView(certBody, off, off + certLen));
+    off += certLen;
+    if (off + 2 > end) break;
+    final extLen = (certBody[off] << 8) | certBody[off + 1];
+    off += 2 + extLen;
+  }
+  return out;
+}
+
+
 ///
 /// 1. Splits [flightBytes] into EncryptedExtensions, Certificate,
 ///    CertificateVerify.
@@ -1129,5 +1179,34 @@ void _verifyLeafCertValidity({
   final leafDer = _extractLeafCertDer(msgs[1].body);
   if (!certIsCurrentlyValid(leafDer, now: now)) {
     throw StateError('server certificate is expired or not yet valid');
+  }
+}
+
+/// RFC 5280 §6 — validates the server's full certificate chain to a trust
+/// anchor in [trust]. Throws `StateError` (handshake abort) on any failure.
+///
+/// Exposed under a public name for testing.
+void verifyCertChainForTesting({
+  required Uint8List flightBytes,
+  required TrustStore trust,
+  DateTime? now,
+}) => _verifyCertChain(flightBytes: flightBytes, trust: trust, now: now);
+
+void _verifyCertChain({
+  required Uint8List flightBytes,
+  required TrustStore trust,
+  DateTime? now,
+}) {
+  final msgs = _splitHandshakeMessages(flightBytes);
+  if (msgs.length < 2 || msgs[1].type != _hsCertificate) {
+    throw StateError(
+      'chain check: server flight does not contain a Certificate message',
+    );
+  }
+  final chain = _extractCertChainDer(msgs[1].body);
+  try {
+    validateCertChain(chain: chain, trust: trust, now: now);
+  } on Object catch (e) {
+    throw StateError('server certificate chain validation failed: $e');
   }
 }
