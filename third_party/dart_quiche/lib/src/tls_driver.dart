@@ -15,6 +15,7 @@ import 'package:dart_quiche/src/_pdq/handshake/server_hello.dart' show ServerHel
 
 import 'cert_utils.dart'
     show
+        certIsCurrentlyValid,
         extractEcdsaPublicKeyFromCertificateDer,
         extractRsaPublicKeyFromCertificateDer,
         hostnameMatchesCert,
@@ -350,6 +351,10 @@ class TlsServerDriver {
     _earlyAlg = entry.alg;
     _earlyClientTrafficSecret = cets;
     _zeroRttAccepted = true;
+    // Anti-replay (RFC 8446 §8.1): burn the ticket now that it has been
+    // accepted, so a replayed 0-RTT carrying the same identity misses the
+    // lookup and is forced into a full 1-RTT handshake.
+    store.consume(ppsk.identities.first.identity);
   }
 }
 
@@ -384,6 +389,12 @@ class TlsClientDriver {
   /// does not match the requested hostname can opt out by passing
   /// `false`.
   final bool verifyHostname;
+
+  /// When true (default), the client rejects a leaf cert that is
+  /// expired or not yet valid (RFC 5280 §4.1.2.5). Tests replaying a
+  /// fixed cert fixture outside its window can opt out by passing
+  /// `false`.
+  final bool verifyValidity;
 
   /// ALPN protocols offered in the ClientHello, in preference order.
   /// Defaults to `['h3']`. After the server's EncryptedExtensions has
@@ -433,6 +444,7 @@ class TlsClientDriver {
     required this.conn,
     required this.hostname,
     this.verifyHostname = true,
+    this.verifyValidity = true,
     this.alpns = const ['h3'],
     this.resumption,
     TlsClientHandshake? tls,
@@ -632,6 +644,13 @@ class TlsClientDriver {
               flightBytes: flightBytes,
               hostname: hostname,
             );
+          }
+
+          // RFC 5280 §4.1.2.5 — reject a leaf cert that is expired or not
+          // yet valid. Independent of hostname; skipped only when
+          // `verifyValidity` is false (e.g. replaying a fixed fixture).
+          if (verifyValidity) {
+            _verifyLeafCertValidity(flightBytes: flightBytes);
           }
 
           // RFC 9000 §7.4: ingest peer transport parameters from the
@@ -1084,5 +1103,31 @@ void _verifyHostnameMatchesLeafCert({
     throw StateError(
       'server certificate SAN does not cover hostname "$hostname"',
     );
+  }
+}
+
+/// RFC 5280 §4.1.2.5 — rejects a leaf certificate whose validity window
+/// does not include the current time. Throws `StateError` when expired or
+/// not yet valid.
+///
+/// Exposed under a public name for testing.
+void verifyLeafCertValidityForTesting({
+  required Uint8List flightBytes,
+  DateTime? now,
+}) => _verifyLeafCertValidity(flightBytes: flightBytes, now: now);
+
+void _verifyLeafCertValidity({
+  required Uint8List flightBytes,
+  DateTime? now,
+}) {
+  final msgs = _splitHandshakeMessages(flightBytes);
+  if (msgs.length < 2 || msgs[1].type != _hsCertificate) {
+    throw StateError(
+      'validity check: server flight does not contain a Certificate message',
+    );
+  }
+  final leafDer = _extractLeafCertDer(msgs[1].body);
+  if (!certIsCurrentlyValid(leafDer, now: now)) {
+    throw StateError('server certificate is expired or not yet valid');
   }
 }

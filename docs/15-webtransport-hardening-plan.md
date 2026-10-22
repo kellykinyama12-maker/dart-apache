@@ -192,13 +192,29 @@ The deferred `dart_quiche` items; needed before untrusted-network production.
 
 1. **PKI**: chain-to-root X.509 validation on the client/handshake path
    (currently self-signed/pinned only). Tracked in
-   [12-http3-integration-plan.md](12-http3-integration-plan.md). **OPEN** —
-   deep QUIC/TLS work; keep the trusted-network scoping below until it lands.
-2. **0-RTT** hardening + anti-replay review. **OPEN** (see the known
-   `zero_rtt_e2e` PSK-binder gap excluded from CI).
+   [12-http3-integration-plan.md](12-http3-integration-plan.md). **◐ PARTIAL** —
+   the client now verifies the `CertificateVerify` signature over the transcript,
+   the leaf SAN vs. hostname (RFC 6125), **and the leaf validity window
+   (RFC 5280 §4.1.2.5: `certIsCurrentlyValid` / `verifyValidity`, default on)**.
+   Still **OPEN**: full chain-to-root (issuer-signature verification over child
+   TBS, trust-anchor set, `basicConstraints` path checks, RSA-PKCS1v15/P-384 for
+   CA sigs). That is a bounded-large (~400–600 LOC, multiple ASN.1/crypto
+   schemes) change whose subtle failure modes are security-critical, so it stays
+   scoped behind the trusted-network caveat below rather than rushed.
+2. **0-RTT** hardening + anti-replay review. ✅ **DONE** — the `zero_rtt_e2e`
+   failure was a time-bomb *test fixture* (a fixed-past `issuedAt` made the
+   ticket stale under `TicketStore.lookup`'s real-time eviction), not a binder
+   gap; the binder/key-install path was correct. Fixed the fixture and added
+   **single-use anti-replay** (RFC 8446 §8.1): `TicketStore.consume` burns a
+   ticket on 0-RTT acceptance so a replayed Initial misses and is forced to a
+   full 1-RTT handshake. Covered by `ticket_store_test.dart` + an e2e replay
+   assertion; the CI exclusion is removed (full vendored suite green).
 3. **Linux production** run verified natively (not `/mnt/c`), multi-worker
-   `reusePort`, under load. **PARTIAL** — Linux/WSL run verified (doc 13);
-   native-ext4 multi-worker soak still TODO.
+   `reusePort`, under load. ✅ **DONE** — binary staged on native **ext4**
+   (`/dev/sdd`), `--workers=4` (4 isolates, SO_REUSEPORT sockets). Soak via
+   `tool/soak*.sh`: **5040 requests (5000 h1-TLS + 40 h3/QUIC), 0 failures**;
+   worker RSS 27.8→33.2 MB with a *decelerating* per-round delta (3.1→2.5 MB),
+   consistent with JIT/cache warm-up, not a linear leak.
 4. **Fuzz** the inbound WT stream/datagram parsers (malformed prefixes, huge
    varints, split frames). ✅ **DONE** —
    `third_party/dart_quiche/test/fuzz_parsers_test.dart` sweeps 80k+ random and
@@ -208,12 +224,13 @@ The deferred `dart_quiche` items; needed before untrusted-network production.
    ticket-redeem fuzz (`test/wt_ticket_test.dart`) — arbitrary and bit-flipped
    tokens always return null, never throw.
 
-**Acceptance:** handshake rejects an untrusted cert (OPEN); fuzz corpus runs
-clean (DONE); Linux soak passes (PARTIAL).
+**Acceptance:** handshake rejects an untrusted cert (◐ validity + hostname +
+transcript enforced; chain-to-root OPEN); fuzz corpus runs clean (DONE); Linux
+soak passes (DONE).
 
-**Risk:** high (QUIC internals; pre-1.0 dependency). PKI + 0-RTT remain the
-gating items; until they land, run behind a trusted TLS terminator / on a
-trusted network (see [16-deploy.md](16-deploy.md)).
+**Risk:** high (QUIC internals; pre-1.0 dependency). Chain-to-root PKI is the one
+remaining gating item; until it lands, run behind a trusted TLS terminator / on
+a trusted network (see [16-deploy.md](16-deploy.md)).
 
 ---
 
@@ -222,7 +239,8 @@ trusted network (see [16-deploy.md](16-deploy.md)).
 1. `dart analyze` + `dart test` (both packages) on push. ✅
    `.github/workflows/ci.yml` `analyze-test` job: root `dart analyze bin lib
    test tool` + `dart test` (42), and vendored `dart analyze lib test` +
-   `dart test` (498, excluding the known `zero_rtt_e2e` PSK-binder gap).
+   `dart test` (full suite, 506 — the former `zero_rtt_e2e` exclusion is gone
+   now that the time-bomb fixture is fixed).
 2. A browser job (Edge + Playwright) running the `tool/browser-h3-test/*.js`
    suite against a spun-up server, gated on the dev cert. ✅
    `.github/workflows/browser.yml` — `workflow_dispatch` on a self-hosted

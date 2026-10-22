@@ -290,6 +290,69 @@ List<int>? _parseIPv4(String s) {
   return out;
 }
 
+/// Parses the certificate's validity window (`notBefore` / `notAfter`),
+/// supporting ASN.1 UTCTime and GeneralizedTime in the standard `...Z`
+/// (UTC) form that X.509 mandates (RFC 5280 §4.1.2.5).
+({DateTime notBefore, DateTime notAfter}) extractCertValidity(
+  Uint8List certDer,
+) {
+  final certSeq = _derChildren(_derRead(certDer, 0));
+  final tbs = _derChildren(certSeq[0]);
+  // TBSCertificate: [version [0] EXPLICIT]? serialNumber, signature, issuer,
+  // validity, subject, spki, ... — skip the optional version to land on the
+  // validity SEQUENCE (serial, signature, issuer, THEN validity).
+  var idx = 0;
+  if (tbs.isNotEmpty && tbs[0].tag == 0xA0) idx = 1;
+  final validity = tbs[idx + 3];
+  if (validity.tag != 0x30) {
+    throw StateError('expected validity SEQUENCE, got tag ${validity.tag}');
+  }
+  final times = _derChildren(validity);
+  if (times.length < 2) {
+    throw StateError('validity needs notBefore + notAfter');
+  }
+  return (
+    notBefore: _parseAsn1Time(times[0]),
+    notAfter: _parseAsn1Time(times[1]),
+  );
+}
+
+/// True if [now] (default `DateTime.now()`, compared in UTC) falls within
+/// the certificate's `notBefore .. notAfter` window.
+bool certIsCurrentlyValid(Uint8List certDer, {DateTime? now}) {
+  final v = extractCertValidity(certDer);
+  final t = (now ?? DateTime.now()).toUtc();
+  return !t.isBefore(v.notBefore) && !t.isAfter(v.notAfter);
+}
+
+DateTime _parseAsn1Time(_DerTlv tlv) {
+  final s = String.fromCharCodes(tlv.value);
+  // UTCTime (0x17): YYMMDDHHMMSSZ; GeneralizedTime (0x18): YYYYMMDDHHMMSSZ.
+  if (tlv.tag == 0x17) {
+    if (s.length < 13 || !s.endsWith('Z')) {
+      throw StateError('unsupported UTCTime "$s"');
+    }
+    final yy = int.parse(s.substring(0, 2));
+    return _mkUtc(yy < 50 ? 2000 + yy : 1900 + yy, s, 2);
+  }
+  if (tlv.tag == 0x18) {
+    if (s.length < 15 || !s.endsWith('Z')) {
+      throw StateError('unsupported GeneralizedTime "$s"');
+    }
+    return _mkUtc(int.parse(s.substring(0, 4)), s, 4);
+  }
+  throw StateError('unexpected ASN.1 time tag ${tlv.tag}');
+}
+
+DateTime _mkUtc(int year, String s, int o) => DateTime.utc(
+      year,
+      int.parse(s.substring(o, o + 2)),
+      int.parse(s.substring(o + 2, o + 4)),
+      int.parse(s.substring(o + 4, o + 6)),
+      int.parse(s.substring(o + 6, o + 8)),
+      int.parse(s.substring(o + 8, o + 10)),
+    );
+
 // --- Minimal DER TLV reader ---------------------------------------------
 
 class _DerTlv {
@@ -297,7 +360,6 @@ class _DerTlv {
   final Uint8List value;
   _DerTlv(this.tag, this.value);
 }
-
 /// Reads one DER TLV at [off]. Throws if truncated.
 _DerTlv _derRead(Uint8List buf, int off) {
   if (off + 2 > buf.length) {

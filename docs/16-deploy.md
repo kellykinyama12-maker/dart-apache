@@ -122,8 +122,14 @@ php artisan view:cache
 
 `--tls-cert` / `--tls-key` load a PEM cert + key (the server also accepts a
 full chain in the cert file). For local dev use
-`dart run tool/gen_dev_cert.dart build`. Production PKI validation on the
-client/handshake path is tracked under Phase 5.
+`dart run tool/gen_dev_cert.dart build`.
+
+The vendored client/handshake path verifies the `CertificateVerify` signature
+over the transcript, the leaf SAN against the hostname, and the leaf validity
+window — but does **not** yet validate a full chain to a trusted root
+(issuer-signature verification + trust anchors). Until that lands (Phase 5),
+terminate TLS at a trusted front end or run on a trusted network for any
+untrusted-client exposure.
 
 ## Verify
 

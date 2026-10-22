@@ -30,11 +30,9 @@ jobs:
       - name: Analyze vendored
         working-directory: third_party/dart_quiche
         run: dart analyze lib test
-      # Excludes zero_rtt_e2e_test: a known pre-1.0 PSK-binder gap in the
-      # vendored stack, unrelated to the WebTransport work (tracked in Phase 5).
       - name: Test vendored
         working-directory: third_party/dart_quiche
-        run: dart test $(ls test/*_test.dart | grep -v zero_rtt_e2e_test)
+        run: dart test
 
   lint:
     name: Lint (PHP + JS)
