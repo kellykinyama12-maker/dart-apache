@@ -88,13 +88,16 @@ install*.
 
 ## Against Apache httpd specifically
 
-> Architectural comparison (our harness measured *nginx*, not httpd). Apache is
-> a **friendlier opponent than nginx**: it isn't a zero-copy speed demon, so the
-> static gap is far narrower, and we're level on the modern PHP path.
+> **Measured** (`tool/bench_apache.sh`, WSL2 ext4 loopback `wrk`, Apache 2.4.58
+> event MPM, 4 procs × 64 threads, access logs off — apples to apples). Apache
+> is a **far friendlier opponent than nginx**: ~5× ahead on static, not ~47× —
+> and our cache HIT path already beats it.
 
 | Dimension | Apache httpd | dart-apache | Who wins |
 |---|---|---|---|
-| Static raw throughput | event MPM, ~50–150k typical | ~20k (pure-Dart floor); ~130k from the in-mem cache | 🔴 Apache on cold/large; ⚪ par-to-us on hot files via `--cache` |
+| Static 1 KiB | **~95k** req/s · 0.8 ms | ~19k req/s · 3.3 ms | 🔴 Apache **~5× faster** |
+| Static 100 KiB | **~60k** req/s · 1.1 ms | ~14k req/s · 4.7 ms | 🔴 Apache **~4.4× faster** |
+| Hot file via `--cache` | ~95k (static) | **~130k** req/s (HIT) | 🟢 us — cache beats httpd static |
 | Static correctness (ETag/ranges/304/gzip) | ✅ mature | ✅ standards-correct | ⚪ par |
 | PHP — classic | `mod_php` (in-process, fast cold) | `php-cgi` | 🔴 Apache cold |
 | PHP — modern (php-fpm/FastCGI) | ✅ | ✅ (`--php-fpm=`) | ⚪ par |
@@ -107,12 +110,13 @@ install*.
 | Zero-downtime reload | ✅ graceful | ✅ `SIGHUP` | ⚪ par |
 | Single static binary | ❌ (dynamic libs/modules) | ✅ cross-compiled ELF | 🟢 us |
 
-**Verdict vs httpd:** we lose only on **raw static** (and by much less than vs
-nginx — our cache path already overtakes a typical Apache static setup for hot
-files) and on **ecosystem maturity**. We're **level on modern PHP** (`php-fpm`),
-and we win decisively on **HTTP/3, WebTransport, the Livewire bridge, one-flag
-caching, and single-binary deployment** — things Apache either lacks or makes
-you fight its config for.
+**Verdict vs httpd:** on raw static Apache is only **~5× ahead** (vs nginx's
+~47×), and **our in-memory cache HIT (~130k req/s) overtakes Apache's static
+serving (~95k)** for hot files. We're **level on modern PHP** (`php-fpm`), and we
+win decisively on **HTTP/3, WebTransport, the Livewire bridge, one-flag caching,
+and single-binary deployment** — things Apache either lacks or makes you fight
+its config for. Apache keeps the edge only on **ecosystem maturity** and classic
+`mod_php` cold starts.
 
 ## Who it's for (ICP)
 

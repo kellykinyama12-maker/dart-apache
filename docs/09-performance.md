@@ -37,6 +37,22 @@ access logging off on both). Loopback inflates absolute numbers — read the
 | 1 KiB | **948k** req/s · 83 µs | 20k req/s · 3.2 ms | 🔴 nginx **~47× faster** |
 | 100 KiB | **958k** req/s · 60 µs | 15k req/s · 4.4 ms | 🔴 nginx **~65× faster** |
 
+### Static files — three-way vs Apache httpd (`tool/bench_apache.sh`, same `wrk` run)
+
+Apache 2.4.58 **event MPM**, 4 procs × 64 threads, access log off — apples to
+apples with nginx and dart-apache. Loopback rates are noisy run-to-run; the
+**within-run ratios** are the signal:
+
+| File size | nginx | Apache httpd | dart-apache | dart vs Apache |
+| --- | ---: | ---: | ---: | --- |
+| 1 KiB | ~713k req/s | **~95k** req/s · 0.8 ms | ~19k req/s · 3.3 ms | 🔴 Apache **~5× faster** |
+| 100 KiB | ~250k req/s | **~60k** req/s · 1.1 ms | ~14k req/s · 4.7 ms | 🔴 Apache **~4.4× faster** |
+
+**The honest read on Apache:** it's a *far* friendlier opponent than nginx —
+~5× ahead on static, not ~47×. And **our cache HIT path (~130k req/s) beats
+Apache's static serving (~95k)** outright, so for hot files routed through
+`--cache` we're already past httpd.
+
 ### Dynamic PHP — cache OFF vs ON (same endpoint, same dart-apache)
 
 | Mode | Throughput | Latency | vs. OFF |
