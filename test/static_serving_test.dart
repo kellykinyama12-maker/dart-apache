@@ -184,6 +184,12 @@ void main() {
       expect(wk.statusCode, 200);
       expect(utf8.decode(wk.body), 'ok');
     });
+
+    test('server-wide OPTIONS * -> 204 with Allow', () async {
+      final r = await req('OPTIONS', path: '*');
+      expect(r.statusCode, 204);
+      expect(r.headers['allow'], 'GET, HEAD, POST, OPTIONS');
+    });
   });
 }
 

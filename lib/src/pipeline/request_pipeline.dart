@@ -75,6 +75,18 @@ class RequestPipeline {
         return;
       }
 
+      // RFC 9110 §9.3.7: server-wide OPTIONS (`OPTIONS *`) advertises the
+      // methods the origin supports, without touching any resource.
+      if (exchange.method == 'OPTIONS' &&
+          (exchange.uri.path == '*' || exchange.uri.path.isEmpty)) {
+        response
+          ..setStatus(HttpStatus.noContent)
+          ..setHeader(HttpHeaders.allowHeader, 'GET, HEAD, POST, OPTIONS')
+          ..setHeader(HttpHeaders.contentLengthHeader, '0');
+        await response.close();
+        return;
+      }
+
       // Built-in endpoint: issue an opaque WebTransport session ticket sealing
       // the request's Cookie (which the browser sends on this normal request).
       final ticketPath = config.wtTicketPath;
