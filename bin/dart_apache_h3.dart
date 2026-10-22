@@ -1,19 +1,28 @@
 import 'dart:io';
 
 import 'package:dart_apache/src/config.dart';
-import 'package:dart_apache/src/http3/h3_php_server.dart';
+import 'package:dart_apache/src/supervisor.dart';
 
 /// Experimental HTTP/3 (QUIC) entry point serving static files and PHP.
 ///
 ///   dart run bin/dart_apache_h3.dart --root=./public --port=4433 --dev
 ///   dart run bin/dart_apache_h3.dart --root=./public --tls-cert=cert.pem \
-///       --tls-key=key.pem
+///       --tls-key=key.pem --workers=4
 Future<void> main(List<String> arguments) async {
   final config = ServerConfig.fromArgs(arguments);
-  final verbose = arguments.contains('--verbose');
 
   if (!Directory(config.documentRoot).existsSync()) {
     stderr.writeln('DocumentRoot does not exist: ${config.documentRoot}');
+    exitCode = 2;
+    return;
+  }
+
+  final hasCert = config.tlsCertPath != null && config.tlsKeyPath != null;
+  if (!hasCert && !config.devMode) {
+    stderr.writeln(
+      'HTTP/3 requires a TLS certificate: pass --tls-cert and --tls-key, '
+      'or --dev to use a generated self-signed certificate.',
+    );
     exitCode = 2;
     return;
   }
@@ -30,13 +39,24 @@ Future<void> main(List<String> arguments) async {
           tlsCertPath: config.tlsCertPath,
           tlsKeyPath: config.tlsKeyPath,
           devMode: config.devMode,
+          workers: config.workers,
         )
       : config;
 
-  try {
-    await Http3PhpServer(effective, verbose: verbose).start();
-  } on StateError catch (e) {
-    stderr.writeln(e.message);
-    exitCode = 2;
+  final server = ServerSupervisor(effective, kind: WorkerKind.http3);
+
+  ProcessSignal.sigint.watch().listen((_) async {
+    stdout.writeln('\nShutting down...');
+    await server.stop();
+    exit(0);
+  });
+  if (!Platform.isWindows) {
+    ProcessSignal.sigterm.watch().listen((_) async {
+      await server.stop();
+      exit(0);
+    });
+    ProcessSignal.sighup.watch().listen((_) => server.reload());
   }
+
+  await server.start();
 }

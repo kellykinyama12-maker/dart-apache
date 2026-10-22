@@ -4,12 +4,13 @@ import 'dart:io';
 import 'config.dart';
 import 'pipeline/http_exchange.dart';
 import 'pipeline/request_pipeline.dart';
+import 'worker_server.dart';
 
 /// A small HTTP/1.1 server that serves static files and runs PHP, reproducing
 /// Apache's request-handling flow. Request handling lives in the shared,
 /// transport-agnostic [RequestPipeline]; this class owns the listening socket
 /// and adapts each `dart:io` request to the pipeline.
-class ApacheServer {
+class ApacheServer implements WorkerServer {
   ApacheServer(this.config) : _pipeline = RequestPipeline(config);
 
   final ServerConfig config;
@@ -21,6 +22,7 @@ class ApacheServer {
   ///
   /// [workerId] identifies the owning isolate for logging; when omitted the
   /// server prints its own startup banner (single-isolate/dev use).
+  @override
   Future<void> start({int? workerId}) async {
     // `shared: true` lets every worker isolate bind the same port and have the
     // runtime load-balance connections across them (no blocking, no lock).
@@ -47,6 +49,7 @@ class ApacheServer {
   /// Stops accepting new connections. When [graceful] is true, in-flight
   /// requests are allowed to finish (connection draining); otherwise the
   /// listening socket is closed immediately.
+  @override
   Future<void> stop({bool graceful = false}) async {
     await _server?.close(force: !graceful);
     _server = null;

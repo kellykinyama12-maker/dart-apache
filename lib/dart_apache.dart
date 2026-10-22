@@ -18,3 +18,4 @@ export 'src/pipeline/server_exchange.dart';
 export 'src/request_resolver.dart';
 export 'src/server.dart';
 export 'src/supervisor.dart';
+export 'src/worker_server.dart';

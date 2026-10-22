@@ -25,6 +25,9 @@
 - HTTP/3 TLS certificates: load a real PEM cert/key (`--tls-cert`/`--tls-key`)
   or generate a self-signed one with `--dev`; vendored cert/TLS debug output is
   silenced. `tool/gen_dev_cert.dart` writes a local self-signed cert/key.
+- HTTP/3 runs multi-core under the supervisor: N worker isolates share the UDP
+  port via `reusePort` (SO_REUSEPORT), with respawn/backoff and reload; each
+  worker tags its connection IDs with its worker id (routing groundwork).
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.

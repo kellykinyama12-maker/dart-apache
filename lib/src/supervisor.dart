@@ -3,20 +3,26 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'config.dart';
+import 'http3/h3_php_server.dart';
 import 'server.dart';
+import 'worker_server.dart';
+
+/// Which transport a supervised worker serves.
+enum WorkerKind { http1, http3 }
 
 /// Supervises worker isolates, each running an independent, non-blocking
-/// [ApacheServer] bound to a shared listening socket (shared-nothing,
+/// [WorkerServer] bound to a shared listening socket (shared-nothing,
 /// worker-per-core — nginx-style). The supervisor:
 ///
-/// - **respawns** workers that exit unexpectedly, and
+/// - **respawns** workers that exit unexpectedly (with backoff), and
 /// - performs **zero-downtime reloads**: a fresh generation of workers is
 ///   spawned on the same shared socket, then the old generation is told to
 ///   drain in-flight requests and exit.
 class ServerSupervisor {
-  ServerSupervisor(this.config);
+  ServerSupervisor(this.config, {this.kind = WorkerKind.http1});
 
   final ServerConfig config;
+  final WorkerKind kind;
   final List<_Worker> _workers = [];
 
   bool _stopping = false;
@@ -30,8 +36,11 @@ class ServerSupervisor {
 
   /// Spawns the configured number of workers and begins serving.
   Future<void> start() async {
+    final scheme = kind == WorkerKind.http3 ? 'https' : 'http';
+    final transport = kind == WorkerKind.http3 ? ' (QUIC/UDP)' : '';
     stdout.writeln('dart-apache serving "${config.documentRoot}"');
-    stdout.writeln('Listening on http://${config.address}:${config.port}/');
+    stdout.writeln(
+        'Listening on $scheme://${config.address}:${config.port}/$transport');
     stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
     stdout.writeln('Workers: ${config.workers} isolate(s)');
 
@@ -86,7 +95,7 @@ class ServerSupervisor {
 
     final isolate = await Isolate.spawn(
       _workerMain,
-      _WorkerArgs(config, id, ready.sendPort),
+      _WorkerArgs(config, id, ready.sendPort, kind),
       onExit: exit.sendPort,
       debugName: 'dart-apache-worker-$id',
     );
@@ -184,19 +193,22 @@ class _Worker {
   bool draining = false;
 }
 
-/// Isolate payload: the (sendable) config, worker index, and a port used to
-/// report readiness back to the supervisor.
+/// Isolate payload: the (sendable) config, worker index, a port used to report
+/// readiness back to the supervisor, and which transport to serve.
 class _WorkerArgs {
-  _WorkerArgs(this.config, this.id, this.toSupervisor);
+  _WorkerArgs(this.config, this.id, this.toSupervisor, this.kind);
   final ServerConfig config;
   final int id;
   final SendPort toSupervisor;
+  final WorkerKind kind;
 }
 
 /// Entry point run inside each worker isolate.
 Future<void> _workerMain(_WorkerArgs args) async {
   final control = ReceivePort();
-  final server = ApacheServer(args.config);
+  final WorkerServer server = args.kind == WorkerKind.http3
+      ? Http3PhpServer(args.config)
+      : ApacheServer(args.config);
   await server.start(workerId: args.id);
 
   // Signal readiness by handing the supervisor our control port.

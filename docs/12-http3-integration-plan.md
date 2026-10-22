@@ -199,9 +199,18 @@ accept model does not directly apply. Plan:
 | H3-3 ✅ | HTTP/3 server adapts `dart_quiche` to the contract | h3 serves static + PHP through the **same** pipeline (verified) |
 | H3-4 ✅ | **Streaming** h3 responses (per-chunk DATA + flush) | Large static (200 KB) + PHP streamed over h3 without full-body buffering |
 | H3-5 ✅ | Real certs + SNI + `--dev` self-signed; silence cert debug | PEM cert/key loaded (`--tls-cert`/`--tls-key`); `--dev` self-signed; vendored cert/TLS debug output silenced |
-| H3-6 | Multi-isolate UDP acceptor + CID affinity via supervisor | h3 served across all cores; respawn/reload work |
+| H3-6 🟡 | Multi-isolate UDP acceptor + CID affinity via supervisor | h3 runs N workers on a shared UDP port (SO_REUSEPORT) under the supervisor; CID worker-tag in place; cross-worker forwarding for migration pending |
 | H3-7 | GOAWAY drain, migration, Alt-Svc advertisement | Zero-dropped-stream reload; `Alt-Svc` upgrades clients |
 | H3-8 | quic-interop + load/soak; qlog + metrics | Interop targets pass; metrics/qlog available |
+
+> **Status:** H3-1..H3-5 done; **H3-6 in progress** — HTTP/3 now runs under the
+> shared [`ServerSupervisor`](../lib/src/supervisor.dart) as N worker isolates
+> (`--workers`), each binding the UDP port with `reusePort` (SO_REUSEPORT on
+> Linux/BSD) for kernel 4-tuple load-balancing, with respawn/backoff and reload.
+> Each worker tags its connection IDs with its worker id. Remaining H3-6:
+> cross-worker datagram **forwarding** (for client migration / kernel
+> mis-steer) and SO_REUSEPORT is Linux-only (Windows runs a single effective
+> acceptor).
 
 > **Status:** H3-1..H3-5 are **done**. HTTP/3 loads a real PEM certificate
 > (`--tls-cert`/`--tls-key`) or a generated self-signed one (`--dev`), and the

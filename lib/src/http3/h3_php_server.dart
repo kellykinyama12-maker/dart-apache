@@ -11,12 +11,13 @@ import 'package:dart_quiche/src/handshake_keys.dart';
 import '../config.dart';
 import '../pipeline/request_pipeline.dart';
 import '../pipeline/server_exchange.dart';
+import '../worker_server.dart';
 
 /// An experimental HTTP/3 (QUIC) server that serves static files and runs PHP
 /// using the pure-Dart `dart_quiche` transport. It terminates QUIC + TLS 1.3,
 /// speaks HTTP/3, and adapts each request to the shared [RequestPipeline] — the
 /// same handlers the HTTP/1.1 server uses.
-class Http3PhpServer {
+class Http3PhpServer implements WorkerServer {
   Http3PhpServer(this.config, {this.verbose = false})
       : _pipeline = RequestPipeline(config);
 
@@ -24,10 +25,14 @@ class Http3PhpServer {
   final bool verbose;
   final RequestPipeline _pipeline;
 
-  late final RawDatagramSocket _socket;
+  RawDatagramSocket? _socket;
   late final EcdsaCert _cert;
   final Map<String, _Session> _sessions = {};
   final Random _rng = Random.secure();
+
+  /// This worker's index (0..N-1), encoded into server-chosen connection IDs
+  /// so datagrams can later be routed to the owning worker.
+  int _workerId = 0;
 
   /// A forked zone that swallows `print()` so the vendored `dart_quiche` cert
   /// and TLS code don't spam stdout. Our own logging uses `stdout.writeln`,
@@ -36,21 +41,45 @@ class Http3PhpServer {
     specification: ZoneSpecification(print: (_, _, _, _) {}),
   );
 
-  Future<void> start() async {
+  @override
+  Future<void> start({int? workerId}) async {
+    _workerId = workerId ?? 0;
     _cert = _quietZone.run(_buildCert);
-    _socket = await RawDatagramSocket.bind(
+
+    // `reusePort` (SO_REUSEPORT on Linux/BSD) lets every worker isolate bind the
+    // same UDP port; the kernel load-balances datagrams by 4-tuple, giving
+    // per-connection affinity for non-migrating clients. Not supported on
+    // Windows, so it is only requested off-Windows.
+    final socket = await RawDatagramSocket.bind(
       InternetAddress(config.address),
       config.port,
+      reuseAddress: true,
+      reusePort: !Platform.isWindows,
     );
+    _socket = socket;
 
-    stdout.writeln('dart-apache HTTP/3 serving "${config.documentRoot}"');
-    stdout.writeln('Listening on https://${config.address}:${config.port}/ '
-        '(QUIC/UDP)');
-    stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
+    if (workerId == null) {
+      stdout.writeln('dart-apache HTTP/3 serving "${config.documentRoot}"');
+      stdout.writeln('Listening on https://${config.address}:${config.port}/ '
+          '(QUIC/UDP)');
+      stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
+    } else {
+      stdout.writeln('[worker $workerId] ready (h3)');
+    }
 
     // Run the datagram handler in the quiet zone so handshake debug prints are
     // suppressed (callbacks inherit the zone active at listen() time).
-    _quietZone.run(() => _socket.listen(_onSocketEvent));
+    _quietZone.run(() => socket.listen(_onSocketEvent));
+  }
+
+  @override
+  Future<void> stop({bool graceful = false}) async {
+    // QUIC is connectionless at the socket layer; closing the socket stops new
+    // datagrams. (GOAWAY-based draining is tracked as H3-7.)
+    _socket?.close();
+    _socket = null;
+    _sessions.clear();
+    await _pipeline.close();
   }
 
   /// Builds the server certificate: a real PEM cert/key when configured, or a
@@ -73,7 +102,9 @@ class Http3PhpServer {
 
   void _onSocketEvent(RawSocketEvent event) {
     if (event != RawSocketEvent.read) return;
-    final datagram = _socket.receive();
+    final socket = _socket;
+    if (socket == null) return;
+    final datagram = socket.receive();
     if (datagram == null) return;
 
     final key = '${datagram.address.address}:${datagram.port}';
@@ -117,7 +148,7 @@ class Http3PhpServer {
         clientScid: hdr.scid.bytes,
         rng: _rng,
       );
-      _socket.send(vn, datagram.address, datagram.port);
+      _socket?.send(vn, datagram.address, datagram.port);
       return null;
     }
     if (datagram.data.isEmpty || (datagram.data[0] & 0x80) == 0) {
@@ -137,6 +168,9 @@ class Http3PhpServer {
     final clientScid = hdr.scid.bytes;
     final serverScid =
         Uint8List.fromList(List.generate(8, (_) => _rng.nextInt(256)));
+    // Tag the first CID byte with this worker's id so datagrams can later be
+    // routed to the owning worker (CID-affinity groundwork).
+    serverScid[0] = _workerId & 0xFF;
 
     final conn = Connection(
       localCid: serverScid,
@@ -235,6 +269,8 @@ class Http3PhpServer {
   }
 
   void _txAll(_Session session) {
+    final socket = _socket;
+    if (socket == null) return;
     while (true) {
       Uint8List? pkt;
       for (final epoch in const [
@@ -246,7 +282,7 @@ class Http3PhpServer {
         if (pkt != null) break;
       }
       if (pkt == null) break;
-      _socket.send(pkt, session.addr, session.port);
+      socket.send(pkt, session.addr, session.port);
     }
   }
 
