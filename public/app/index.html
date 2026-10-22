@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>dart-apache SPA over WebTransport</title>
+  <!-- A Flutter/Dart web build ships an index.html like this plus main.dart.js
+       (or main.dart.wasm). Here a hand-written shell stands in for that bundle
+       to show static hosting + SPA routing + a WebTransport round-trip. -->
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem; }
+    code { background: #f2f2f2; padding: 0 .3em; }
+    pre { background: #f7f7f7; padding: 1rem; overflow: auto; }
+    .ok { color: #176d17; } .err { color: #a11; }
+  </style>
+</head>
+<body>
+  <h1>dart-apache · SPA over WebTransport</h1>
+  <p>Client-side route: <code id="route"></code></p>
+  <p>WebTransport status: <strong id="status">connecting…</strong></p>
+  <h3>Bridge round-trip (bidi stream → PHP → back)</h3>
+  <pre id="out">…</pre>
+
+  <script type="module">
+    // Client-side router (like Flutter's PathUrlStrategy). Deep links such as
+    // /app/dashboard are served this same index.html by the server's SPA
+    // fallback, then the app renders the route below.
+    const routeEl = document.getElementById('route');
+    const statusEl = document.getElementById('status');
+    const outEl = document.getElementById('out');
+    routeEl.textContent = location.pathname;
+
+    function setStatus(text, ok) {
+      statusEl.textContent = text;
+      statusEl.className = ok ? 'ok' : 'err';
+    }
+
+    async function main() {
+      if (!('WebTransport' in window)) {
+        setStatus('WebTransport unavailable — would fall back to fetch()', false);
+        return;
+      }
+      try {
+        const wt = new WebTransport(`https://${location.host}/wt`);
+        await wt.ready;
+        setStatus('connected (HTTP/3)', true);
+
+        // One component commit: write JSON on a bidi stream, read the reply.
+        const req = { component: 'home', message: 'from-flutter-shell', calls: [] };
+        const stream = await wt.createBidirectionalStream();
+        const w = stream.writable.getWriter();
+        await w.write(new TextEncoder().encode(JSON.stringify(req)));
+        await w.close();
+
+        const r = stream.readable.getReader();
+        let raw = '';
+        for (;;) {
+          const { value, done } = await r.read();
+          if (done) break;
+          raw += new TextDecoder().decode(value);
+        }
+        outEl.textContent = raw;
+        wt.close();
+      } catch (e) {
+        setStatus('error: ' + (e && e.message ? e.message : e), false);
+      }
+    }
+    main();
+  </script>
+</body>
+</html>

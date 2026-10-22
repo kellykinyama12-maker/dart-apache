@@ -69,7 +69,9 @@ class RequestPipeline {
         case ResolutionKind.forbidden:
           await _serveError(response, HttpStatus.forbidden, 'Forbidden');
         case ResolutionKind.notFound:
-          await _serveError(response, HttpStatus.notFound, 'Not Found');
+          if (!await _trySpaFallback(exchange, response)) {
+            await _serveError(response, HttpStatus.notFound, 'Not Found');
+          }
       }
     } on CgiException catch (e) {
       stderr.writeln('[php] $e');
@@ -150,6 +152,36 @@ class RequestPipeline {
     }
     await response.addStream(php.body);
     await response.close();
+  }
+
+  /// Single-page-app rewrite: when [ServerConfig.spaFallback] is set, serve it
+  /// for an extensionless GET/HEAD that otherwise 404s, so client-side routes
+  /// (e.g. a Flutter/Dart web build) survive a refresh. Returns true if served.
+  Future<bool> _trySpaFallback(
+    ServerExchange exchange,
+    ServerResponse response,
+  ) async {
+    final fallback = config.spaFallback;
+    if (fallback == null) return false;
+    if (exchange.method != 'GET' && exchange.method != 'HEAD') return false;
+    // Only rewrite navigation paths; genuinely-missing assets (with a file
+    // extension, e.g. main.dart.js, foo.png) must still 404.
+    final lastSegment = exchange.uri.pathSegments.isEmpty
+        ? ''
+        : exchange.uri.pathSegments.last;
+    if (lastSegment.contains('.')) return false;
+    final fb = _resolver.resolve(fallback);
+    switch (fb.kind) {
+      case ResolutionKind.staticFile:
+        await _serveStatic(exchange, response, fb.filePath);
+        return true;
+      case ResolutionKind.phpScript:
+        await _servePhp(exchange, response, fb);
+        return true;
+      case ResolutionKind.forbidden:
+      case ResolutionKind.notFound:
+        return false;
+    }
   }
 
   Future<void> _serveError(

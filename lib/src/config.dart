@@ -33,6 +33,7 @@ class ServerConfig {
     this.proxyRoutes = const [],
     this.wtPath,
     this.wtBridgePath,
+    this.spaFallback,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
         workers = (workers == null || workers < 1)
@@ -111,6 +112,14 @@ class ServerConfig {
   /// enough). When null, WebTransport messages are echoed instead.
   final String? wtBridgePath;
 
+  /// When set (e.g. `/index.html`), a GET/HEAD request for an **extensionless**
+  /// path that resolves to nothing is served this file with `200` instead of a
+  /// `404`. This is the single-page-app rewrite (nginx `try_files … /index.html`)
+  /// that client-side routing — e.g. a Flutter/Dart web build using
+  /// `PathUrlStrategy` — needs so deep links survive a refresh. Missing assets
+  /// (anything with a file extension) still `404`.
+  final String? spaFallback;
+
   /// The `Alt-Svc` header value advertising HTTP/3, or null if disabled.
   String? get altSvcHeader => altSvcH3Port == null
       ? null
@@ -159,6 +168,10 @@ class ServerConfig {
     // Longest prefix first so more specific routes win.
     proxyRoutes.sort((a, b) => b.pathPrefix.length.compareTo(a.pathPrefix.length));
 
+    // --spa is shorthand for --spa-fallback=/index.html.
+    final spaFallback = map['spa-fallback'] ??
+        (args.contains('--spa') ? '/index.html' : null);
+
     return ServerConfig(
       address: map['address'] ?? '127.0.0.1',
       port: port,
@@ -179,6 +192,7 @@ class ServerConfig {
       proxyRoutes: proxyRoutes,
       wtPath: map['wt-path'],
       wtBridgePath: map['wt-bridge-path'],
+      spaFallback: spaFallback,
       workers: int.tryParse(map['workers'] ?? ''),
     );
   }

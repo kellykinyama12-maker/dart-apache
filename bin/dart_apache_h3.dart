@@ -42,6 +42,7 @@ Future<void> main(List<String> arguments) async {
           workers: config.workers,
           wtPath: config.wtPath,
           wtBridgePath: config.wtBridgePath,
+          spaFallback: config.spaFallback,
         )
       : config;
 
