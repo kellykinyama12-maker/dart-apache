@@ -142,7 +142,55 @@ void main() {
       expect(g2.headers['x-cache'], 'HIT'); // same Vary value
       expect(br.headers['x-cache'], 'MISS'); // different Vary value
     });
+
+    test('HEAD is served from a cached GET (headers, no body)', () async {
+      var hits = 0;
+      final app = DartApp([
+        DartRoute.exact('/h', (e, r) async {
+          hits++;
+          r.setHeader('cache-control', 'max-age=60');
+          await r.writeText('body');
+        }, methods: {'GET'}),
+      ]);
+      final pipeline =
+          RequestPipeline(ServerConfig(documentRoot: '.', cacheEnabled: true),
+              app: app);
+      await _get(pipeline, '/h'); // populate cache
+      final head = await _method(pipeline, 'HEAD', '/h');
+      expect(head.headers['x-cache'], 'HIT');
+      expect(head.body, isEmpty);
+      expect(head.headers['content-length'], '4'); // from the cached GET
+      expect(hits, 1); // handler ran once
+    });
+
+    test('request Cache-Control: no-cache bypasses the hit', () async {
+      var hits = 0;
+      final app = DartApp([
+        DartRoute.exact('/b', (e, r) async {
+          hits++;
+          r.setHeader('cache-control', 'max-age=60');
+          await r.writeText('n=$hits');
+        }),
+      ]);
+      final pipeline =
+          RequestPipeline(ServerConfig(documentRoot: '.', cacheEnabled: true),
+              app: app);
+      await _get(pipeline, '/b'); // MISS, stored n=1
+      final bust = await _get(pipeline, '/b', {'cache-control': 'no-cache'});
+      expect(bust.headers['x-cache'], 'MISS'); // re-run + re-store
+      expect(utf8.decode(bust.body), 'n=2');
+      final after = await _get(pipeline, '/b');
+      expect(after.headers['x-cache'], 'HIT');
+      expect(utf8.decode(after.body), 'n=2'); // refreshed entry
+    });
   });
+}
+
+Future<_FakeResponse> _method(RequestPipeline p, String method, String path,
+    [Map<String, String> headers = const {}]) async {
+  final ex = _FakeExchange(method, Uri.parse(path), headers);
+  await p.serve(ex);
+  return ex.response;
 }
 
 Future<_FakeResponse> _get(RequestPipeline p, String path,

@@ -102,24 +102,33 @@ class RequestPipeline {
         return;
       }
 
-      // Response cache (GET only): a fresh, vary-matching hit is replayed; on a
-      // miss the response is teed through [CachingResponse], which stores it
-      // iff the handler marks it cacheable (Cache-Control/Expires).
+      // Response cache. A fresh, vary-matching hit is replayed (a HEAD reuses
+      // the stored GET, headers only); a request `no-cache` bypasses the hit;
+      // otherwise a GET miss is teed through [CachingResponse], which stores it
+      // iff the handler marks it cacheable (Cache-Control/Expires). `no-store`
+      // requests are not stored.
       final cache = _cache;
-      if (cache != null && exchange.method == 'GET') {
+      if (cache != null &&
+          (exchange.method == 'GET' || exchange.method == 'HEAD')) {
         final reqHeaders = _requestHeaders(exchange);
+        final reqCc = (reqHeaders['cache-control'] ?? '').toLowerCase();
         final key = _cacheKey(exchange);
-        final hit = cache.get(key, reqHeaders);
-        if (hit != null) {
-          await _replayCached(response, hit);
-          return;
+        if (!reqCc.contains('no-cache')) {
+          final hit = cache.get(key, reqHeaders);
+          if (hit != null) {
+            await _replayCached(response, hit,
+                headOnly: exchange.method == 'HEAD');
+            return;
+          }
         }
-        response = CachingResponse(
-          inner: response,
-          method: exchange.method,
-          requestHeaders: reqHeaders,
-          onStore: (entry) => cache.put(key, entry),
-        );
+        if (exchange.method == 'GET' && !reqCc.contains('no-store')) {
+          response = CachingResponse(
+            inner: response,
+            method: exchange.method,
+            requestHeaders: reqHeaders,
+            onStore: (entry) => cache.put(key, entry),
+          );
+        }
       }
 
       // Reverse-proxy routes take precedence over local static/PHP.
@@ -335,15 +344,20 @@ class RequestPipeline {
     return '"${mtime.toRadixString(16)}-${stat.size.toRadixString(16)}"';
   }
 
-  /// Cache key: method + absolute request target.
+  /// Cache key: always the GET target, so a HEAD reuses a stored GET entry.
   String _cacheKey(ServerExchange e) {
     final q = e.uri.query;
-    return '${e.method} ${e.scheme}://${e.authority}${e.uri.path}'
+    return 'GET ${e.scheme}://${e.authority}${e.uri.path}'
         '${q.isEmpty ? '' : '?$q'}';
   }
 
   /// Replays a cached response with a recomputed `Age` and `X-Cache: HIT`.
-  Future<void> _replayCached(ServerResponse response, CachedResponse e) async {
+  /// [headOnly] omits the body (serving HEAD from a cached GET).
+  Future<void> _replayCached(
+    ServerResponse response,
+    CachedResponse e, {
+    bool headOnly = false,
+  }) async {
     response.setStatus(e.statusCode);
     for (final h in e.headers) {
       response.setHeader(h.key, h.value);
@@ -351,7 +365,9 @@ class RequestPipeline {
     response
       ..setHeader('Age', '${e.ageSeconds(DateTime.now())}')
       ..setHeader('X-Cache', 'HIT');
-    await response.addStream(Stream<List<int>>.value(e.body));
+    if (!headOnly) {
+      await response.addStream(Stream<List<int>>.value(e.body));
+    }
     await response.close();
   }
 
