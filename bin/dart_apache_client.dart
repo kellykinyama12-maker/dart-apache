@@ -2,10 +2,13 @@ import 'dart:io';
 
 import 'package:dart_apache/src/client/alt_svc_client.dart';
 import 'package:dart_apache/src/client/client_response.dart';
+import 'package:dart_apache/src/client/wt_client.dart';
+import 'package:dart_quiche/dart_quiche.dart' show TrustStore;
 
 /// An Alt-Svc-aware Dart HTTP client. Without request flags it runs a two-step
 /// discovery demo (HTTP/1.1 first, auto-upgrade to HTTP/3). With curl-like
-/// flags it performs a single request of the given method.
+/// flags it performs a single request of the given method. With `--wt` it
+/// opens a WebTransport session instead.
 ///
 ///   dart run bin/dart_apache_client.dart http://127.0.0.1:8080/
 ///   dart run bin/dart_apache_client.dart https://127.0.0.1:8443/ --insecure
@@ -13,6 +16,8 @@ import 'package:dart_apache/src/client/client_response.dart';
 ///   dart run bin/dart_apache_client.dart -X POST -H 'Content-Type: application/json' \
 ///     -d '{"a":1}' https://127.0.0.1:8443/echo.php --insecure
 ///   dart run bin/dart_apache_client.dart --head https://127.0.0.1:8443/ --insecure
+///   dart run bin/dart_apache_client.dart --wt --dgram ping --bidi hello \
+///     https://127.0.0.1:8443/wt --insecure
 Future<void> main(List<String> arguments) async {
   final opts = _parseArgs(arguments);
   final url = Uri.parse(opts.target);
@@ -22,6 +27,11 @@ Future<void> main(List<String> arguments) async {
   String? caBundlePem;
   if (opts.caBundlePath != null) {
     caBundlePem = File(opts.caBundlePath!).readAsStringSync();
+  }
+
+  if (opts.wt) {
+    await _runWebTransport(url, opts, caBundlePem);
+    return;
   }
 
   final client = AltSvcHttpClient(
@@ -64,6 +74,11 @@ class _Options {
     required this.outputPath,
     required this.headOnly,
     required this.hasRequestFlags,
+    required this.wt,
+    required this.dgrams,
+    required this.unis,
+    required this.bidis,
+    required this.wtWaitSeconds,
   });
 
   final String target;
@@ -75,6 +90,11 @@ class _Options {
   final String? outputPath;
   final bool headOnly;
   final bool hasRequestFlags;
+  final bool wt;
+  final List<String> dgrams;
+  final List<String> unis;
+  final List<String> bidis;
+  final int wtWaitSeconds;
 }
 
 _Options _parseArgs(List<String> args) {
@@ -86,6 +106,11 @@ _Options _parseArgs(List<String> args) {
   String? outputPath;
   var headOnly = false;
   var explicitMethod = false;
+  var wt = false;
+  final dgrams = <String>[];
+  final unis = <String>[];
+  final bidis = <String>[];
+  var wtWaitSeconds = 2;
   final positional = <String>[];
 
   for (var i = 0; i < args.length; i++) {
@@ -116,6 +141,16 @@ _Options _parseArgs(List<String> args) {
         outputPath = next();
       case '--insecure':
         insecure = true;
+      case '--wt':
+        wt = true;
+      case '--dgram':
+        dgrams.add(next());
+      case '--uni':
+        unis.add(next());
+      case '--bidi':
+        bidis.add(next());
+      case '--wt-wait':
+        wtWaitSeconds = int.tryParse(next()) ?? wtWaitSeconds;
       default:
         if (a.startsWith('--ca-bundle=')) {
           caBundlePath = a.substring('--ca-bundle='.length);
@@ -143,7 +178,49 @@ _Options _parseArgs(List<String> args) {
     outputPath: outputPath,
     headOnly: headOnly,
     hasRequestFlags: hasRequestFlags,
+    wt: wt,
+    dgrams: dgrams,
+    unis: unis,
+    bidis: bidis,
+    wtWaitSeconds: wtWaitSeconds,
   );
+}
+
+Future<void> _runWebTransport(
+  Uri url,
+  _Options opts,
+  String? caBundlePem,
+) async {
+  final trustStore =
+      caBundlePem != null ? (TrustStore()..addPem(caBundlePem)) : null;
+  final client = await WebTransportClient.connect(url, trustStore: trustStore);
+  stdout.writeln('WebTransport session open (stream ${client.sessionId})');
+
+  var count = 0;
+  final sub = client.incoming.listen((msg) {
+    final kind = msg.isDatagram ? 'datagram' : 'stream ${msg.streamId}';
+    final text = String.fromCharCodes(msg.data).trim();
+    if (text.isNotEmpty) {
+      count++;
+      stdout.writeln('← [$kind] $text');
+    }
+  });
+
+  for (final d in opts.dgrams) {
+    client.sendDatagram(d.codeUnits);
+  }
+  for (final u in opts.unis) {
+    client.openUniStream(u.codeUnits);
+  }
+  for (final b in opts.bidis) {
+    // Half-close so the server completes and echoes the message.
+    client.openBidiStream(b.codeUnits, fin: true);
+  }
+
+  await Future<void>.delayed(Duration(seconds: opts.wtWaitSeconds));
+  await sub.cancel();
+  await client.close();
+  stdout.writeln('received $count message(s); session closed');
 }
 
 Future<void> _emit(ClientResponse response, _Options opts) async {

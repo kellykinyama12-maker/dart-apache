@@ -1,0 +1,6 @@
+tags:
+  e2e:
+    # Live QUIC loopback end-to-end tests (bind a UDP socket + full handshake).
+    # Skipped by default so CI stays socket-free; run explicitly with:
+    #   dart test -t e2e --run-skipped
+    skip: "live QUIC e2e; run with: dart test -t e2e --run-skipped"
