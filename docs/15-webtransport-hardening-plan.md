@@ -99,11 +99,11 @@ Phase 3. Packet-loss emulation is still TODO (loopback measures CPU/framing only
 
 ---
 
-## Phase 3 — Coverage & robustness (closes G3)
+## Phase 3 — Coverage & robustness (closes G3)  ✅ DONE
 
 Shake out real-app behavior beyond a counter.
 
-0. **QUIC stream flow control (surfaced by Phase 2, highest priority).** The
+0. **QUIC stream flow control (surfaced by Phase 2, highest priority).** ✅ The
    vendored stack advertises `initial_max_streams_bidi` and never emits
    `MAX_STREAMS`, so a connection stalls once the budget is spent (one bidi
    stream per request). Mitigated by raising the grant to 65 536; the real fixes:
@@ -113,22 +113,39 @@ Shake out real-app behavior beyond a counter.
    bidi stream with message framing (sidesteps both). Also handle a client
    `STOP_SENDING` mid-response gracefully in `_H3ResponseSink` (the caught
    `QuicError(StreamStopped)` 500 noted in Phase 1).
+   **Done:** MAX_STREAMS replenishment + `_collectCompletedStreams()` landed
+   (300-req bench, 0 errors); `_sendHeaders`/`_sendData` now return `bool` and
+   catch `QuicError`, with an `_aborted` flag on `_H3ResponseSink` that stops
+   reading the source and skips the trailing FIN — a mid-response client reset
+   logs a clean `stopped by client` line instead of a 500.
 1. **Coverage app** in `livewire-wt`: a form with `wire:model`, server-side
    validation (error bag), a `wire:navigate` link, and a `wire:poll` component.
+   **Done:** `⚡contact-form` (required/email/min validation) + `⚡ticker`
+   (`wire:poll.700ms`) + a `wire:navigate` link, all on `/form`.
 2. **Reconnect** in the shim: on `wt.closed`, reset and lazily reconnect on the
    next update; in-flight messages fall back to `fetch`.
+   **Done:** `wt.closed.then(reset, reset)` nulls the handles; `connect()`
+   lazily reopens on the next request; a request that fails mid-flight falls
+   back to native `fetch`.
 3. **Uploads.** Livewire file uploads use a separate multipart endpoint — decide:
    bridge binary bodies over WT, or let uploads use native `fetch` (likely the
-   latter; document it).
+   latter; document it). **Deferred:** uploads stay on native `fetch` (the shim
+   only intercepts the JSON update endpoint); revisit in Phase 4.
 4. **Backpressure / limits.** Confirm the per-message cap
    (`maxRequestBodyBytes`) and stream pruning hold under rapid interaction;
    add a soak step (hundreds of updates) watching memory.
+   **Done:** 300-req benchmark with stream collection, 0 errors, stable memory.
 5. **`wire:navigate`.** Verify SPA-style navigation works (front-controller +
    full-page responses); if Livewire fetches full HTML over the same hook, the
    response contract from Phase 1 must carry `text/html` correctly.
+   **Done:** `wire:navigate` GETs the target page over normal h3 (not the WT
+   hook) and the front-controller serves it; verified `navigated: true`.
 
 **Acceptance:** a `livewire_coverage_test.js` exercising form submit + validation
 error + navigate, all over WT; soak run shows stable memory.
+**Verified:** `livewire_coverage_test.js` →
+`{errName: "…required.", saved: "Saved Ada …", ticks 5→6, polledOverWt: true,
+navigated: true, wtUsed: 9, errors: []}` (exit 0); server log all `200`, no 500s.
 
 **Risk:** medium (uncovers Livewire-internal assumptions).
 

@@ -726,8 +726,9 @@ class Http3PhpServer implements WorkerServer {
   }
 
   /// Sends the response HEADERS frame (QPACK-encoded). [fin] closes the stream
-  /// for headers-only / empty-body responses.
-  void _sendHeaders(
+  /// for headers-only / empty-body responses. Returns false if the client has
+  /// reset the stream (STOP_SENDING), so the caller can abandon the response.
+  bool _sendHeaders(
     _Session session,
     int streamId,
     int status,
@@ -744,20 +745,33 @@ class Http3PhpServer implements WorkerServer {
     if (!headers.containsKey('server')) {
       h3Headers.add(_h3Header('server', config.serverSoftware));
     }
-    session.h3!.sendResponse(streamId, h3Headers, fin: fin);
+    try {
+      session.h3!.sendResponse(streamId, h3Headers, fin: fin);
+    } on QuicError catch (e) {
+      _log('response stream $streamId stopped by client: $e');
+      return false;
+    }
     _txAll(session);
+    return true;
   }
 
   /// Streams one body chunk (DATA frame) and flushes it to the socket, giving
-  /// soft back-pressure as the source produces data.
-  void _sendData(
+  /// soft back-pressure as the source produces data. Returns false if the
+  /// client has reset the stream (STOP_SENDING).
+  bool _sendData(
     _Session session,
     int streamId,
     List<int> chunk, {
     required bool fin,
   }) {
-    session.h3!.sendData(streamId, Uint8List.fromList(chunk), fin: fin);
+    try {
+      session.h3!.sendData(streamId, Uint8List.fromList(chunk), fin: fin);
+    } on QuicError catch (e) {
+      _log('response stream $streamId stopped by client: $e');
+      return false;
+    }
     _txAll(session);
+    return true;
   }
 
   void _txAll(_Session session) {
@@ -1044,6 +1058,7 @@ class _H3ResponseSink implements ServerResponse {
   final Map<String, List<String>> _headers = {};
   int _status = 200;
   bool _headersSent = false;
+  bool _aborted = false;
 
   @override
   int get statusCode => _status;
@@ -1056,23 +1071,31 @@ class _H3ResponseSink implements ServerResponse {
       _headers.putIfAbsent(name.toLowerCase(), () => <String>[]).add(value);
 
   void _ensureHeaders() {
-    if (_headersSent) return;
+    if (_headersSent || _aborted) return;
     _headersSent = true;
-    _server._sendHeaders(_session, _streamId, _status, _headers, fin: false);
+    if (!_server._sendHeaders(_session, _streamId, _status, _headers, fin: false)) {
+      _aborted = true;
+    }
   }
 
   @override
   Future<void> addStream(Stream<List<int>> body) async {
     await for (final chunk in body) {
+      if (_aborted) break; // client reset the stream — stop reading the source
       _ensureHeaders();
+      if (_aborted) break;
       if (chunk.isNotEmpty) {
-        _server._sendData(_session, _streamId, chunk, fin: false);
+        if (!_server._sendData(_session, _streamId, chunk, fin: false)) {
+          _aborted = true;
+          break;
+        }
       }
     }
   }
 
   @override
   Future<void> close() async {
+    if (_aborted) return;
     if (_headersSent) {
       _server._sendData(_session, _streamId, const [], fin: true);
     } else {

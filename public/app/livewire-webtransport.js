@@ -39,6 +39,8 @@
   var wt = null;
   var ready = null;
 
+  // Lazy reconnect: on close/error we null the handles; the next request opens
+  // a fresh connection. A request that fails mid-flight falls back to fetch().
   function connect() {
     if (ready) return ready;
     wt = new WebTransport(CONFIG.wtUrl);

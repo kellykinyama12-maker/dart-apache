@@ -83,14 +83,47 @@ function findBrowser() {
     await page.waitForSelector('#saved', { timeout: 15000 });
     const saved = (await page.textContent('#saved')).trim();
 
+    // 4) wire:poll fires over WebTransport — the ticker increments on a timer.
+    const ticks0 = parseInt(await page.textContent('#ticks'), 10) || 0;
+    const wtBeforePoll = await page.evaluate(() => window.__livewireWtUsed || 0);
+    await page.waitForFunction(
+      (t0) => (parseInt(document.getElementById('ticks').textContent, 10) || 0) > t0,
+      ticks0,
+      { timeout: 8000 },
+    );
+    const ticks1 = parseInt(await page.textContent('#ticks'), 10) || 0;
+    const wtAfterPoll = await page.evaluate(() => window.__livewireWtUsed || 0);
+
+    // 5) wire:navigate — SPA full-page swap to the counter page.
+    await page.click('#nav-home');
+    await page.waitForFunction(
+      () => location.pathname === '/' && !!document.getElementById('count'),
+      { timeout: 10000 },
+    );
+    const navigated = await page.evaluate(
+      () => location.pathname === '/' && !!document.getElementById('count'),
+    );
+
     const wtUsed = await page.evaluate(() => window.__livewireWtUsed || 0);
-    const result = { errName, errEmailPresent: errEmail.length > 0, saved, wtUsed, errors };
+    const result = {
+      errName,
+      errEmailPresent: errEmail.length > 0,
+      saved,
+      ticks0,
+      ticks1,
+      polledOverWt: wtAfterPoll > wtBeforePoll,
+      navigated,
+      wtUsed,
+      errors,
+    };
     console.log(JSON.stringify(result, null, 2));
     const pass =
       /required/i.test(errName) &&
       /ada@example\.com/.test(saved) &&
       /Ada/.test(saved) &&
-      wtUsed >= 3 &&
+      ticks1 > ticks0 &&
+      wtAfterPoll > wtBeforePoll &&
+      navigated &&
       errors.length === 0;
     process.exit(pass ? 0 : 1);
   } finally {
