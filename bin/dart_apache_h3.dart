@@ -41,6 +41,7 @@ Future<void> main(List<String> arguments) async {
           devMode: config.devMode,
           workers: config.workers,
           wtPath: config.wtPath,
+          wtBridgePath: config.wtBridgePath,
         )
       : config;
 

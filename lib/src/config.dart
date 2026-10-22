@@ -32,6 +32,7 @@ class ServerConfig {
     this.maxRequestBodyBytes = 10 * 1024 * 1024,
     this.proxyRoutes = const [],
     this.wtPath,
+    this.wtBridgePath,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
         workers = (workers == null || workers < 1)
@@ -103,6 +104,13 @@ class ServerConfig {
   /// on this path open a WebTransport session (datagram echo).
   final String? wtPath;
 
+  /// When set, each complete inbound WebTransport message (stream or datagram)
+  /// is bridged to this path as a synthetic `POST` through the PHP pipeline —
+  /// e.g. `/livewire/update` for Livewire-over-WebTransport. The response is
+  /// written back on the same stream (or returned as a datagram when small
+  /// enough). When null, WebTransport messages are echoed instead.
+  final String? wtBridgePath;
+
   /// The `Alt-Svc` header value advertising HTTP/3, or null if disabled.
   String? get altSvcHeader => altSvcH3Port == null
       ? null
@@ -170,6 +178,7 @@ class ServerConfig {
           int.tryParse(map['max-body'] ?? '') ?? 10 * 1024 * 1024,
       proxyRoutes: proxyRoutes,
       wtPath: map['wt-path'],
+      wtBridgePath: map['wt-bridge-path'],
       workers: int.tryParse(map['workers'] ?? ''),
     );
   }

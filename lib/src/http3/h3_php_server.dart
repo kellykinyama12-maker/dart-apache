@@ -355,9 +355,40 @@ class Http3PhpServer implements WorkerServer {
   /// Handles one inbound WebTransport datagram. Extension point for
   /// application protocols (e.g. ephemeral Livewire signals such as presence,
   /// typing, or cursor position). Datagrams are unreliable and unordered — use
-  /// streams for state that must arrive. The default behaviour echoes it.
+  /// streams for state that must arrive. When [ServerConfig.wtBridgePath] is
+  /// set the datagram is bridged through the PHP pipeline; otherwise echoed.
   void _handleWtDatagram(_Session session, Uint8List payload) {
+    final bridgePath = config.wtBridgePath;
+    if (bridgePath != null) {
+      unawaited(_bridgeWtDatagram(session, payload, bridgePath));
+      return;
+    }
     _sendWtDatagram(session, payload);
+  }
+
+  /// Bridges one WebTransport datagram through the PHP pipeline as a synthetic
+  /// `POST [path]`. The reply is returned as a datagram when it fits the
+  /// negotiated size, otherwise on a fresh server-initiated uni stream so a
+  /// larger Livewire response is not lost.
+  Future<void> _bridgeWtDatagram(
+    _Session session,
+    Uint8List payload,
+    String path,
+  ) async {
+    final response = await _runWtBridge(session, path, payload);
+    final wt = session.wt;
+    if (response == null || wt == null) return;
+    final body = response.take();
+    if (!_sendWtDatagram(session, body)) {
+      final uniId = session.h3!.allocLocalUniStreamId();
+      final prefix = encodeWtUniStreamPrefix(wt.streamId);
+      session.conn.streamSend(
+        uniId,
+        Uint8List.fromList([...prefix, ...body]),
+        fin: true,
+      );
+    }
+    _txAll(session);
   }
 
   /// Sends a WebTransport datagram, dropping it (with a log) rather than
@@ -431,7 +462,8 @@ class Http3PhpServer implements WorkerServer {
 
   /// Handles one complete inbound WebTransport message (a full stream buffered
   /// to its FIN). This is the extension point for application protocols such as
-  /// Livewire-over-WebTransport. The default behaviour echoes the message: a
+  /// Livewire-over-WebTransport. When [ServerConfig.wtBridgePath] is set the
+  /// message is bridged through the PHP pipeline; otherwise it is echoed: a
   /// bidi message is replied on the same stream; a uni message is sent out on a
   /// fresh server-initiated uni stream.
   void _handleWtMessage(
@@ -441,6 +473,19 @@ class Http3PhpServer implements WorkerServer {
     required int? bidiStreamId,
   }) {
     if (session.wt == null) return;
+    final bridgePath = config.wtBridgePath;
+    if (bridgePath != null) {
+      unawaited(
+        _bridgeWtMessage(
+          session,
+          sessionId,
+          message,
+          bidiStreamId: bidiStreamId,
+          path: bridgePath,
+        ),
+      );
+      return;
+    }
     if (bidiStreamId != null) {
       session.conn.streamSend(bidiStreamId, message, fin: true);
       _log(
@@ -460,6 +505,60 @@ class Http3PhpServer implements WorkerServer {
       'WebTransport uni message: ${message.length} bytes '
       '(session $sessionId)',
     );
+  }
+
+  /// Bridges one WebTransport stream message through the PHP pipeline as a
+  /// synthetic `POST [path]` (the Livewire-over-WebTransport path), then writes
+  /// the response back: on the same bidi stream, or a fresh uni stream.
+  Future<void> _bridgeWtMessage(
+    _Session session,
+    int sessionId,
+    Uint8List message, {
+    required int? bidiStreamId,
+    required String path,
+  }) async {
+    final response = await _runWtBridge(session, path, message);
+    if (response == null || session.wt == null) return;
+    final body = response.take();
+    if (bidiStreamId != null) {
+      session.conn.streamSend(bidiStreamId, body, fin: true);
+    } else {
+      final uniId = session.h3!.allocLocalUniStreamId();
+      final prefix = encodeWtUniStreamPrefix(sessionId);
+      session.conn.streamSend(
+        uniId,
+        Uint8List.fromList([...prefix, ...body]),
+        fin: true,
+      );
+    }
+    _log(
+      'WebTransport bridge: ${message.length}B in -> ${body.length}B out '
+      '(${response.statusCode}) [$path]',
+    );
+    _txAll(session);
+  }
+
+  /// Runs [body] through the PHP pipeline as a synthetic `POST [path]` and
+  /// returns the captured response, or null on error.
+  Future<_WtBridgeResponse?> _runWtBridge(
+    _Session session,
+    String path,
+    Uint8List body,
+  ) async {
+    session.inFlight++;
+    final response = _WtBridgeResponse();
+    final exchange =
+        _WtBridgeExchange(session, config.serverName, path, body, response);
+    try {
+      await _pipeline.serve(exchange);
+      await response.done.future;
+      return response;
+    } catch (e) {
+      _log('WebTransport bridge error: $e');
+      return null;
+    } finally {
+      session.inFlight--;
+    }
   }
 
   String? _headerValue(List<H3Header> headers, String name) {
@@ -611,6 +710,104 @@ class _WtInboundStream {
   }
 
   Uint8List take() => _buf.takeBytes();
+}
+
+/// Adapts a complete inbound WebTransport message to the [ServerExchange]
+/// contract as a synthetic `POST`, so it runs through the same PHP pipeline as
+/// an HTTP request. Carries AJAX-style headers so a Laravel/Livewire front
+/// controller treats it like the `/livewire/update` XHR it replaces.
+class _WtBridgeExchange implements ServerExchange {
+  _WtBridgeExchange(
+    this._session,
+    this._authority,
+    this._path,
+    this._bodyBytes,
+    this._response,
+  );
+
+  final _Session _session;
+  final String _authority;
+  final String _path;
+  final Uint8List _bodyBytes;
+  final _WtBridgeResponse _response;
+
+  @override
+  String get method => 'POST';
+
+  @override
+  Uri get uri => Uri.parse(_path);
+
+  @override
+  String get protocolVersion => '3';
+
+  @override
+  String get scheme => 'https';
+
+  @override
+  String get authority => _authority;
+
+  @override
+  String get protocol => 'h3-wt';
+
+  @override
+  String get remoteAddress => _session.addr.address;
+
+  @override
+  int get remotePort => _session.port;
+
+  @override
+  int get contentLength => _bodyBytes.length;
+
+  @override
+  String? get contentType => 'application/json';
+
+  @override
+  void forEachHeader(void Function(String name, String value) action) {
+    action('content-type', 'application/json');
+    action('x-requested-with', 'XMLHttpRequest');
+    action('x-livewire', 'true');
+    action('accept', 'application/json, text/html; q=0.9, */*; q=0.8');
+  }
+
+  @override
+  Stream<List<int>> get body =>
+      _bodyBytes.isEmpty ? const Stream.empty() : Stream.value(_bodyBytes);
+
+  @override
+  ServerResponse respond() => _response;
+}
+
+/// Captures a pipeline response into memory so it can be shipped back over a
+/// WebTransport stream or datagram. Completes [done] when the pipeline closes.
+class _WtBridgeResponse implements ServerResponse {
+  final BytesBuilder _body = BytesBuilder(copy: false);
+  final Map<String, List<String>> headers = {};
+  final Completer<void> done = Completer<void>();
+  int _status = 200;
+
+  @override
+  int get statusCode => _status;
+
+  @override
+  void setStatus(int statusCode, [String? reasonPhrase]) => _status = statusCode;
+
+  @override
+  void setHeader(String name, String value) =>
+      headers.putIfAbsent(name.toLowerCase(), () => <String>[]).add(value);
+
+  @override
+  Future<void> addStream(Stream<List<int>> body) async {
+    await for (final chunk in body) {
+      _body.add(chunk);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    if (!done.isCompleted) done.complete();
+  }
+
+  Uint8List take() => _body.takeBytes();
 }
 
 /// Adapts a completed HTTP/3 request to the [ServerExchange] contract.
