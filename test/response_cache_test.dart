@@ -183,6 +183,38 @@ void main() {
       expect(after.headers['x-cache'], 'HIT');
       expect(utf8.decode(after.body), 'n=2'); // refreshed entry
     });
+
+    test('stale-while-revalidate serves stale then refreshes in background',
+        () async {
+      var hits = 0;
+      final app = DartApp([
+        DartRoute.exact('/swr', (e, r) async {
+          hits++;
+          // Immediately stale, but serveable-stale for 60s.
+          r.setHeader('cache-control', 'max-age=0, stale-while-revalidate=60');
+          await r.writeText('n=$hits');
+        }),
+      ]);
+      final pipeline =
+          RequestPipeline(ServerConfig(documentRoot: '.', cacheEnabled: true),
+              app: app);
+
+      final a = await _get(pipeline, '/swr'); // MISS, stores n=1
+      expect(a.headers['x-cache'], 'MISS');
+      expect(utf8.decode(a.body), 'n=1');
+
+      final b = await _get(pipeline, '/swr'); // stale -> served immediately
+      expect(b.headers['x-cache'], 'STALE');
+      expect(utf8.decode(b.body), 'n=1'); // the stale value, served now
+
+      // Background revalidation refreshed the entry to n=2.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(hits, 2);
+
+      final c = await _get(pipeline, '/swr');
+      expect(c.headers['x-cache'], 'STALE');
+      expect(utf8.decode(c.body), 'n=2'); // now serving the refreshed value
+    });
   });
 }
 

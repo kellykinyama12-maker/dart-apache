@@ -15,6 +15,7 @@ class CachedResponse {
     required this.freshness,
     required this.varyNames,
     required this.varyValues,
+    this.staleWhileRevalidate = Duration.zero,
   });
 
   final int statusCode;
@@ -22,10 +23,19 @@ class CachedResponse {
   final Uint8List body;
   final DateTime storedAt;
   final Duration freshness;
+
+  /// RFC 5861: how long past [freshness] the entry may still be *served stale*
+  /// while an asynchronous revalidation refreshes it.
+  final Duration staleWhileRevalidate;
+
   final List<String> varyNames;
   final Map<String, String?> varyValues;
 
   bool isFresh(DateTime now) => now.difference(storedAt) < freshness;
+
+  /// True while the entry may be served (fresh, or stale within the SWR window).
+  bool isServeable(DateTime now) =>
+      now.difference(storedAt) < freshness + staleWhileRevalidate;
 
   int ageSeconds(DateTime now) {
     final s = now.difference(storedAt).inSeconds;
@@ -56,12 +66,13 @@ class ResponseCache {
   int get length => _entries.length;
   int get bytes => _bytes;
 
-  /// Returns a fresh, vary-matching entry (and marks it most-recently-used), or
-  /// null. Stale entries are evicted on access.
+  /// Returns a serveable (fresh or SWR-stale), vary-matching entry (and marks
+  /// it most-recently-used), or null. Entries past the serveable window are
+  /// evicted on access.
   CachedResponse? get(String key, Map<String, String> requestHeaders) {
     final entry = _entries[key];
     if (entry == null) return null;
-    if (!entry.isFresh(DateTime.now())) {
+    if (!entry.isServeable(DateTime.now())) {
       _evict(key);
       return null;
     }
@@ -142,7 +153,12 @@ Duration? sharedCacheFreshness({
   final sMaxAge = int.tryParse(cc['s-maxage'] ?? '');
   if (sMaxAge != null) return sMaxAge > 0 ? Duration(seconds: sMaxAge) : null;
   final maxAge = int.tryParse(cc['max-age'] ?? '');
-  if (maxAge != null) return maxAge > 0 ? Duration(seconds: maxAge) : null;
+  if (maxAge != null) {
+    if (maxAge > 0) return Duration(seconds: maxAge);
+    // max-age=0 is storable only if it may be served stale (RFC 5861 SWR).
+    final swr = int.tryParse(cc['stale-while-revalidate'] ?? '');
+    return (swr != null && swr > 0) ? Duration.zero : null;
+  }
 
   final expires = responseHeaders['expires'];
   if (expires != null) {
@@ -182,6 +198,7 @@ class CachingResponse implements ServerResponse {
   final BytesBuilder _buf = BytesBuilder(copy: false);
   bool? _cacheable;
   Duration? _freshness;
+  Duration _swr = Duration.zero;
 
   static const _skipOnReplay = {
     'age',
@@ -217,6 +234,12 @@ class CachingResponse implements ServerResponse {
       requestHeaders: requestHeaders,
     );
     _cacheable = _freshness != null;
+    if (_cacheable!) {
+      final swr = int.tryParse(
+          parseCacheControl(_headerMap['cache-control'])['stale-while-revalidate'] ??
+              '');
+      _swr = (swr != null && swr > 0) ? Duration(seconds: swr) : Duration.zero;
+    }
     inner.setHeader('X-Cache', _cacheable! ? 'MISS' : 'BYPASS');
   }
 
@@ -259,6 +282,7 @@ class CachingResponse implements ServerResponse {
         body: _buf.takeBytes(),
         storedAt: DateTime.now(),
         freshness: _freshness!,
+        staleWhileRevalidate: _swr,
         varyNames: varyNames,
         varyValues: varyValues,
       ));

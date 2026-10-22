@@ -43,7 +43,9 @@ install*.
   Dart real-time apps — again, no sidecar.
 - **Micro-cache for dynamic content** (`--cache`): an RFC 9111 in-memory
   response cache for PHP/proxy `GET`s (honors `Cache-Control`/`Expires`/`Vary`,
-  `X-Cache: HIT/MISS/BYPASS`) — the `fastcgi_cache`/`proxy_cache` win, built in.
+  `HEAD`-from-`GET`, `no-cache` bypass, and RFC 5861 **stale-while-revalidate**
+  — serve stale instantly, refresh in the background) — the
+  `fastcgi_cache`/`proxy_cache` win, built in.
 - **One language, edge-to-app**, and a **single static binary**
   (cross-compiles to a standalone Linux ELF — no modules to assemble, no
   php-fpm orchestration required for the h1/h3 core).

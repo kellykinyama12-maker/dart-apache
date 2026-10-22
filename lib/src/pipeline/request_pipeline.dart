@@ -116,8 +116,14 @@ class RequestPipeline {
         if (!reqCc.contains('no-cache')) {
           final hit = cache.get(key, reqHeaders);
           if (hit != null) {
-            await _replayCached(response, hit,
-                headOnly: exchange.method == 'HEAD');
+            final head = exchange.method == 'HEAD';
+            if (hit.isFresh(DateTime.now())) {
+              await _replayCached(response, hit, headOnly: head);
+              return;
+            }
+            // RFC 5861: serve stale immediately, refresh in the background.
+            await _replayCached(response, hit, headOnly: head, xCache: 'STALE');
+            _revalidateInBackground(exchange, key, reqHeaders);
             return;
           }
         }
@@ -131,46 +137,7 @@ class RequestPipeline {
         }
       }
 
-      // Reverse-proxy routes take precedence over local static/PHP.
-      final route = _proxy?.routeFor(exchange.uri.path);
-      if (route != null) {
-        await _proxy!.proxy(exchange, response, route);
-        return;
-      }
-
-      // In-process Dart handlers run before static/PHP so an app can own a
-      // path prefix (e.g. /api) natively over HTTP/3. The handler owns the
-      // response (write + close), like the static/PHP handlers.
-      final dartRoute = app?.match(exchange.method, exchange.uri.path);
-      if (dartRoute != null) {
-        await dartRoute.handler(exchange, response);
-        return;
-      }
-
-      final resolution = _resolver.resolve(exchange.uri.path);
-      switch (resolution.kind) {
-        case ResolutionKind.staticFile:
-          await _serveStaticResource(exchange, response, resolution.filePath);
-        case ResolutionKind.redirect:
-          final q = exchange.uri.query;
-          final location = q.isEmpty
-              ? resolution.location
-              : '${resolution.location}?$q';
-          response
-            ..setStatus(HttpStatus.movedPermanently)
-            ..setHeader(HttpHeaders.locationHeader, location)
-            ..setHeader(HttpHeaders.contentLengthHeader, '0');
-          await response.close();
-        case ResolutionKind.phpScript:
-          await _servePhp(exchange, response, resolution);
-        case ResolutionKind.forbidden:
-          await _serveError(response, HttpStatus.forbidden, 'Forbidden');
-        case ResolutionKind.notFound:
-          if (!await _tryFrontController(exchange, response) &&
-              !await _trySpaFallback(exchange, response)) {
-            await _serveError(response, HttpStatus.notFound, 'Not Found');
-          }
-      }
+      await _dispatch(exchange, response);
     } on CgiException catch (e) {
       stderr.writeln('[php] $e');
       await _serveError(
@@ -192,6 +159,78 @@ class RequestPipeline {
     } finally {
       _log(exchange, response.statusCode);
     }
+  }
+
+  /// Produces the response for [exchange] into [response]: reverse proxy, then
+  /// an in-process Dart route, then the resolved static file / redirect / PHP /
+  /// front-controller / SPA fallback. Shared by the live path and background
+  /// cache revalidation.
+  Future<void> _dispatch(ServerExchange exchange, ServerResponse response) async {
+    final route = _proxy?.routeFor(exchange.uri.path);
+    if (route != null) {
+      await _proxy!.proxy(exchange, response, route);
+      return;
+    }
+
+    final dartRoute = app?.match(exchange.method, exchange.uri.path);
+    if (dartRoute != null) {
+      await dartRoute.handler(exchange, response);
+      return;
+    }
+
+    final resolution = _resolver.resolve(exchange.uri.path);
+    switch (resolution.kind) {
+      case ResolutionKind.staticFile:
+        await _serveStaticResource(exchange, response, resolution.filePath);
+      case ResolutionKind.redirect:
+        final q = exchange.uri.query;
+        final location =
+            q.isEmpty ? resolution.location : '${resolution.location}?$q';
+        response
+          ..setStatus(HttpStatus.movedPermanently)
+          ..setHeader(HttpHeaders.locationHeader, location)
+          ..setHeader(HttpHeaders.contentLengthHeader, '0');
+        await response.close();
+      case ResolutionKind.phpScript:
+        await _servePhp(exchange, response, resolution);
+      case ResolutionKind.forbidden:
+        await _serveError(response, HttpStatus.forbidden, 'Forbidden');
+      case ResolutionKind.notFound:
+        if (!await _tryFrontController(exchange, response) &&
+            !await _trySpaFallback(exchange, response)) {
+          await _serveError(response, HttpStatus.notFound, 'Not Found');
+        }
+    }
+  }
+
+  /// Keys with a revalidation currently running, to avoid a stampede.
+  final Set<String> _revalidating = {};
+
+  /// Re-runs a GET in the background (no client attached) to refresh a stale
+  /// cache entry, storing the fresh response if it is still cacheable.
+  void _revalidateInBackground(
+    ServerExchange original,
+    String key,
+    Map<String, String> reqHeaders,
+  ) {
+    final cache = _cache;
+    if (cache == null || !_revalidating.add(key)) return;
+    final detached = _DetachedExchange(original, reqHeaders);
+    final sink = CachingResponse(
+      inner: _NullResponse(),
+      method: 'GET',
+      requestHeaders: reqHeaders,
+      onStore: (entry) => cache.put(key, entry),
+    );
+    Future<void>(() async {
+      try {
+        await _dispatch(detached, sink);
+      } catch (e) {
+        stderr.writeln('[cache] background revalidation failed for $key: $e');
+      } finally {
+        _revalidating.remove(key);
+      }
+    });
   }
 
   /// Method gating for a static file (RFC 9110): `OPTIONS` -> 204 + `Allow`,
@@ -351,12 +390,14 @@ class RequestPipeline {
         '${q.isEmpty ? '' : '?$q'}';
   }
 
-  /// Replays a cached response with a recomputed `Age` and `X-Cache: HIT`.
-  /// [headOnly] omits the body (serving HEAD from a cached GET).
+  /// Replays a cached response with a recomputed `Age` and `X-Cache`.
+  /// [headOnly] omits the body (serving HEAD from a cached GET); [xCache] is
+  /// `HIT` for a fresh entry or `STALE` when serving stale during revalidation.
   Future<void> _replayCached(
     ServerResponse response,
     CachedResponse e, {
     bool headOnly = false,
+    String xCache = 'HIT',
   }) async {
     response.setStatus(e.statusCode);
     for (final h in e.headers) {
@@ -364,7 +405,7 @@ class RequestPipeline {
     }
     response
       ..setHeader('Age', '${e.ageSeconds(DateTime.now())}')
-      ..setHeader('X-Cache', 'HIT');
+      ..setHeader('X-Cache', xCache);
     if (!headOnly) {
       await response.addStream(Stream<List<int>>.value(e.body));
     }
@@ -620,4 +661,63 @@ class RequestPipeline {
       '$status -',
     );
   }
+}
+
+/// A request clone with an empty body and a no-op response, used to re-run a
+/// GET for background cache revalidation (no client attached).
+class _DetachedExchange implements ServerExchange {
+  _DetachedExchange(ServerExchange o, this._headers)
+      : uri = o.uri,
+        scheme = o.scheme,
+        authority = o.authority,
+        protocol = o.protocol,
+        protocolVersion = o.protocolVersion,
+        remoteAddress = o.remoteAddress,
+        remotePort = o.remotePort;
+
+  final Map<String, String> _headers;
+
+  @override
+  String get method => 'GET';
+  @override
+  final Uri uri;
+  @override
+  final String scheme;
+  @override
+  final String authority;
+  @override
+  final String protocol;
+  @override
+  final String protocolVersion;
+  @override
+  final String remoteAddress;
+  @override
+  final int remotePort;
+  @override
+  int get contentLength => 0;
+  @override
+  String? get contentType => _headers['content-type'];
+  @override
+  void forEachHeader(void Function(String name, String value) action) =>
+      _headers.forEach(action);
+  @override
+  Stream<List<int>> get body => const Stream.empty();
+  @override
+  ServerResponse respond() => _NullResponse();
+}
+
+/// A response sink that discards everything — the client side of a background
+/// revalidation. The cache capture happens in the wrapping [CachingResponse].
+class _NullResponse implements ServerResponse {
+  int _status = 200;
+  @override
+  int get statusCode => _status;
+  @override
+  void setStatus(int statusCode, [String? reasonPhrase]) => _status = statusCode;
+  @override
+  void setHeader(String name, String value) {}
+  @override
+  Future<void> addStream(Stream<List<int>> body) => body.drain<void>();
+  @override
+  Future<void> close() async {}
 }
