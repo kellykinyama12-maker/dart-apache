@@ -9,6 +9,8 @@ environment:
 # Add regular dependencies here.
 dependencies:
   path: ^1.9.0
+  # AES-GCM for opaque, short-lived WebTransport session tickets.
+  pointycastle: ^4.0.0
   # HTTP/3 (QUIC) stack, vendored locally so it can be edited/hardened.
   # Pure-Dart port of Cloudflare's quiche; see docs/04-protocols.md.
   dart_quiche:

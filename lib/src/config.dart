@@ -1,4 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'wt/ticket.dart';
 
 /// A reverse-proxy route: requests whose path starts with [pathPrefix] are
 /// forwarded to one of [upstreams] (round-robin). Upstreams are base URLs like
@@ -35,9 +39,10 @@ class ServerConfig {
     this.wtBridgePath,
     this.spaFallback,
     this.frontController,
+    this.wtTicketPath,
+    Uint8List? wtTicketKey,
     int? workers,
-  })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],
-        workers = (workers == null || workers < 1)
+  })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],        wtTicketKey = wtTicketKey ?? WtTicket.generateKey(),        workers = (workers == null || workers < 1)
             ? Platform.numberOfProcessors
             : workers;
 
@@ -128,6 +133,19 @@ class ServerConfig {
   /// `/livewire/update` reach the app router). Checked before [spaFallback].
   final String? frontController;
 
+  /// When set (e.g. `/wt-ticket`), the server issues an opaque, short-lived
+  /// AES-GCM ticket encrypting the request's `Cookie` header. The browser
+  /// fetches it over normal HTTPS (where the HttpOnly session cookie is sent)
+  /// and carries it on WebTransport messages via `X-WT-Ticket`; the bridge
+  /// decrypts it to recover the session — keeping the cookie HttpOnly instead
+  /// of forwarding `document.cookie`.
+  final String? wtTicketPath;
+
+  /// 256-bit key used to seal/open [wtTicketPath] tickets. Generated per run
+  /// unless provided via `--wt-ticket-key` (base64); all workers in a run share
+  /// the one key (the config object is copied to each isolate).
+  final Uint8List wtTicketKey;
+
   /// The `Alt-Svc` header value advertising HTTP/3, or null if disabled.
   String? get altSvcHeader => altSvcH3Port == null
       ? null
@@ -202,6 +220,10 @@ class ServerConfig {
       wtBridgePath: map['wt-bridge-path'],
       spaFallback: spaFallback,
       frontController: map['front-controller'],
+      wtTicketPath: map['wt-ticket-path'],
+      wtTicketKey: map['wt-ticket-key'] != null
+          ? Uint8List.fromList(base64.decode(map['wt-ticket-key']!))
+          : null,
       workers: int.tryParse(map['workers'] ?? ''),
     );
   }

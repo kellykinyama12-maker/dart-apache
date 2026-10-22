@@ -13,6 +13,7 @@ import '../config.dart';
 import '../pipeline/request_pipeline.dart';
 import '../pipeline/server_exchange.dart';
 import '../worker_server.dart';
+import '../wt/ticket.dart';
 
 /// An experimental HTTP/3 (QUIC) server that serves static files and runs PHP
 /// using the pure-Dart `dart_quiche` transport. It terminates QUIC + TLS 1.3,
@@ -655,6 +656,13 @@ class Http3PhpServer implements WorkerServer {
         (session.cookie?.isNotEmpty ?? false)) {
       h['cookie'] = session.cookie!;
     }
+    // A WT ticket (opaque, server-sealed) is authoritative: decrypt it to
+    // recover the session cookie, which stays HttpOnly on the client.
+    final ticket = preamble['x-wt-ticket'];
+    if (ticket != null) {
+      final cookie = WtTicket.redeem(ticket, config.wtTicketKey);
+      if (cookie != null && cookie.isNotEmpty) h['cookie'] = cookie;
+    }
     // Laravel stateful CSRF: echo the XSRF-TOKEN cookie as X-XSRF-TOKEN unless
     // the client already supplied an explicit CSRF header.
     if (!h.containsKey('x-xsrf-token') && !h.containsKey('x-csrf-token')) {
@@ -946,7 +954,15 @@ class _H3Exchange implements ServerExchange {
         case ':protocol':
           break; // pseudo-headers are not CGI/request headers
         default:
-          _headers[name.toLowerCase()] = value;
+          // QPACK may split one header (notably Cookie) across several fields;
+          // rejoin duplicates ('; ' for Cookie per RFC 9114 §4.2.1, else ',').
+          final lower = name.toLowerCase();
+          final existing = _headers[lower];
+          if (existing == null) {
+            _headers[lower] = value;
+          } else {
+            _headers[lower] = '$existing${lower == 'cookie' ? '; ' : ', '}$value';
+          }
       }
     }
   }

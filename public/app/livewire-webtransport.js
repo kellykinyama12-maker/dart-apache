@@ -18,6 +18,12 @@
     // Livewire 4 uses a randomized prefix /livewire-<hash>/update. Override the
     // whole match with window.LIVEWIRE_WT_ENDPOINT (substring) if needed.
     endpoint: (window.LIVEWIRE_WT_ENDPOINT || null),
+    // Opaque session-ticket endpoint (matches --wt-ticket-path). When present,
+    // the shim carries a ticket instead of document.cookie, so the session
+    // cookie can stay HttpOnly. Set to null to disable.
+    ticketUrl: (window.LIVEWIRE_WT_TICKET_URL !== undefined
+      ? window.LIVEWIRE_WT_TICKET_URL
+      : '/wt-ticket'),
   };
 
   // Graceful enhancement: without WebTransport, leave fetch untouched.
@@ -54,8 +60,32 @@
     return meta ? meta.getAttribute('content') : null;
   }
 
+  var nativeFetch = window.fetch.bind(window);
+
+  // Opaque session ticket, refreshed before its server-side TTL (~5 min).
+  var ticket = null;
+  var ticketAt = 0;
+  var ticketPromise = null;
+  function getTicket() {
+    if (!CONFIG.ticketUrl) return Promise.resolve(null);
+    var fresh = ticket && (Date.now() - ticketAt) < 4 * 60 * 1000;
+    if (fresh) return Promise.resolve(ticket);
+    if (ticketPromise) return ticketPromise;
+    ticketPromise = nativeFetch(CONFIG.ticketUrl, { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        ticket = (j && j.ticket) || null;
+        ticketAt = Date.now();
+        ticketPromise = null;
+        return ticket;
+      })
+      .catch(function () { ticketPromise = null; return null; });
+    return ticketPromise;
+  }
+
   async function sendOverWt(bodyText, token, uriPath) {
     var conn = await connect();
+    var tk = await getTicket();
     var stream = await conn.createBidirectionalStream();
     var w = stream.writable.getWriter();
     var preamble = '';
@@ -63,11 +93,13 @@
     // not hard-code Livewire's randomized endpoint prefix).
     if (uriPath) preamble += 'X-Bridge-Uri: ' + uriPath + '\r\n';
     if (token) preamble += 'X-CSRF-TOKEN: ' + token + '\r\n';
-    // Forward readable cookies (session + XSRF-TOKEN) for session continuity,
-    // since WebTransport sends no cookies on its handshake. Requires the app's
-    // session cookie to be readable (dev: SESSION_HTTP_ONLY=false) or a
-    // ticket-based scheme in production.
-    if (document.cookie) preamble += 'Cookie: ' + document.cookie + '\r\n';
+    if (tk) {
+      // Preferred: opaque ticket; the real session cookie stays HttpOnly.
+      preamble += 'X-WT-Ticket: ' + tk + '\r\n';
+    } else if (document.cookie) {
+      // Fallback (dev): forward readable cookies for session continuity.
+      preamble += 'Cookie: ' + document.cookie + '\r\n';
+    }
     preamble += 'Content-Type: application/json\r\n\r\n';
     await w.write(new TextEncoder().encode(preamble + (bodyText || '')));
     await w.close();
@@ -80,8 +112,6 @@
     }
     return await new Blob(chunks).text();
   }
-
-  var nativeFetch = window.fetch.bind(window);
 
   window.fetch = async function (input, init) {
     try {

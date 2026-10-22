@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import '../config.dart';
@@ -7,6 +8,7 @@ import '../php/fastcgi.dart';
 import '../php/php_backend.dart';
 import '../proxy/reverse_proxy.dart';
 import '../request_resolver.dart';
+import '../wt/ticket.dart';
 import 'server_exchange.dart';
 
 /// Transport-agnostic request handling: resolves a [ServerExchange] against the
@@ -50,6 +52,14 @@ class RequestPipeline {
       if (exchange.contentLength > config.maxRequestBodyBytes) {
         await _serveError(response, HttpStatus.requestEntityTooLarge,
             'Payload Too Large');
+        return;
+      }
+
+      // Built-in endpoint: issue an opaque WebTransport session ticket sealing
+      // the request's Cookie (which the browser sends on this normal request).
+      final ticketPath = config.wtTicketPath;
+      if (ticketPath != null && exchange.uri.path == ticketPath) {
+        await _serveWtTicket(exchange, response);
         return;
       }
 
@@ -214,6 +224,28 @@ class RequestPipeline {
       case ResolutionKind.notFound:
         return false;
     }
+  }
+
+  /// Issues an opaque WebTransport session ticket that seals the request's
+  /// `Cookie` header (sent automatically on this normal HTTPS request, HttpOnly
+  /// included) so the browser can carry the session over WebTransport without
+  /// ever reading the cookie in JS.
+  Future<void> _serveWtTicket(
+    ServerExchange exchange,
+    ServerResponse response,
+  ) async {
+    final cookies = <String>[];
+    exchange.forEachHeader((name, value) {
+      if (name.toLowerCase() == 'cookie') cookies.add(value);
+    });
+    final ticket = WtTicket.issue(cookies.join('; '), config.wtTicketKey);
+    final bytes = utf8.encode(jsonEncode({'ticket': ticket}));
+    response
+      ..setStatus(HttpStatus.ok)
+      ..setHeader(HttpHeaders.contentTypeHeader, 'application/json')
+      ..setHeader(HttpHeaders.cacheControlHeader, 'no-store');
+    await response.addStream(Stream.value(bytes));
+    await response.close();
   }
 
   Future<void> _serveError(
