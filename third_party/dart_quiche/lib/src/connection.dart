@@ -1140,6 +1140,8 @@ class Connection {
     final fcFrames = <Frame>[];
     if (epoch == Epoch.application) {
       final now = DateTime.now();
+      // Reclaim fully-closed streams before scanning per-stream windows.
+      _collectCompletedStreams();
       for (final s in _streams.values) {
         if (s.recv.almostFull()) {
           final nextMax = s.recv.maxDataNext();
@@ -1760,6 +1762,22 @@ class Connection {
   /// [send] with `Epoch.application` will drain it into STREAM frames.
   int streamSend(int id, Uint8List data, {bool fin = false}) {
     return _getOrCreateStream(id).send.write(data, fin);
+  }
+
+  /// Remove fully-closed streams (recv fin consumed + send fully acked, per
+  /// [Stream.isComplete]) from [_streams] so memory is bounded by *concurrent*
+  /// rather than *cumulative* stream count. MAX_STREAMS credit is tracked by
+  /// highest-opened id, so dropping finished streams never lowers the cap.
+  int _collectCompletedStreams() {
+    List<int>? done;
+    for (final e in _streams.entries) {
+      if (e.value.isComplete()) (done ??= <int>[]).add(e.key);
+    }
+    if (done == null) return 0;
+    for (final id in done) {
+      _streams.remove(id);
+    }
+    return done.length;
   }
 
   /// Abort the send half of stream [id] (RFC 9000 §3.2). The next
