@@ -273,6 +273,19 @@ class H3Connection {
     return id;
   }
 
+  /// Register a locally-opened WebTransport bidi [streamId] (belonging to WT
+  /// session [sessionId]) so inbound bytes — the peer's reply, which carries
+  /// no `WEBTRANSPORT_STREAM` prefix because this side already wrote it — are
+  /// surfaced as [H3WebTransportBidiStreamEvent] payload instead of being
+  /// parsed as H3 frames.
+  void registerLocalWtBidiStream(int streamId, int sessionId) {
+    _reqStreams.putIfAbsent(streamId, () => _H3RequestStream(streamId))
+      ..isWtBidi = true
+      .._wtClassified = true
+      .._wtPrefixParsed = true
+      ..wtSessionId = sessionId;
+  }
+
   // Next bidi stream id we'll allocate when the application calls
   // [sendRequest]. Clients use 0, 4, 8, ...; servers use 1, 5, 9, ...
   int _nextBidiId;
