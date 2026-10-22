@@ -170,35 +170,17 @@ import 'hash.dart';
 /// Decode PEM -> DER
 /// ------------------------------------------------------------
 Uint8List decodePemToDer(String pem) {
-  const startsWith = [
-    '-----BEGIN PUBLIC KEY-----',
-    '-----BEGIN PRIVATE KEY-----',
-    '-----BEGIN CERTIFICATE-----',
-    '-----BEGIN EC PRIVATE KEY-----',
-  ];
-
-  const endsWith = [
-    '-----END PUBLIC KEY-----',
-    '-----END PRIVATE KEY-----',
-    '-----END CERTIFICATE-----',
-    '-----END EC PRIVATE KEY-----',
-  ];
-
-  for (final s in startsWith) {
-    if (pem.startsWith(s)) {
-      pem = pem.substring(s.length);
-    }
+  // Robustly extract the base64 body between the BEGIN and END armor lines,
+  // tolerant of CRLF, leading/trailing blank lines, and a missing trailing
+  // newline (any of which otherwise leaks the END marker into base64.decode).
+  final begin = pem.indexOf('-----BEGIN');
+  if (begin >= 0) {
+    final afterBegin = pem.indexOf('\n', begin);
+    if (afterBegin >= 0) pem = pem.substring(afterBegin + 1);
   }
-
-  for (final s in endsWith) {
-    if (pem.endsWith(s)) {
-      pem = pem.substring(0, pem.length - s.length);
-    }
-  }
-
-  pem = pem.replaceAll('\n', '');
-  pem = pem.replaceAll('\r', '');
-
+  final end = pem.indexOf('-----END');
+  if (end >= 0) pem = pem.substring(0, end);
+  pem = pem.replaceAll(RegExp(r'\s'), '');
   return Uint8List.fromList(base64.decode(pem));
 }
 
