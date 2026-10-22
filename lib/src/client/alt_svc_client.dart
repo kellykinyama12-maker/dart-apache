@@ -397,5 +397,9 @@ class AltSvcHttpClient {
     if (verbose) stdout.writeln('[client] $message');
   }
 
-  void close() => _http.close(force: true);
+  /// Closes the HTTP/1.1 client and every pooled HTTP/3 connection.
+  void close() {
+    _http.close(force: true);
+    unawaited(_h3.close());
+  }
 }
