@@ -17,6 +17,9 @@ void main() {
       File('${dir.path}/small.txt').writeAsStringSync('tiny');
       Directory('${dir.path}/pages').createSync();
       File('${dir.path}/pages/index.html').writeAsStringSync('<h1>idx</h1>');
+      File('${dir.path}/.env').writeAsStringSync('SECRET=1');
+      Directory('${dir.path}/.well-known').createSync();
+      File('${dir.path}/.well-known/ok.txt').writeAsStringSync('ok');
       pipeline = RequestPipeline(ServerConfig(documentRoot: dir.path));
     });
     tearDown(() => dir.deleteSync(recursive: true));
@@ -172,6 +175,14 @@ void main() {
       final longPath = '/${'a' * 9000}';
       final r = await req('GET', path: longPath);
       expect(r.statusCode, 414);
+    });
+
+    test('hidden dotfiles are forbidden (403); .well-known is allowed', () async {
+      expect((await req('GET', path: '/.env')).statusCode, 403);
+      expect((await req('GET', path: '/.git/config')).statusCode, 403);
+      final wk = await req('GET', path: '/.well-known/ok.txt');
+      expect(wk.statusCode, 200);
+      expect(utf8.decode(wk.body), 'ok');
     });
   });
 }

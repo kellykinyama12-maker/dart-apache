@@ -90,6 +90,17 @@ class RequestResolver {
     // an existing `.php` file, treating the remainder as PATH_INFO.
     final segments =
         urlPath.split('/').where((s) => s.isNotEmpty).toList(growable: false);
+
+    // Deny hidden files/dirs (`.env`, `.git/`, `.htaccess`, …) like a hardened
+    // Apache/nginx. `.well-known` is allowed for ACME and similar.
+    for (final s in segments) {
+      if (s.startsWith('.') &&
+          s != '.' &&
+          s != '..' &&
+          s != '.well-known') {
+        return Resolution.forbidden();
+      }
+    }
     final consumed = <String>[];
     for (var i = 0; i < segments.length; i++) {
       final segment = segments[i];

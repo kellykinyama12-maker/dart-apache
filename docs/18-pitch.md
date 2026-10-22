@@ -46,7 +46,7 @@ install*.
   php-fpm orchestration required for the h1/h3 core).
 - **Security that's built, not configured:** chain-to-root X.509 validation,
   single-use 0-RTT anti-replay, HttpOnly-safe WebTransport session tickets,
-  fuzzed wire parsers.
+  fuzzed wire parsers, and hidden-dotfile denial (`.env`/`.git` never served).
 
 ## Honest gaps — where Apache/nginx still win
 
