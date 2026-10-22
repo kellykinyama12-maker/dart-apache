@@ -167,6 +167,12 @@ void main() {
       expect(served.statusCode, 200);
       expect(utf8.decode(served.body), '<h1>idx</h1>');
     });
+
+    test('an over-long request target -> 414', () async {
+      final longPath = '/${'a' * 9000}';
+      final r = await req('GET', path: longPath);
+      expect(r.statusCode, 414);
+    });
   });
 }
 

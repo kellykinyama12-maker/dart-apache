@@ -16,6 +16,10 @@ import 'server_exchange.dart';
 /// unsatisfiable range (416).
 enum _RangeKind { full, partial, unsatisfiable }
 
+/// Request-target (path + query) length cap, matching Apache's default
+/// `LimitRequestLine` of 8190 bytes; over it yields 414.
+const int _maxRequestTargetBytes = 8190;
+
 /// Transport-agnostic request handling: resolves a [ServerExchange] against the
 /// document root and serves static files, PHP (CGI/FastCGI), or an error —
 /// writing the result to the exchange's [ServerResponse]. Shared by every
@@ -60,6 +64,14 @@ class RequestPipeline {
       if (exchange.contentLength > config.maxRequestBodyBytes) {
         await _serveError(response, HttpStatus.requestEntityTooLarge,
             'Payload Too Large');
+        return;
+      }
+
+      // Request-target length cap (Apache LimitRequestLine / nginx
+      // large_client_header_buffers), answered with 414 like the giants.
+      if (exchange.uri.path.length + exchange.uri.query.length >
+          _maxRequestTargetBytes) {
+        await _serveError(response, HttpStatus.requestUriTooLong, 'URI Too Long');
         return;
       }
 
@@ -261,6 +273,8 @@ class RequestPipeline {
     'application/javascript',
     'application/xml',
     'application/rss+xml',
+    'application/atom+xml',
+    'application/xhtml+xml',
     'application/manifest+json',
     'application/wasm',
     'image/svg+xml',

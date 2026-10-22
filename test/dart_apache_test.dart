@@ -12,6 +12,17 @@ void main() {
       expect(mimeTypeFor('a.png'), 'image/png');
     });
 
+    test('extended web types', () {
+      expect(mimeTypeFor('a.avif'), 'image/avif');
+      expect(mimeTypeFor('a.webmanifest'),
+          'application/manifest+json; charset=UTF-8');
+      expect(mimeTypeFor('a.wasm'), 'application/wasm');
+      expect(mimeTypeFor('a.wav'), 'audio/wav');
+      expect(mimeTypeFor('a.map'), 'application/json; charset=UTF-8');
+      expect(mimeTypeFor('a.xhtml'),
+          'application/xhtml+xml; charset=UTF-8');
+    });
+
     test('unknown extension defaults to octet-stream', () {
       expect(mimeTypeFor('a.unknownext'), 'application/octet-stream');
     });
