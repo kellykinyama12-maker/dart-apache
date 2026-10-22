@@ -304,7 +304,7 @@ class Http3PhpServer implements WorkerServer {
           break;
       }
     }
-    _echoWebTransport(session);
+    _drainWtDatagrams(session);
   }
 
   /// Accepts a WebTransport session on the configured path, or rejects it on
@@ -341,12 +341,37 @@ class Http3PhpServer implements WorkerServer {
     );
   }
 
-  /// Echoes any received WebTransport datagrams back to the client.
-  void _echoWebTransport(_Session session) {
+  /// Drains and dispatches any received WebTransport datagrams.
+  void _drainWtDatagrams(_Session session) {
     final wt = session.wt;
     if (wt == null) return;
-    for (Uint8List? dg = wt.recvDatagram(); dg != null; dg = wt.recvDatagram()) {
-      wt.sendDatagram(dg);
+    for (Uint8List? dg = wt.recvDatagram();
+        dg != null;
+        dg = wt.recvDatagram()) {
+      _handleWtDatagram(session, dg);
+    }
+  }
+
+  /// Handles one inbound WebTransport datagram. Extension point for
+  /// application protocols (e.g. ephemeral Livewire signals such as presence,
+  /// typing, or cursor position). Datagrams are unreliable and unordered — use
+  /// streams for state that must arrive. The default behaviour echoes it.
+  void _handleWtDatagram(_Session session, Uint8List payload) {
+    _sendWtDatagram(session, payload);
+  }
+
+  /// Sends a WebTransport datagram, dropping it (with a log) rather than
+  /// throwing when the peer disabled datagrams or the payload exceeds the
+  /// negotiated max_datagram_frame_size. Returns true if it was enqueued.
+  bool _sendWtDatagram(_Session session, Uint8List payload) {
+    final wt = session.wt;
+    if (wt == null) return false;
+    try {
+      wt.sendDatagram(payload);
+      return true;
+    } on QuicError catch (e) {
+      _log('WebTransport datagram dropped (${payload.length}B): $e');
+      return false;
     }
   }
 
