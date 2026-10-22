@@ -8,11 +8,17 @@ import 'package:dart_apache/src/client/client_response.dart';
 /// upgrades to HTTP/3 automatically.
 ///
 ///   dart run bin/dart_apache_client.dart http://127.0.0.1:8080/
+///   dart run bin/dart_apache_client.dart https://127.0.0.1:8080/ --insecure
 Future<void> main(List<String> arguments) async {
-  final target = arguments.isNotEmpty ? arguments[0] : 'http://127.0.0.1:8080/';
+  final positional = arguments.where((a) => !a.startsWith('--')).toList();
+  final target =
+      positional.isNotEmpty ? positional[0] : 'http://127.0.0.1:8080/';
   final url = Uri.parse(target);
 
-  final client = AltSvcHttpClient(verbose: true);
+  final client = AltSvcHttpClient(
+    verbose: true,
+    allowInsecure: arguments.contains('--insecure'),
+  );
   try {
     stdout.writeln('=== Request 1 (discovery) ===');
     final first = await client.get(url);

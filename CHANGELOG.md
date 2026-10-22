@@ -34,6 +34,11 @@
 - Unified listener: `--http3` runs HTTP/1.1 (TCP) and HTTP/3 (UDP/QUIC) in one
   process on one port; HTTP/1.1 auto-advertises the co-located h3 listener via
   `Alt-Svc`, so discovery points at a listener that is actually running.
+- TLS termination on the HTTP/1.1 (TCP) listener (`--https`, implied by
+  `--http3`): HTTPS via `HttpServer.bindSecure` with the same cert source
+  (`--tls-cert`/`--tls-key` or `--dev`), so the first hop is HTTPS and browsers
+  can honor `Alt-Svc` to upgrade to HTTP/3. Client gains `allowInsecure` for
+  self-signed dev certs.
 - Experimental **HTTP/3 (QUIC)** server over the pure-Dart `dart_quiche` stack
   (`bin/dart_apache_h3.dart`): terminates QUIC + TLS 1.3, speaks HTTP/3, and
   serves static files and PHP via `php-cgi`.

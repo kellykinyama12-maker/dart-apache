@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'config.dart';
 import 'pipeline/http_exchange.dart';
 import 'pipeline/request_pipeline.dart';
+import 'tls/dev_cert.dart';
 import 'worker_server.dart';
 
 /// A small HTTP/1.1 server that serves static files and runs PHP, reproducing
@@ -26,18 +28,26 @@ class ApacheServer implements WorkerServer {
   Future<void> start({int? workerId}) async {
     // `shared: true` lets every worker isolate bind the same port and have the
     // runtime load-balance connections across them (no blocking, no lock).
-    final server = await HttpServer.bind(
-      config.address,
-      config.port,
-      shared: true,
-    );
+    final server = config.tlsEnabled
+        ? await HttpServer.bindSecure(
+            config.address,
+            config.port,
+            _securityContext(),
+            shared: true,
+          )
+        : await HttpServer.bind(
+            config.address,
+            config.port,
+            shared: true,
+          );
     server.serverHeader = config.serverSoftware;
     server.idleTimeout = config.idleTimeout;
     _server = server;
 
+    final scheme = config.tlsEnabled ? 'https' : 'http';
     if (workerId == null) {
       stdout.writeln('dart-apache serving "${config.documentRoot}"');
-      stdout.writeln('Listening on http://${config.address}:${config.port}/');
+      stdout.writeln('Listening on $scheme://${config.address}:${config.port}/');
       stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
     } else {
       stdout.writeln('[worker $workerId] ready');
@@ -54,6 +64,26 @@ class ApacheServer implements WorkerServer {
     await _server?.close(force: !graceful);
     _server = null;
     await _pipeline.close();
+  }
+
+  /// Builds the TLS context for HTTPS: a real PEM cert/key when configured, or
+  /// a generated self-signed one in `--dev` mode. Only `http/1.1` is offered
+  /// over ALPN (dart:io's server speaks HTTP/1.1).
+  SecurityContext _securityContext() {
+    final ctx = SecurityContext()..setAlpnProtocols(['http/1.1'], true);
+    final certPath = config.tlsCertPath;
+    final keyPath = config.tlsKeyPath;
+    if (certPath != null && keyPath != null) {
+      ctx
+        ..useCertificateChain(certPath)
+        ..usePrivateKey(keyPath);
+    } else {
+      final pem = generateDevCertPem();
+      ctx
+        ..useCertificateChainBytes(utf8.encode(pem.cert))
+        ..usePrivateKeyBytes(utf8.encode(pem.key));
+    }
+    return ctx;
   }
 
   Future<void> _handle(HttpRequest request) async {

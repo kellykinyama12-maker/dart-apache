@@ -18,6 +18,7 @@ class ServerConfig {
     this.tlsCertPath,
     this.tlsKeyPath,
     this.devMode = false,
+    this.tlsEnabled = false,
     this.idleTimeout = const Duration(seconds: 120),
     this.maxRequestBodyBytes = 10 * 1024 * 1024,
     int? workers,
@@ -73,6 +74,10 @@ class ServerConfig {
   /// When true, HTTP/3 may use a generated self-signed certificate.
   final bool devMode;
 
+  /// When true, the HTTP/1.1 (TCP) listener terminates TLS (HTTPS), using the
+  /// same certificate source as HTTP/3.
+  final bool tlsEnabled;
+
   /// How long an idle keep-alive connection may stay open (slowloris defense).
   final Duration idleTimeout;
 
@@ -105,6 +110,9 @@ class ServerConfig {
     final http3 = args.contains('--http3');
     final altSvcH3Port =
         int.tryParse(map['advertise-h3'] ?? '') ?? (http3 ? port : null);
+    // --http3 co-locates h3 on the TCP port, so the h1 side must be HTTPS for
+    // browsers to honor Alt-Svc; --https enables HTTPS on h1 without h3.
+    final tlsEnabled = http3 || args.contains('--https');
 
     return ServerConfig(
       address: map['address'] ?? '127.0.0.1',
@@ -117,6 +125,7 @@ class ServerConfig {
       tlsCertPath: map['tls-cert'],
       tlsKeyPath: map['tls-key'],
       devMode: args.contains('--dev'),
+      tlsEnabled: tlsEnabled,
       idleTimeout: Duration(
         seconds: int.tryParse(map['idle-timeout'] ?? '') ?? 120,
       ),

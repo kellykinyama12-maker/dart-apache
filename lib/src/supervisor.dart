@@ -38,18 +38,19 @@ class ServerSupervisor {
   /// Spawns the configured number of workers and begins serving.
   Future<void> start() async {
     stdout.writeln('dart-apache serving "${config.documentRoot}"');
+    final tcpScheme = config.tlsEnabled ? 'https' : 'http';
     switch (kind) {
       case WorkerKind.unified:
-        stdout.writeln('Listening on http://${config.address}:${config.port}/ '
-            '(HTTP/1.1) and https://${config.address}:${config.port}/ '
-            '(HTTP/3, QUIC/UDP)');
+        stdout.writeln('Listening on $tcpScheme://${config.address}:'
+            '${config.port}/ (HTTP/1.1) and https://${config.address}:'
+            '${config.port}/ (HTTP/3, QUIC/UDP)');
       case WorkerKind.http3:
         stdout.writeln(
             'Listening on https://${config.address}:${config.port}/ '
             '(QUIC/UDP)');
       case WorkerKind.http1:
         stdout.writeln(
-            'Listening on http://${config.address}:${config.port}/');
+            'Listening on $tcpScheme://${config.address}:${config.port}/');
     }
     stdout.writeln('PHP handler: ${config.phpFpm ?? config.phpCgiPath}');
     stdout.writeln('Workers: ${config.workers} isolate(s)');

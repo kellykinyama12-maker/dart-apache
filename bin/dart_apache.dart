@@ -16,13 +16,13 @@ Future<void> main(List<String> arguments) async {
   }
 
   // `--http3` co-locates an HTTP/3 (QUIC) listener with HTTP/1.1 in one
-  // process, which requires a TLS certificate.
+  // process; `--http3`/`--https` terminate TLS, which requires a certificate.
   final http3 = arguments.contains('--http3');
-  if (http3) {
+  if (config.tlsEnabled) {
     final hasCert = config.tlsCertPath != null && config.tlsKeyPath != null;
     if (!hasCert && !config.devMode) {
       stderr.writeln(
-        'HTTP/3 requires a TLS certificate: pass --tls-cert and --tls-key, '
+        'TLS requires a certificate: pass --tls-cert and --tls-key, '
         'or --dev to use a generated self-signed certificate.',
       );
       exitCode = 2;

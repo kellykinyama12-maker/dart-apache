@@ -13,7 +13,13 @@ class AltSvcHttpClient {
   AltSvcHttpClient({
     this.userAgent = 'dart-apache-client/1.0',
     this.verbose = false,
-  }) : _h3 = H3Client(userAgent: userAgent);
+    bool allowInsecure = false,
+  }) : _h3 = H3Client(userAgent: userAgent) {
+    if (allowInsecure) {
+      // Accept self-signed certs (dev TLS). Never enable in production.
+      _http.badCertificateCallback = (_, _, _) => true;
+    }
+  }
 
   final String userAgent;
   final bool verbose;

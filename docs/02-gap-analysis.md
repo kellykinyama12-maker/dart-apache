@@ -30,7 +30,7 @@ prototype lives in `lib/src/` and `bin/dart_apache.dart`.
 | **Concurrency** | ✅ multi-isolate acceptors over a shared port | Add master supervisor + rolling restart |
 | **HTTP/2** | None | Full h2 (streams, HPACK, flow control, priorities) |
 | **HTTP/3 / QUIC** | ✅ experimental PoC: static + PHP over h3 (`dart_quiche`) | Harden, integrate into main pipeline, conformance |
-| **TLS** | h3 uses TLS 1.3 (self-signed, via `dart_quiche`) | TLS 1.3 for h1/h2, ALPN, SNI, OCSP, cert rotation |
+| **TLS** | ✅ HTTPS on h1 (TCP) + TLS 1.3 on h3; `--dev` or PEM | SNI multi-cert, OCSP stapling, ACME, cert rotation |
 | **Reverse proxy** | None | HTTP/FastCGI/SCGI upstreams, keep-alive pools |
 | **Load balancing** | None | round-robin, least-conn, hashing, health checks |
 | **WebSocket** | None | Origin upgrade (RFC 6455/8441) + proxy passthrough (Phase 2–3) |
