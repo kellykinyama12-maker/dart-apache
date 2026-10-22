@@ -10,6 +10,7 @@ import '../proxy/reverse_proxy.dart';
 import '../request_resolver.dart';
 import '../wt/ticket.dart';
 import 'dart_handler.dart';
+import 'response_cache.dart';
 import 'server_exchange.dart';
 
 /// Outcome of parsing a `Range` header: whole body, a partial slice, or an
@@ -32,7 +33,10 @@ class RequestPipeline {
             : CgiBackend(config),
         _proxy = config.proxyRoutes.isEmpty
             ? null
-            : ReverseProxyHandler(config.proxyRoutes);
+            : ReverseProxyHandler(config.proxyRoutes),
+        _cache = config.cacheEnabled
+            ? ResponseCache(maxBytes: config.cacheMaxBytes)
+            : null;
 
   final ServerConfig config;
 
@@ -41,6 +45,9 @@ class RequestPipeline {
   final RequestResolver _resolver;
   final PhpBackend _php;
   final ReverseProxyHandler? _proxy;
+
+  /// Optional in-memory response cache (`--cache`), null when disabled.
+  final ResponseCache? _cache;
 
   /// Called with a Common Log Format line after each request (defaults to
   /// stdout). Transports can override to centralize logging.
@@ -52,7 +59,7 @@ class RequestPipeline {
   }
 
   Future<void> serve(ServerExchange exchange) async {
-    final response = exchange.respond();
+    var response = exchange.respond();
 
     // Advertise HTTP/3 on non-h3 responses so clients can upgrade.
     final altSvc = config.altSvcHeader;
@@ -93,6 +100,26 @@ class RequestPipeline {
       if (ticketPath != null && exchange.uri.path == ticketPath) {
         await _serveWtTicket(exchange, response);
         return;
+      }
+
+      // Response cache (GET only): a fresh, vary-matching hit is replayed; on a
+      // miss the response is teed through [CachingResponse], which stores it
+      // iff the handler marks it cacheable (Cache-Control/Expires).
+      final cache = _cache;
+      if (cache != null && exchange.method == 'GET') {
+        final reqHeaders = _requestHeaders(exchange);
+        final key = _cacheKey(exchange);
+        final hit = cache.get(key, reqHeaders);
+        if (hit != null) {
+          await _replayCached(response, hit);
+          return;
+        }
+        response = CachingResponse(
+          inner: response,
+          method: exchange.method,
+          requestHeaders: reqHeaders,
+          onStore: (entry) => cache.put(key, entry),
+        );
       }
 
       // Reverse-proxy routes take precedence over local static/PHP.
@@ -306,6 +333,26 @@ class RequestPipeline {
   String _etagFor(FileStat stat) {
     final mtime = stat.modified.millisecondsSinceEpoch ~/ 1000;
     return '"${mtime.toRadixString(16)}-${stat.size.toRadixString(16)}"';
+  }
+
+  /// Cache key: method + absolute request target.
+  String _cacheKey(ServerExchange e) {
+    final q = e.uri.query;
+    return '${e.method} ${e.scheme}://${e.authority}${e.uri.path}'
+        '${q.isEmpty ? '' : '?$q'}';
+  }
+
+  /// Replays a cached response with a recomputed `Age` and `X-Cache: HIT`.
+  Future<void> _replayCached(ServerResponse response, CachedResponse e) async {
+    response.setStatus(e.statusCode);
+    for (final h in e.headers) {
+      response.setHeader(h.key, h.value);
+    }
+    response
+      ..setHeader('Age', '${e.ageSeconds(DateTime.now())}')
+      ..setHeader('X-Cache', 'HIT');
+    await response.addStream(Stream<List<int>>.value(e.body));
+    await response.close();
   }
 
   /// Collects request headers into a lower-cased map (duplicates joined).

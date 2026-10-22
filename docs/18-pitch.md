@@ -41,6 +41,9 @@ install*.
   bridge for `shelf_router` + middleware.
 - **Native WebTransport session handler** (datagrams + uni/bidi streams) for
   Dart real-time apps — again, no sidecar.
+- **Micro-cache for dynamic content** (`--cache`): an RFC 9111 in-memory
+  response cache for PHP/proxy `GET`s (honors `Cache-Control`/`Expires`/`Vary`,
+  `X-Cache: HIT/MISS/BYPASS`) — the `fastcgi_cache`/`proxy_cache` win, built in.
 - **One language, edge-to-app**, and a **single static binary**
   (cross-compiles to a standalone Linux ELF — no modules to assemble, no
   php-fpm orchestration required for the h1/h3 core).
@@ -56,11 +59,12 @@ install*.
 - **Ecosystem & config:** no `.htaccess`/mod_rewrite, no mod_security, no SSI,
   a smaller module surface, and a CLI-flag config (YAML + hot-reload is
   roadmapped).
-- **Not yet present:** response/proxy caching and HTTP/2 (intentionally
-  skipped — h3 is the multiplexed transport). Static serving now matches the
-  giants on **ETag, conditional GET (304), and single byte ranges (206/416)**;
-  only *multipart/byteranges* (multiple ranges in one response) is a documented
-  intentional fallback to a full 200.
+- **Not yet present:** HTTP/2 (intentionally skipped — h3 is the multiplexed
+  transport). Static serving now matches the giants on **ETag, conditional GET
+  (304), and single byte ranges (206/416)**; only *multipart/byteranges*
+  (multiple ranges in one response) is a documented intentional fallback to a
+  full 200. A dynamic-response **micro-cache** exists (`--cache`); disk-backed
+  caching and stale-while-revalidate are still roadmap.
 - **Raw static throughput** at nginx's scale isn't proven yet.
 
 ## Who it's for (ICP)

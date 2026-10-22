@@ -41,6 +41,8 @@ class ServerConfig {
     this.frontController,
     this.wtTicketPath,
     Uint8List? wtTicketKey,
+    this.cacheEnabled = false,
+    this.cacheMaxBytes = 64 * 1024 * 1024,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],        wtTicketKey = wtTicketKey ?? WtTicket.generateKey(),        workers = (workers == null || workers < 1)
             ? Platform.numberOfProcessors
@@ -103,6 +105,12 @@ class ServerConfig {
   /// Maximum accepted request body size in bytes; larger declared bodies get a
   /// `413 Payload Too Large`.
   final int maxRequestBodyBytes;
+
+  /// Whether the in-memory response micro-cache is enabled (`--cache`).
+  final bool cacheEnabled;
+
+  /// LRU byte budget for the response cache (`--cache-max-bytes`).
+  final int cacheMaxBytes;
 
   /// Reverse-proxy routes, checked (longest prefix first) before static/PHP.
   final List<ProxyRoute> proxyRoutes;
@@ -228,6 +236,9 @@ class ServerConfig {
       ),
       maxRequestBodyBytes:
           int.tryParse(map['max-body'] ?? '') ?? 10 * 1024 * 1024,
+      cacheEnabled: args.contains('--cache'),
+      cacheMaxBytes:
+          int.tryParse(map['cache-max-bytes'] ?? '') ?? 64 * 1024 * 1024,
       proxyRoutes: proxyRoutes,
       wtPath: wtPath,
       wtBridgePath: wtBridgePath,
