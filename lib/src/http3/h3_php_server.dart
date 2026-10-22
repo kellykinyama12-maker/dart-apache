@@ -287,18 +287,19 @@ class Http3PhpServer implements WorkerServer {
           final req = session.reqs[streamId];
           if (req != null) _dispatch(session, streamId, req);
         case H3WebTransportUniStreamEvent(
+          :final streamId,
           :final sessionId,
           :final data,
           :final fin,
         ):
-          _echoWtUniStream(session, sessionId, data, fin);
+          _onWtUniData(session, streamId, sessionId, data, fin);
         case H3WebTransportBidiStreamEvent(
           :final streamId,
           :final sessionId,
           :final data,
           :final fin,
         ):
-          _echoWtBidiStream(session, streamId, sessionId, data, fin);
+          _onWtBidiData(session, streamId, sessionId, data, fin);
         default:
           break;
       }
@@ -349,44 +350,90 @@ class Http3PhpServer implements WorkerServer {
     }
   }
 
-  /// Echoes an inbound (client-initiated) WebTransport unidirectional stream
-  /// back to the browser on a fresh server-initiated WT uni stream, so the
-  /// round trip is observable via `incomingUnidirectionalStreams`.
-  void _echoWtUniStream(
+  /// Buffers an inbound (client-initiated) WebTransport unidirectional stream
+  /// until its FIN, then hands the complete message to [_handleWtMessage].
+  void _onWtUniData(
     _Session session,
+    int wtStreamId,
     int sessionId,
     Uint8List data,
     bool fin,
   ) {
-    if (session.wt == null || data.isEmpty) return;
+    if (session.wt == null) return;
+    final buf = session.wtInbound.putIfAbsent(wtStreamId, _WtInboundStream.new);
+    buf.add(data, config.maxRequestBodyBytes);
+    if (!fin) return;
+    session.wtInbound.remove(wtStreamId);
+    if (buf.overflowed) {
+      _log(
+        'WebTransport uni stream $wtStreamId exceeded '
+        '${config.maxRequestBodyBytes}B; dropped',
+      );
+      return;
+    }
+    _handleWtMessage(session, sessionId, buf.take(), bidiStreamId: null);
+  }
+
+  /// Buffers an inbound (client-initiated) WebTransport bidirectional stream
+  /// until its FIN, then hands the complete message to [_handleWtMessage].
+  void _onWtBidiData(
+    _Session session,
+    int bidiStreamId,
+    int sessionId,
+    Uint8List data,
+    bool fin,
+  ) {
+    if (session.wt == null) return;
+    final buf =
+        session.wtInbound.putIfAbsent(bidiStreamId, _WtInboundStream.new);
+    buf.add(data, config.maxRequestBodyBytes);
+    if (!fin) return;
+    session.wtInbound.remove(bidiStreamId);
+    if (buf.overflowed) {
+      _log(
+        'WebTransport bidi stream $bidiStreamId exceeded '
+        '${config.maxRequestBodyBytes}B; dropped',
+      );
+      return;
+    }
+    _handleWtMessage(
+      session,
+      sessionId,
+      buf.take(),
+      bidiStreamId: bidiStreamId,
+    );
+  }
+
+  /// Handles one complete inbound WebTransport message (a full stream buffered
+  /// to its FIN). This is the extension point for application protocols such as
+  /// Livewire-over-WebTransport. The default behaviour echoes the message: a
+  /// bidi message is replied on the same stream; a uni message is sent out on a
+  /// fresh server-initiated uni stream.
+  void _handleWtMessage(
+    _Session session,
+    int sessionId,
+    Uint8List message, {
+    required int? bidiStreamId,
+  }) {
+    if (session.wt == null) return;
+    if (bidiStreamId != null) {
+      session.conn.streamSend(bidiStreamId, message, fin: true);
+      _log(
+        'WebTransport bidi message: ${message.length} bytes '
+        '(session $sessionId)',
+      );
+      return;
+    }
     final uniId = session.h3!.allocLocalUniStreamId();
     final prefix = encodeWtUniStreamPrefix(sessionId);
     session.conn.streamSend(
       uniId,
-      Uint8List.fromList([...prefix, ...data]),
+      Uint8List.fromList([...prefix, ...message]),
       fin: true,
     );
     _log(
-      'WebTransport uni stream echo: ${data.length} bytes '
-      '(session $sessionId, fin=$fin)',
-    );
-  }
-
-  /// Echoes an inbound (client-initiated) WebTransport bidirectional stream
-  /// back on the same stream, so the browser observes the reply on the
-  /// bidi stream's readable side.
-  void _echoWtBidiStream(
-    _Session session,
-    int streamId,
-    int sessionId,
-    Uint8List data,
-    bool fin,
-  ) {
-    if (session.wt == null || data.isEmpty) return;
-    session.conn.streamSend(streamId, data, fin: true);
-    _log(
-      'WebTransport bidi stream echo: ${data.length} bytes '
-      '(stream $streamId, session $sessionId, fin=$fin)',
+      'WebTransport uni message: ${message.length} bytes '
+      '(session $sessionId)',
     );
   }
 
@@ -498,6 +545,9 @@ class _Session {
   /// Active WebTransport session on this connection, if any.
   WebTransportSession? wt;
 
+  /// Inbound WebTransport streams buffered until FIN, keyed by QUIC stream id.
+  final Map<int, _WtInboundStream> wtInbound = {};
+
   /// CID keys this session is registered under (client DCID + our SCID).
   final List<String> cids = [];
 
@@ -512,6 +562,30 @@ class _ReqState {
   List<H3Header>? headers;
   final BytesBuilder body = BytesBuilder(copy: false);
   bool responded = false;
+}
+
+/// Buffers one inbound WebTransport stream (uni or bidi) until its FIN so a
+/// complete application message can be handed off in one piece. Enforces a
+/// byte cap to bound per-stream memory.
+class _WtInboundStream {
+  final BytesBuilder _buf = BytesBuilder(copy: false);
+  int _len = 0;
+  bool overflowed = false;
+
+  /// Appends [data] unless the running size would exceed [limit], in which
+  /// case the buffer is discarded and the stream marked [overflowed].
+  void add(Uint8List data, int limit) {
+    if (overflowed) return;
+    _len += data.length;
+    if (_len > limit) {
+      overflowed = true;
+      _buf.clear();
+      return;
+    }
+    _buf.add(data);
+  }
+
+  Uint8List take() => _buf.takeBytes();
 }
 
 /// Adapts a completed HTTP/3 request to the [ServerExchange] contract.

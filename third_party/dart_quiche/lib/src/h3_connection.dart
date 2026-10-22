@@ -670,11 +670,43 @@ class H3Connection {
     _drainReadableStreams();
     _parseUniStreams();
     _parseRequestStreams();
+    _pruneFinishedStreams();
     // Inbound encoder-stream traffic produces Insert Count Increment
     // acks; inbound SETTINGS may trigger Set Capacity. Flush both.
     _flushQpackStreams();
     if (_events.isEmpty) return null;
     return _events.removeAt(0);
+  }
+
+  /// Drop fully-consumed request / WebTransport streams so their buffers
+  /// don't accumulate over a long-lived session (e.g. an interactive
+  /// WebTransport connection that opens a fresh stream per round-trip).
+  /// Their fin events are already queued, so the state is safe to release.
+  /// The QUIC transport dedups retransmits, so a pruned id is not re-added.
+  void _pruneFinishedStreams() {
+    List<int>? doneReq;
+    for (final s in _reqStreams.values) {
+      final done = s.isWtBidi
+          ? s._wtFinEmitted
+          : (s.finishedEmitted && s._buf.isEmpty);
+      if (done) (doneReq ??= <int>[]).add(s.id);
+    }
+    if (doneReq != null) {
+      for (final id in doneReq) {
+        _reqStreams.remove(id);
+      }
+    }
+    List<int>? doneUni;
+    for (final s in _uniStreams.values) {
+      if (s.typeVarint == _wtUniStreamTypeId && s._wtFinEmitted) {
+        (doneUni ??= <int>[]).add(s.id);
+      }
+    }
+    if (doneUni != null) {
+      for (final id in doneUni) {
+        _uniStreams.remove(id);
+      }
+    }
   }
 
   void _drainReadableStreams() {

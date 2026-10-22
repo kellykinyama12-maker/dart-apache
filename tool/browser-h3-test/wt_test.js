@@ -116,8 +116,37 @@ function findBrowser() {
           echoBidi += new TextDecoder().decode(chunk.value);
         }
 
+        // Large (multi-frame) bidi payload: exercises stream reassembly and
+        // the message-framed echo (one FIN, not per-chunk). 64 KiB spans many
+        // QUIC STREAM frames.
+        const bigLen = 64 * 1024;
+        const big = new Uint8Array(bigLen);
+        for (let i = 0; i < bigLen; i++) big[i] = 65 + (i % 26);
+        const bidi2 = await wt.createBidirectionalStream();
+        const bw2 = bidi2.writable.getWriter();
+        await bw2.write(big);
+        await bw2.close();
+        const br2 = bidi2.readable.getReader();
+        let got = 0;
+        let intact = true;
+        for (;;) {
+          const chunk = await Promise.race([br2.read(), timeout(10000)]);
+          if (chunk.done) break;
+          for (let i = 0; i < chunk.value.length; i++) {
+            if (chunk.value[i] !== 65 + ((got + i) % 26)) { intact = false; break; }
+          }
+          got += chunk.value.length;
+        }
+
         wt.close();
-        return { ok: true, echoed, greeting: greeting.trim(), echoUni, echoBidi };
+        return {
+          ok: true,
+          echoed,
+          greeting: greeting.trim(),
+          echoUni,
+          echoBidi,
+          bigEcho: { bytes: got, expected: bigLen, intact },
+        };
       } catch (e) {
         return { ok: false, error: String(e && e.message ? e.message : e) };
       }
