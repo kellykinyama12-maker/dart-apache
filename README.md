@@ -187,6 +187,46 @@ Demo (run the h1 server with `--advertise-h3=4433` and the h3 server on 4433):
 dart run bin/dart_apache_client.dart http://127.0.0.1:8080/
 ```
 
+## Native Dart app handlers (and PHP parity)
+
+Besides static + PHP, dart-apache can serve **in-process Dart handlers** on the
+same ports (HTTP/1.1 and HTTP/3) — no subprocess, no second socket. Register
+routes with a top-level `DartAppBuilder` and run them via `ServerSupervisor`:
+
+```dart
+DartApp buildApp(ServerConfig config) => DartApp([
+      DartRoute.exact('/api/hello', (e, r) async {
+        await r.writeJson({'hello': e.uri.queryParameters['name'] ?? 'world'});
+      }, methods: {'GET'}),
+    ]);
+```
+
+See [`example/dart_app.dart`](example/dart_app.dart).
+
+### Prove the Dart app matches your PHP app
+
+[`example/parity_app.dart`](example/parity_app.dart) re-implements the sample
+PHP app (`public/*.php`) as native Dart handlers, so you can **A/B the two**:
+
+```sh
+# Dart equivalents mounted under /parity/* alongside the PHP files:
+dart run example/parity_app.dart --root=./public --port=8080
+#   GET /echo.php         (PHP)      vs  POST /parity/echo    (Dart)
+#   GET /index.php?name=x (PHP)      vs  GET  /parity/?name=x (Dart)
+
+# Or as a drop-in replacement: Dart handlers mounted at the real .php paths,
+# so the same URLs are served by Dart instead of php-cgi:
+dart run example/parity_app.dart --root=./public --port=8080 --dropin
+```
+
+[`test/parity_test.dart`](test/parity_test.dart) locks this down: it runs the
+PHP and Dart versions and asserts equivalent responses (byte-identical bodies,
+matching status/headers/JSON). Run it with:
+
+```sh
+dart test -t e2e --run-skipped test/parity_test.dart
+```
+
 ## Project layout
 
 - `bin/dart_apache.dart` — entry point / CLI.

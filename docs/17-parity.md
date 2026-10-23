@@ -9,6 +9,15 @@ difference into one of: *spec-compliant (intentional)*, *bug to fix*, or
 > Parity is measured on **HTTP/1.1 semantics** first (where all three servers
 > are directly comparable), then HTTP/3-specific behavior separately.
 
+> **Implemented (a first slice):** a PHP↔Dart differential harness for the
+> sample app. [`example/parity_app.dart`](../example/parity_app.dart)
+> re-implements `public/*.php` as native Dart handlers (two mountings:
+> `/parity/*`, or drop-in at the real `.php` paths), and
+> [`test/parity_test.dart`](../test/parity_test.dart) asserts the PHP and Dart
+> responses agree (byte-identical bodies, matching status/headers/JSON) — both
+> on one server and in an A/B of two servers at identical URLs. Run:
+> `dart test -t e2e --run-skipped test/parity_test.dart`.
+
 ## 1. Goal & definition of "parity"
 
 For each request in a matrix, the three servers — fed the **same document
