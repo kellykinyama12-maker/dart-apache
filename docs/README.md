@@ -23,6 +23,10 @@ path to **HTTP/3 (QUIC)**, TLS, reverse proxying, and horizontal scalability.
 | [13-wsl-linux-testing.md](13-wsl-linux-testing.md) | What must be verified on WSL/Linux (FastCGI, SIGHUP reload, h3) |
 | [14-livewire-webtransport.md](14-livewire-webtransport.md) | **Livewire over WebTransport**: what the WT→PHP bridge means for the next Livewire, and what it would need to adopt it |
 | [15-webtransport-hardening-plan.md](15-webtransport-hardening-plan.md) | **Hardening plan**: sequenced phases to take Livewire-over-WebTransport from prototype to shippable (response contract, benchmark, coverage, packaging, transport, CI) |
+| [16-deploy.md](16-deploy.md) | Production deploy: Linux build, persistent WT ticket key, systemd unit, `.env`/TLS notes |
+| [17-parity.md](17-parity.md) | Differential-testing plan vs Apache/nginx + the implemented PHP↔Dart parity harness |
+| [18-pitch.md](18-pitch.md) | Positioning vs Apache & nginx (measured benchmarks, verdicts) |
+| [19-dart-development.md](19-dart-development.md) | **Developer guide**: writing in-process Dart app handlers + WebTransport sessions on dart-apache |
 
 ## Reading order
 

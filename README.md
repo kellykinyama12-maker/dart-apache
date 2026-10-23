@@ -203,6 +203,11 @@ DartApp buildApp(ServerConfig config) => DartApp([
 
 See [`example/dart_app.dart`](example/dart_app.dart).
 
+> **New to writing Dart handlers here?** The full developer guide is
+> [docs/19-dart-development.md](docs/19-dart-development.md) — routing, the
+> request/response contract, the isolate rule, WebTransport, running, and
+> testing.
+
 ### Prove the Dart app matches your PHP app
 
 [`example/parity_app.dart`](example/parity_app.dart) re-implements the sample
