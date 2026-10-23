@@ -163,6 +163,21 @@ void main() {
           '@extends("shell")@section("title", t)');
       expect(fe.render('pg', {'t': 'Home'}), '<title>Home</title>');
     });
+
+    test('@checked/@selected/@disabled emit attributes when truthy', () {
+      expect(
+          fe.renderString(
+              '<input type="checkbox" @checked(on)>', {'on': true}),
+          '<input type="checkbox" checked>');
+      expect(
+          fe.renderString('<input @checked(on)>', {'on': false}), '<input >');
+      expect(
+          fe.renderString('<option @selected(v == 2)>', {'v': 2}),
+          '<option selected>');
+      expect(
+          fe.renderString('<button @disabled(busy)>', {'busy': true}),
+          '<button disabled>');
+    });
   });
 
   group('components (<x-...>)', () {

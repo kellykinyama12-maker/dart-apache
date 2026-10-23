@@ -108,6 +108,7 @@ class BlazeEngine {
     'push', 'endpush', 'stack',
     'auth', 'endauth', 'guest', 'endguest',
     'csrf',
+    'checked', 'selected', 'disabled', 'readonly', 'required',
     'include', 'extends', 'section', 'endsection', 'yield',
   };
 
@@ -488,6 +489,12 @@ class _TreeParser {
         nodes.add(_IfNode([_Branch(Expression.parse('!auth'), body)]));
       case 'csrf':
         nodes.add(_CsrfNode());
+      case 'checked':
+      case 'selected':
+      case 'disabled':
+      case 'readonly':
+      case 'required':
+        nodes.add(_AttrFlagNode(Expression.parse(t.args), t.value));
       case 'json':
         nodes.add(_JsonNode(Expression.parse(t.args)));
       case 'push':
@@ -573,6 +580,19 @@ class _CsrfNode extends _Node {
     final token = ctx['csrf'];
     out.write('<input type="hidden" name="_token" value="'
         '${_escapeHtml(token == null ? '' : '$token')}">');
+  }
+}
+
+/// Emits an HTML boolean attribute (`checked`, `selected`, `disabled`,
+/// `readonly`, `required`) when the guarded expression is truthy.
+class _AttrFlagNode extends _Node {
+  _AttrFlagNode(this.expr, this.attribute);
+  final Expression expr;
+  final String attribute;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    if (expr.evaluateTruthy(ctx)) out.write(attribute);
   }
 }
 

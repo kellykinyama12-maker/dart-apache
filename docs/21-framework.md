@@ -387,6 +387,12 @@ Small quality-of-life wins developers reach for daily.
       `abortIf(cond, 400)`, and `abortUnless(cond, 401)` raise an `HttpException`
       the router's error boundary turns into a response with that status (and a
       sensible default reason phrase when no message is given).
+
+## 3v. Phase 22 — conditional attribute directives
+
+- [x] **AA1 — `@checked/@selected/@disabled/@readonly/@required`.** Each emits
+      its HTML boolean attribute when the guarded expression is truthy, e.g.
+      `<input @checked(user.active)>` / `<option @selected(v == current)>`.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
