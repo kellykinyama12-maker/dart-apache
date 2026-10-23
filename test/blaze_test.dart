@@ -244,6 +244,13 @@ void main() {
       expect(fe.renderString(src, {'role': 'guest'}), '?');
     });
 
+    test('@once renders its body only once per pass', () {
+      expect(
+          fe.renderString('@foreach(xs as x)@once<s>@endonce{{ x }}@endforeach',
+              {'xs': [1, 2, 3]}),
+          '<s>123');
+    });
+
     test('@includeIf skips a missing partial; @includeWhen gates on a cond', () {
       File('${dir.path}/present.blaze.html').writeAsStringSync('[here]');
       expect(fe.renderString("@includeIf('present')"), '[here]');

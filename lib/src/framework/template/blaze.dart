@@ -126,6 +126,7 @@ class BlazeEngine {
     'checked', 'selected', 'disabled', 'readonly', 'required',
     'class', 'style',
     'switch', 'case', 'default', 'break', 'endswitch',
+    'once', 'endonce',
     'include', 'includeIf', 'includeWhen', 'each', 'extends', 'section',
     'endsection', 'yield',
   };
@@ -439,6 +440,7 @@ class _TreeParser {
   _TreeParser(this._toks);
   final List<_Tok> _toks;
   int _pos = 0;
+  int _onceId = 0;
   String? extendsName;
 
   /// Parses nodes until one of [stops] directive names, or the component close
@@ -578,6 +580,10 @@ class _TreeParser {
         nodes.add(_CsrfNode());
       case 'break':
         nodes.add(_BreakNode());
+      case 'once':
+        final body = parseBlock({'endonce'});
+        _expect('endonce');
+        nodes.add(_OnceNode(_onceId++, body));
       case 'checked':
       case 'selected':
       case 'disabled':
@@ -791,6 +797,24 @@ class _BreakNode extends _Node {
   @override
   void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
       Map<String, String> sections) {}
+}
+
+/// `@once … @endonce`: renders its body at most once per render pass (keyed by
+/// a unique id stashed in [sections]). Handy with `@push` for one-off scripts.
+class _OnceNode extends _Node {
+  _OnceNode(this.id, this.body);
+  final int id;
+  final List<_Node> body;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final key = '__once:$id';
+    if (sections.containsKey(key)) return;
+    sections[key] = '';
+    for (final n in body) {
+      n.render(out, ctx, engine, sections);
+    }
+  }
 }
 
 class _SwitchCase {

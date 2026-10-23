@@ -516,6 +516,11 @@ Small quality-of-life wins developers reach for daily.
       (bare identifier keys are strings); `@class(['btn', {'active': on}])` and
       `@style([{'color: red': bad}])` build `class`/`style` attributes from
       always-on strings plus condition maps.
+
+## 3ar. Phase 44 — @once
+
+- [x] **AW1 — `@once … @endonce`.** Renders its body at most once per render pass
+      (keyed by a unique id) — pairs with `@push` for one-off component scripts.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
