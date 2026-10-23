@@ -446,6 +446,7 @@ class Router {
   final void Function(Object error, StackTrace stackTrace)? _onError;
   final List<DartRoute> _routes = [];
   final List<Middleware> _globalMiddleware = [];
+  final Map<String, String> _names = {};
 
   /// The app service container (DI). Register services with [bind] / [singleton]
   /// / [instance], resolve them in handlers via `request.make<T>()`.
@@ -471,13 +472,43 @@ class Router {
   /// Registers global middleware (runs for every route).
   void use(Middleware middleware) => _globalMiddleware.add(middleware);
 
-  void get(String pattern, RouteAction action) => _add('GET', pattern, action);
-  void post(String pattern, RouteAction action) => _add('POST', pattern, action);
-  void put(String pattern, RouteAction action) => _add('PUT', pattern, action);
-  void patch(String pattern, RouteAction action) =>
-      _add('PATCH', pattern, action);
-  void delete(String pattern, RouteAction action) =>
-      _add('DELETE', pattern, action);
+  void get(String pattern, RouteAction action, {String? name}) =>
+      _add('GET', pattern, action, name: name);
+  void post(String pattern, RouteAction action, {String? name}) =>
+      _add('POST', pattern, action, name: name);
+  void put(String pattern, RouteAction action, {String? name}) =>
+      _add('PUT', pattern, action, name: name);
+  void patch(String pattern, RouteAction action, {String? name}) =>
+      _add('PATCH', pattern, action, name: name);
+  void delete(String pattern, RouteAction action, {String? name}) =>
+      _add('DELETE', pattern, action, name: name);
+
+  /// Builds the URL for a named route, substituting `:param` segments from
+  /// [params]. Leftover params are appended as a query string.
+  String urlFor(String name, [Map<String, Object?> params = const {}]) {
+    final pattern = _names[name];
+    if (pattern == null) {
+      throw ArgumentError('No route named "$name"');
+    }
+    final used = <String>{};
+    final path = pattern.split('/').map((seg) {
+      if (seg.startsWith(':')) {
+        final key = seg.substring(1);
+        if (!params.containsKey(key)) {
+          throw ArgumentError('Missing route param "$key" for "$name"');
+        }
+        used.add(key);
+        return Uri.encodeComponent('${params[key]}');
+      }
+      return seg;
+    }).join('/');
+    final query = <String, String>{
+      for (final e in params.entries)
+        if (!used.contains(e.key)) e.key: '${e.value}',
+    };
+    if (query.isEmpty) return path;
+    return Uri(path: path, queryParameters: query).toString();
+  }
 
   /// Groups routes under a path [prefix] and optional [middleware]. Register
   /// routes on this same router inside [build].
@@ -495,8 +526,9 @@ class Router {
     _scoped.removeRange(savedLen, _scoped.length);
   }
 
-  void _add(String method, String pattern, RouteAction action) {
+  void _add(String method, String pattern, RouteAction action, {String? name}) {
     final full = '$_prefix$pattern';
+    if (name != null) _names[name] = full;
     final chain = [..._globalMiddleware, ..._scoped];
     final route = DartRoute.path(full, (exchange, response) async {
       final params = _paramsFor(full, exchange.uri.path);

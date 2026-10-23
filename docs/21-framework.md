@@ -411,6 +411,13 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AD1 — `@verbatim ... @endverbatim`.** Emits its inner content literally,
       so client-side `{{ }}` (Alpine/Vue) and `@`-directives pass through
       untouched by Blaze.
+
+## 3z. Phase 26 — named routes
+
+- [x] **AE1 — named routes + `urlFor`.** Pass `name:` to any route method
+      (`router.get('/users/:id', show, name: 'users.show')`) and build URLs with
+      `router.urlFor('users.show', {'id': 42})` (`:param` substitution; leftover
+      params become a query string).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

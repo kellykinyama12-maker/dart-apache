@@ -55,6 +55,18 @@ void main() {
       expect((await run(app, 'GET', '/p')).text, '1/false');
     });
 
+    test('named routes build URLs with urlFor', () {
+      final router = Router()
+        ..get('/users/:id', (r) => r.text('x'), name: 'users.show')
+        ..get('/posts', (r) => r.text('x'), name: 'posts.index');
+      expect(router.urlFor('users.show', {'id': 42}), '/users/42');
+      expect(router.urlFor('posts.index'), '/posts');
+      expect(router.urlFor('users.show', {'id': 7, 'tab': 'bio'}),
+          '/users/7?tab=bio');
+      expect(() => router.urlFor('missing'), throwsArgumentError);
+      expect(() => router.urlFor('users.show'), throwsArgumentError);
+    });
+
     test('content negotiation + method + cookie helpers', () async {
       final app = (Router()
             ..get(
