@@ -6,6 +6,7 @@
 import 'dart:convert';
 
 import '../../wt/wt_handler.dart';
+import '../validation.dart';
 import 'diff.dart';
 
 /// A reactive component: given a state map, [render] produces HTML; [update]
@@ -29,6 +30,15 @@ abstract class LiveComponent {
 
   /// Renders the component's inner HTML for [state].
   String render(Map<String, Object?> state);
+
+  /// Validates [data] against [rules] (Laravel-style), throwing a
+  /// [ValidationException] on failure — the Live handler catches it and folds
+  /// the errors into the re-rendered state (see [liveWtHandler]). Call it from
+  /// [update] before applying a mutating action.
+  void validate(Map<String, Object?> data, Map<String, String> rules) {
+    final errors = Validator.validate(data, rules);
+    if (errors.isNotEmpty) throw ValidationException(errors);
+  }
 }
 
 /// Routes client actions to registered [LiveComponent]s by name.
@@ -67,9 +77,14 @@ WtHandler liveWtHandler(LiveRegistry registry, {bool diff = true}) {
         (msg['payload'] as Map?)?.cast<String, Object?>() ?? const {};
     final action = (msg['action'] as String?) ?? '';
 
-    final next = action.isEmpty
-        ? state
-        : component.update(action, state, payload);
+    // A ValidationException from update() folds its errors back into the state
+    // (keeping the user's input) so the re-render can show the messages.
+    Map<String, Object?> next;
+    try {
+      next = action.isEmpty ? state : component.update(action, state, payload);
+    } on ValidationException catch (e) {
+      next = {...state, 'errors': e.errors};
+    }
     final newHtml = component.render(next);
 
     final Map<String, Object?> reply;
@@ -92,26 +107,31 @@ WtHandler liveWtHandler(LiveRegistry registry, {bool diff = true}) {
 /// plus the bootstrap for the client runtime. [wtPath] is the WebTransport
 /// endpoint (matches `--wt-path`). By default the runtime is loaded from
 /// [scriptUrl]; pass [inlineRuntime] (the JS source) to embed it in the page
-/// instead (one fewer request).
+/// instead (one fewer request). Set [includeRuntime] false for additional
+/// components on a page whose runtime was already included by an earlier mount
+/// (the runtime binds every component on `DOMContentLoaded`).
 String liveMount(
   LiveComponent component, {
   Map<String, Object?>? state,
   String wtPath = '/wt',
   String scriptUrl = '/app/dartisan-live.js',
   String? inlineRuntime,
+  bool includeRuntime = true,
 }) {
   final s = state ?? component.initialState();
   final attrEsc = const HtmlEscape(HtmlEscapeMode.attribute);
   final stateAttr = attrEsc.convert(jsonEncode(s));
   final initial = component.render(s);
-  final boot = inlineRuntime != null
-      ? '<script>$inlineRuntime</script>'
-      : '<script src="$scriptUrl"></script>';
+  final boot = !includeRuntime
+      ? ''
+      : inlineRuntime != null
+          ? '\n<script>$inlineRuntime</script>'
+          : '\n<script src="$scriptUrl"></script>';
   // Seed the client's exact base string so server-side patches splice cleanly.
   return '<div data-live-component="${component.name}" '
       'data-live-state="$stateAttr">$initial</div>\n'
       '<script>window.DARTISAN_LIVE_PATH=${jsonEncode(wtPath)};'
       '(window.DARTISAN_LIVE_INIT=window.DARTISAN_LIVE_INIT||{})'
-      '[${jsonEncode(component.name)}]=${jsonEncode(initial)};</script>\n'
+      '[${jsonEncode(component.name)}]=${jsonEncode(initial)};</script>'
       '$boot';
 }

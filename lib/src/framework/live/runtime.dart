@@ -12,6 +12,10 @@ const String liveRuntimeSource = r'''
 //   data-live-submit="action"  -> on a form's submit
 //   data-live-model="field"    -> two-way: the input's value folds into state
 //                                 on the next action
+//   data-live-loading           -> element (use `hidden`) shown only while an
+//                                   action is in flight
+//   data-live-loading-class="…" -> classes toggled on the element while busy
+//   (the container also gets a [data-live-busy] attribute during the request)
 // Each action sends {component, action, state, payload} on a fresh bidi stream;
 // the server replies {html, state}, and the client MORPHS the container's DOM in
 // place (preserving focus, caret/selection, scroll, and uncommitted input) — not
@@ -83,31 +87,56 @@ const String liveRuntimeSource = r'''
 
   // ---- action round-trip --------------------------------------------------
 
-  async function act(el, action, payload) {
-    var st = collectModels(el, state(el));
-    var reply = await send({
-      id: ++msgId,
-      component: el.getAttribute('data-live-component'),
-      action: action,
-      state: st,
-      payload: payload || {}
-    });
-    // Server may send a full `html`, or a `patch` (changed region) to splice
-    // against our exact base string (seeded at mount, so bytes match).
-    var html;
-    if (reply.patch) {
-      var base = el.__liveHtml != null ? el.__liveHtml : el.innerHTML;
-      var p = reply.patch;
-      html = base.slice(0, p.s) + p.i + base.slice(p.e);
-    } else {
-      html = reply.html;
+  // Toggle loading affordances for the duration of an action: a [data-live-busy]
+  // marker on the container, un-hiding [data-live-loading] elements, and adding
+  // any [data-live-loading-class] classes (all reversed when the reply lands).
+  function setLoading(el, on) {
+    if (on) el.setAttribute('data-live-busy', '');
+    else el.removeAttribute('data-live-busy');
+    var loaders = el.querySelectorAll('[data-live-loading]');
+    for (var i = 0; i < loaders.length; i++) {
+      if (on) loaders[i].removeAttribute('hidden');
+      else loaders[i].setAttribute('hidden', '');
     }
-    el.__liveHtml = html;
-    morph(el, html);
-    el.setAttribute('data-live-state', JSON.stringify(reply.state));
-    // Expose last state for tests / debugging.
-    window.__dartisanLive = reply.state;
-    el.dispatchEvent(new CustomEvent('live:updated', { detail: reply.state }));
+    var classed = el.querySelectorAll('[data-live-loading-class]');
+    for (var j = 0; j < classed.length; j++) {
+      var classes = (classed[j].getAttribute('data-live-loading-class') || '').split(/\s+/);
+      for (var k = 0; k < classes.length; k++) {
+        if (classes[k]) classed[j].classList[on ? 'add' : 'remove'](classes[k]);
+      }
+    }
+  }
+
+  async function act(el, action, payload) {
+    setLoading(el, true);
+    try {
+      var st = collectModels(el, state(el));
+      var reply = await send({
+        id: ++msgId,
+        component: el.getAttribute('data-live-component'),
+        action: action,
+        state: st,
+        payload: payload || {}
+      });
+      // Server may send a full `html`, or a `patch` (changed region) to splice
+      // against our exact base string (seeded at mount, so bytes match).
+      var html;
+      if (reply.patch) {
+        var base = el.__liveHtml != null ? el.__liveHtml : el.innerHTML;
+        var p = reply.patch;
+        html = base.slice(0, p.s) + p.i + base.slice(p.e);
+      } else {
+        html = reply.html;
+      }
+      el.__liveHtml = html;
+      morph(el, html);
+      el.setAttribute('data-live-state', JSON.stringify(reply.state));
+      // Expose last state for tests / debugging.
+      window.__dartisanLive = reply.state;
+      el.dispatchEvent(new CustomEvent('live:updated', { detail: reply.state }));
+    } finally {
+      setLoading(el, false);
+    }
   }
 
   // ---- DOM morphing (morphdom-lite) --------------------------------------

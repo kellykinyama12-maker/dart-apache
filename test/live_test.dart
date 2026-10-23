@@ -27,6 +27,28 @@ class _Counter extends LiveComponent {
       '<span>${state['count']}</span>';
 }
 
+/// A form component that validates on `save` — exercises the Live validation
+/// round-trip (errors fold into state; input is preserved).
+class _LoginForm extends LiveComponent {
+  @override
+  String get name => 'login';
+  @override
+  Map<String, Object?> initialState() => {'email': '', 'saved': false};
+  @override
+  Map<String, Object?> update(
+      String action, Map<String, Object?> state, Map<String, Object?> p) {
+    if (action == 'save') {
+      validate(state, {'email': 'required|email'});
+      return {...state, 'saved': true, 'errors': const {}};
+    }
+    return state;
+  }
+
+  @override
+  String render(Map<String, Object?> state) =>
+      '<form>${state['saved'] == true ? 'ok' : ''}</form>';
+}
+
 class _FakeWtSession implements WtSession {
   final List<String> sent = [];
   @override
@@ -71,6 +93,12 @@ void main() {
     test('inlineRuntime embeds the runtime', () {
       final html = liveMount(_Counter(), inlineRuntime: 'CODE();');
       expect(html, contains('<script>CODE();</script>'));
+      expect(html, isNot(contains('<script src=')));
+    });
+    test('includeRuntime:false emits the component + seed but no runtime', () {
+      final html = liveMount(_Counter(), includeRuntime: false);
+      expect(html, contains('data-live-component="counter"'));
+      expect(html, contains('DARTISAN_LIVE_INIT'));
       expect(html, isNot(contains('<script src=')));
     });
   });
@@ -133,6 +161,49 @@ void main() {
         ),
       );
       expect(s2.sent, isEmpty);
+    });
+  });
+
+  group('Live validation round-trip (B1)', () {
+    test('validate folds errors into the replied state, keeping input', () {
+      final handler = liveWtHandler(LiveRegistry()..register(_LoginForm()),
+          diff: false);
+      final session = _FakeWtSession();
+      handler(session, _action({
+        'id': 1,
+        'component': 'login',
+        'action': 'save',
+        'state': {'email': 'not-an-email'},
+      }));
+      final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
+      final state = (reply['state'] as Map).cast<String, Object?>();
+      expect(state['email'], 'not-an-email'); // input preserved
+      expect(state['saved'], isNot(true)); // not saved
+      expect((state['errors'] as Map).containsKey('email'), isTrue);
+    });
+
+    test('a valid submission saves and clears errors', () {
+      final handler = liveWtHandler(LiveRegistry()..register(_LoginForm()),
+          diff: false);
+      final session = _FakeWtSession();
+      handler(session, _action({
+        'id': 2,
+        'component': 'login',
+        'action': 'save',
+        'state': {'email': 'ada@example.com'},
+      }));
+      final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
+      final state = (reply['state'] as Map).cast<String, Object?>();
+      expect(state['saved'], isTrue);
+      expect(state['errors'], isEmpty);
+    });
+
+    test('LiveComponent.validate throws on failure, passes on success', () {
+      final form = _LoginForm();
+      expect(() => form.validate({'email': 'x'}, {'email': 'email'}),
+          throwsA(isA<ValidationException>()));
+      expect(() => form.validate({'email': 'a@b.co'}, {'email': 'email'}),
+          returnsNormally);
     });
   });
 

@@ -590,6 +590,36 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **BJ1 — `accepted` / `declined`.** Checkbox/terms validation (`accepted` =
       `yes/on/1/true`, `declined` = `no/off/0/false`).
+
+## 3bf. Track B — deepening Dartisan Live (the moat)
+
+Matching Blade directive-for-directive doesn't beat the giants; **Livewire over
+HTTP/3 + WebTransport** is the edge PHP can't match natively. This track widens
+that gap. Roadmap:
+
+- [ ] **B1 — validation round-trips + loading states.** `LiveComponent.validate`
+      throws a `ValidationException` the WT handler catches, folding `errors`
+      into the re-rendered state (input preserved); the client toggles
+      `data-live-loading` elements, a `data-live-busy` root attribute, and
+      `data-live-loading-class` classes for the duration of each action.
+- [ ] **B2 — polling + model modifiers.** `data-live-poll="action"` (interval)
+      and `.lazy` / `.debounce` on `data-live-model`.
+- [ ] **B3 — nested components.** Child components mount inside a parent render
+      with independent state and their own action round-trips.
+- [ ] **B4 — component events.** `emit` / `listen` between components on the
+      same session.
+- [ ] **B5 — lifecycle + dirty state.** `mount` / `updated` hooks; dirty markers.
+
+### B1 — validation round-trips + loading states
+
+- [x] Server: `LiveComponent.validate(data, rules)` → `Validator.validate`; on
+      failure throws `ValidationException`. `liveWtHandler` catches it and
+      renders `{...state, 'errors': errors}` so the component shows messages and
+      keeps the user's input.
+- [x] Client: during each action the runtime sets `data-live-busy` on the
+      container, un-hides `[data-live-loading]` elements, and toggles any
+      `data-live-loading-class` classes — restored when the reply lands.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

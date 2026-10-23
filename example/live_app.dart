@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_apache/dart_apache.dart';
@@ -43,8 +44,53 @@ class CounterComponent extends LiveComponent {
       '<button data-live-click="reset">reset</button>';
 }
 
+/// A reactive signup form: `save` validates the email server-side; on failure
+/// the error folds into the state and renders inline (input preserved). The
+/// `data-live-loading` span appears for the duration of the round-trip.
+class SignupComponent extends LiveComponent {
+  static final _attr = const HtmlEscape(HtmlEscapeMode.attribute);
+  static final _text = const HtmlEscape();
+
+  @override
+  String get name => 'signup';
+
+  @override
+  Map<String, Object?> initialState() => {'email': '', 'saved': false};
+
+  @override
+  Map<String, Object?> update(
+    String action,
+    Map<String, Object?> state,
+    Map<String, Object?> payload,
+  ) {
+    if (action == 'save') {
+      validate(state, {'email': 'required|email'});
+      return {...state, 'saved': true, 'errors': const <String, Object?>{}};
+    }
+    return state;
+  }
+
+  @override
+  String render(Map<String, Object?> state) {
+    final email = '${state['email'] ?? ''}';
+    final errors = (state['errors'] as Map?) ?? const {};
+    final emailErr = (errors['email'] as List?)?.cast<String>() ?? const [];
+    final saved = state['saved'] == true;
+    return '<form data-live-submit="save">'
+        '<input name="email" type="email" placeholder="you@example.com" '
+        'data-live-model="email" value="${_attr.convert(email)}"> '
+        '<button type="submit" data-live-loading-class="busy">Sign up</button> '
+        '<span data-live-loading hidden>…</span>'
+        '${emailErr.isNotEmpty ? '<p style="color:#c00">${_text.convert(emailErr.first)}</p>' : ''}'
+        '${saved ? '<p style="color:#070">Signed up ✓</p>' : ''}'
+        '</form>';
+  }
+}
+
 DartApp buildApp(ServerConfig config) {
-  final registry = LiveRegistry()..register(CounterComponent());
+  final registry = LiveRegistry()
+    ..register(CounterComponent())
+    ..register(SignupComponent());
   final wtPath = config.wtPath ?? '/wt';
   // Inline the client runtime so the demo needs no extra h3 request.
   final runtime = File('public/app/dartisan-live.js').readAsStringSync();
@@ -52,9 +98,13 @@ DartApp buildApp(ServerConfig config) {
     [
       DartRoute.exact('/', (e, r) async {
         final page = '<!DOCTYPE html><html><head><meta charset="utf-8">'
-            '<title>Dartisan Live</title></head><body>'
-            '<h1>Dartisan Live — counter over WebTransport (HTTP/3)</h1>'
+            '<title>Dartisan Live</title>'
+            '<style>.busy{opacity:.5}</style></head><body>'
+            '<h1>Dartisan Live — reactive over WebTransport (HTTP/3)</h1>'
+            '<h2>Counter</h2>'
             '${liveMount(CounterComponent(), wtPath: wtPath, inlineRuntime: runtime)}'
+            '<h2>Signup (server-side validation + loading state)</h2>'
+            '${liveMount(SignupComponent(), wtPath: wtPath, includeRuntime: false)}'
             '</body></html>';
         await r.writeText(page, contentType: 'text/html; charset=UTF-8');
       }, methods: {'GET'}),
