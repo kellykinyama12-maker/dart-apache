@@ -503,6 +503,12 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AT1 — `group(..., name:)`.** A route group's `name:` is prepended to the
       `name:` of routes registered inside it, so `urlFor('admin.users.show')`
       resolves (composes with the path prefix).
+
+## 3ap. Phase 42 — list literals
+
+- [x] **AU1 — list literals in expressions.** `[1, 2, 3]` / `[a, 'x', 2 + 1]` in
+      template expressions (e.g. `@foreach(['a', 'b'] as x)`, `in`/`join`/`length`
+      over inline lists).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

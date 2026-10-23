@@ -64,6 +64,15 @@ class _Ident extends _Node {
   Object? eval(Map<String, Object?> ctx) => ctx[name];
 }
 
+/// A `[a, b, c]` list literal.
+class _ListLiteral extends _Node {
+  _ListLiteral(this.elements);
+  final List<_Node> elements;
+  @override
+  Object? eval(Map<String, Object?> ctx) =>
+      [for (final e in elements) e.eval(ctx)];
+}
+
 /// A call to one of the allow-listed [_builtins] helper functions.
 class _Call extends _Node {
   _Call(this.name, this.args);
@@ -394,6 +403,24 @@ class _Parser {
     }
     if (c == "'" || c == '"') return _Literal(_readString(c!));
     if (c != null && (_isDigit(c))) return _Literal(_readNumber());
+    if (c == '[') {
+      _pos++; // past '['
+      final elements = <_Node>[];
+      _skipWs();
+      if (_peek() != ']') {
+        elements.add(_parseOr());
+        _skipWs();
+        while (_peek() == ',') {
+          _pos++;
+          _skipWs();
+          if (_peek() == ']') break; // trailing comma
+          elements.add(_parseOr());
+          _skipWs();
+        }
+      }
+      _expect(']');
+      return _ListLiteral(elements);
+    }
     if (c != null && (_isIdentStart(c))) {
       final id = _readIdent();
       switch (id) {

@@ -42,6 +42,14 @@ void main() {
       expect(ev("upper(trim('  hi '))"), 'HI'); // nested calls
     });
 
+    test('list literals', () {
+      expect(ev('[1, 2, 3]'), [1, 2, 3]);
+      expect(ev("[a, 'x', 2 + 1]", {'a': 5}), [5, 'x', 3]);
+      expect(ev('[]'), isEmpty);
+      expect(ev('length([1, 2])'), 2);
+      expect(ev("join([1, 2, 3], '-')"), '1-2-3');
+    });
+
     test('collection + number built-ins', () {
       expect(ev("first(xs)", {'xs': [1, 2, 3]}), 1);
       expect(ev("last(xs)", {'xs': [1, 2, 3]}), 3);
