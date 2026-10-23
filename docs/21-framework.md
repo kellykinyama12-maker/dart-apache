@@ -338,6 +338,17 @@ Small quality-of-life wins developers reach for daily.
 - [x] **S2 — `dartisan routes`.** Lists an app's routes (method + pattern) by
       loading its `buildApp` and walking `DartApp.routes`.
 
+## 3p. Phase 16 — pagination + template helpers
+
+- [ ] **T1 — Pagination.** `query.paginate(page: n, perPage: m)` → a `Paginator`
+      (items + `total/page/perPage/lastPage/hasNext/hasPrev/from/to`), backed by
+      a driver `runCount` (in-memory + `SELECT COUNT(*)` on SQL). `toMap()` for
+      Blaze.
+- [ ] **T2 — `@json` + auto `flash` in views.** `@json(expr)` emits
+      `jsonEncode(expr)` (embed server data into `<script>`), and `req.view`
+      injects a `flash` map (all current flash values) so `{{ flash.status }}`
+      works without manual passing.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

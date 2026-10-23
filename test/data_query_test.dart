@@ -69,6 +69,25 @@ void main() {
       expect(await db.table('users').where('age', '>=', 54).count(), 2);
     });
 
+    test('paginate returns a page + metadata', () async {
+      final p = await db.table('users').orderBy('age').paginate(page: 1, perPage: 2);
+      expect(p.items.map((r) => r['name']), ['ada', 'linus']);
+      expect(p.total, 3);
+      expect(p.page, 1);
+      expect(p.perPage, 2);
+      expect(p.lastPage, 2);
+      expect(p.hasNext, isTrue);
+      expect(p.hasPrev, isFalse);
+      expect(p.from, 1);
+      expect(p.to, 2);
+
+      final p2 = await db.table('users').orderBy('age').paginate(page: 2, perPage: 2);
+      expect(p2.items.map((r) => r['name']), ['grace']);
+      expect(p2.hasNext, isFalse);
+      expect(p2.hasPrev, isTrue);
+      expect(p2.toMap()['lastPage'], 2);
+    });
+
     test('update mutates matching rows and returns affected count', () async {
       final n =
           await db.table('users').where('name', 'ada').update({'age': 37});

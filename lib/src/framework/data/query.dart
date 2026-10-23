@@ -14,6 +14,43 @@ abstract class Database {
       String table, Map<String, Object?> data);
   Future<int> runUpdate(QueryBuilder query, Map<String, Object?> data);
   Future<int> runDelete(QueryBuilder query);
+
+  /// Counts rows matching the query's filter, ignoring limit/offset.
+  Future<int> runCount(QueryBuilder query);
+}
+
+/// A page of results plus paging metadata (the Laravel `LengthAwarePaginator`
+/// analog). Use [toMap] to hand it to a Blaze view.
+class Paginator<T> {
+  Paginator(this.items,
+      {required this.total, required this.page, required this.perPage});
+
+  final List<T> items;
+  final int total;
+  final int page;
+  final int perPage;
+
+  int get lastPage => perPage <= 0 ? 1 : ((total + perPage - 1) ~/ perPage);
+  bool get hasPrev => page > 1;
+  bool get hasNext => page < lastPage;
+  int? get prevPage => hasPrev ? page - 1 : null;
+  int? get nextPage => hasNext ? page + 1 : null;
+  int get from => total == 0 ? 0 : (page - 1) * perPage + 1;
+  int get to => total == 0 ? 0 : from + items.length - 1;
+
+  Map<String, Object?> toMap() => {
+        'items': items,
+        'total': total,
+        'page': page,
+        'perPage': perPage,
+        'lastPage': lastPage,
+        'hasPrev': hasPrev,
+        'hasNext': hasNext,
+        'prevPage': prevPage,
+        'nextPage': nextPage,
+        'from': from,
+        'to': to,
+      };
 }
 
 /// One `WHERE` condition.
@@ -109,7 +146,16 @@ class QueryBuilder {
     return rows.isEmpty ? null : rows.first;
   }
 
-  Future<int> count() async => (await get()).length;
+  /// Counts rows matching the filter (ignoring limit/offset).
+  Future<int> count() => _db.runCount(this);
+
+  /// Returns page [page] (1-based) of [perPage] rows plus paging metadata.
+  Future<Paginator<Map<String, Object?>>> paginate(
+      {int page = 1, int perPage = 15}) async {
+    final total = await _db.runCount(this);
+    final items = await (limit(perPage).offset((page - 1) * perPage).get());
+    return Paginator(items, total: total, page: page, perPage: perPage);
+  }
 
   /// Inserts [data] and returns the stored row (with its `id`).
   Future<Map<String, Object?>> insert(Map<String, Object?> data) =>
@@ -175,4 +221,8 @@ class InMemoryDatabase implements Database {
     rows.removeWhere(q.matches);
     return before - rows.length;
   }
+
+  @override
+  Future<int> runCount(QueryBuilder q) async =>
+      _rows(q.table).where(q.matches).length;
 }

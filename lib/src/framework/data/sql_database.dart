@@ -110,6 +110,13 @@ class SqlDatabase implements Database {
   Future<int> runDelete(QueryBuilder q) async =>
       (await execute('DELETE FROM ${q.table}${_where(q.wheres)}')).affected;
 
+  @override
+  Future<int> runCount(QueryBuilder q) async {
+    final res =
+        await execute('SELECT COUNT(*) AS n FROM ${q.table}${_where(q.wheres)}');
+    return res.rows.isEmpty ? 0 : (res.rows.first.first as num).toInt();
+  }
+
   // ---- SQL building ----
 
   static String _where(List<WhereClause> wheres) {
