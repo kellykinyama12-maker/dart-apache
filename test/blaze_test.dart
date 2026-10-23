@@ -93,4 +93,63 @@ void main() {
           '<html><body>Hi [inc:ada]</body></html>');
     });
   });
+
+  group('components (<x-...>)', () {
+    late Directory dir;
+    late BlazeEngine ce;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('blaze_comp_');
+      Directory('${dir.path}/components').createSync();
+      File('${dir.path}/components/card.blaze.html').writeAsStringSync(
+          '<div class="card"><h2>{{ title }}</h2>{!! slot !!}</div>');
+      File('${dir.path}/components/panel.blaze.html').writeAsStringSync(
+          '<section>{!! slot !!}<footer>{!! footer !!}</footer></section>');
+      File('${dir.path}/components/divider.blaze.html')
+          .writeAsStringSync('<hr data-n="{{ n }}">');
+      ce = BlazeEngine(dir.path, cache: false);
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('props (string) + default slot', () {
+      expect(
+          ce.renderString('<x-card title="Hello">Body</x-card>'),
+          '<div class="card"><h2>Hello</h2>Body</div>');
+    });
+
+    test('interpolated prop + bound :prop expression', () {
+      expect(
+          ce.renderString('<x-card title="Hi {{ name }}">x</x-card>',
+              {'name': 'ada'}),
+          '<div class="card"><h2>Hi ada</h2>x</div>');
+      expect(
+          ce.renderString('<x-divider :n="a + 1" />', {'a': 4}),
+          '<hr data-n="5">');
+    });
+
+    test('escaped output + kebab prop become camelCase', () {
+      // user-supplied title is HTML-escaped by {{ }}
+      expect(
+          ce.renderString('<x-card title="<b>">y</x-card>'),
+          '<div class="card"><h2>&lt;b&gt;</h2>y</div>');
+    });
+
+    test('named slot via <x-slot:footer>', () {
+      expect(
+          ce.renderString(
+              '<x-panel>main<x-slot:footer>feet</x-slot:footer></x-panel>'),
+          '<section>main<footer>feet</footer></section>');
+    });
+
+    test('self-closing component', () {
+      expect(ce.renderString('<x-divider/>'), '<hr data-n="">');
+    });
+
+    test('nested + slot content can use directives', () {
+      expect(
+          ce.renderString(
+              '<x-card title="T">@if(ok)<x-divider :n="1"/>@endif</x-card>',
+              {'ok': true}),
+          '<div class="card"><h2>T</h2><hr data-n="1"></div>');
+    });
+  });
 }

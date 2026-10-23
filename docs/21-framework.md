@@ -12,7 +12,7 @@ can match natively.
 | Laravel | **Dartisan** (ours) | What it is |
 | --- | --- | --- |
 | Routing + controllers | **Dartisan Router / Controllers** | route groups, params, middleware, resourceful controllers |
-| Blade | **Blaze** | server-side templating: `{{ }}`, `@if/@foreach/@include`, layouts (`@extends/@section/@yield`) |
+| Blade | **Blaze** | server-side templating: `{{ }}`, `@if/@foreach/@include`, layouts (`@extends/@section/@yield`), and `<x-component>` with props + slots |
 | Livewire | **Dartisan Live** | reactive server-rendered components streamed over **WebTransport/HTTP‑3** (our edge) |
 | Eloquent | **Dartisan Data** | thin query/record layer (`Database`/`QueryBuilder`) + pure-Dart `InMemoryDatabase`; wire-driver DBs later |
 | Artisan CLI | **`dartisan` CLI** | `new`, `make:controller`, `make:view`, `serve`, `routes` |
@@ -304,6 +304,17 @@ working code.
       `dart-db-server`: migrate (ordered) → idempotent → rollback (reverse) →
       re-migrate.
 
+## 3m. Phase 13 — Blade-style view components
+
+- [x] **Q1 — Blaze `<x-component>`.** Reusable view components with **props and
+      slots** (the Blade view-component analog; ease-of-use over byte-for-byte):
+      `<x-card title="Hello" :count="n + 1">body</x-card>` renders
+      `views/components/card.blaze.html` with the attributes as props (string,
+      `{{ }}`-interpolated, or `:bound` expression; kebab→camel) plus `slot`
+      (default body) and `<x-slot:footer>…</x-slot:footer>` named slots.
+      Self-closing (`<x-divider/>`) and nesting supported. Parsed in the Blaze
+      tokenizer/tree-parser; 6 tests in `test/blaze_test.dart`.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
@@ -320,6 +331,7 @@ Tracked as we build. Status: ✅ done · 🟡 in progress · ⬜ planned.
 | Laravel | Dartisan | Status |
 | --- | --- | --- |
 | Blade templating | Blaze (`{{ }}`, `@if/@foreach/@include`, layouts) | ✅ |
+| Blade components (`<x-...>`, props, slots) | Blaze `<x-card>` components | ✅ |
 | Livewire (reactive) | Dartisan Live over WebTransport/HTTP‑3 | ✅ |
 | Routing (`Route::get`, params) | `Router.get('/users/:id', …)` + params | ✅ F2 |
 | Controllers | handler classes / methods bound to routes | ✅ F2 |

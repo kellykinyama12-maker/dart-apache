@@ -118,6 +118,25 @@ binds `loop.{index,first,last,count}`. `@include('partial')` pulls in another
 template; dotted names map to folders (`@include('users.row')` →
 `views/users/row.blaze.html`).
 
+**Components.** For reusable UI with props and slots, use `<x-...>` tags backed
+by `views/components/<name>.blaze.html`:
+
+```html
+<!-- views/components/card.blaze.html -->
+<div class="card"><h2>{{ title }}</h2>{!! slot !!}<footer>{!! footer !!}</footer></div>
+```
+```html
+<!-- any view -->
+<x-card title="Hello" :count="n + 1">
+  <p>default slot body</p>
+  <x-slot:footer>a named slot</x-slot:footer>
+</x-card>
+```
+
+Attributes become props (plain strings, `{{ }}`-interpolated, or `:bound`
+expressions; `kebab-case` → `camelCase`), the inner content is the `slot`, and
+`<x-slot:name>` fills a named slot. `<x-divider/>` self-closes.
+
 ## 4. Validate input (`req.validate`)
 
 Laravel-style pipe rules. On failure it throws `ValidationException` (map it to

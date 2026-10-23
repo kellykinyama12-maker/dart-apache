@@ -148,6 +148,20 @@ class BlazeEngine {
           continue;
         }
       }
+      if (src.startsWith('</x-', i)) {
+        final c = _componentCloseAt(src, i);
+        flush();
+        toks.add(_Tok.componentClose(c.name));
+        i = c.end;
+        continue;
+      }
+      if (src.startsWith('<x-', i)) {
+        final o = _componentOpenAt(src, i);
+        flush();
+        toks.add(_Tok.componentOpen(o.name, o.attrs, o.selfClose));
+        i = o.end;
+        continue;
+      }
       text.write(src[i]);
       i++;
     }
@@ -190,28 +204,139 @@ class BlazeEngine {
   }
 }
 
+// Component names allow letters, digits, _ - . : (`:` for `<x-slot:footer>`).
+bool _isNameChar(String c) {
+  final u = c.codeUnitAt(0);
+  return (u >= 48 && u <= 57) ||
+      (u >= 65 && u <= 90) ||
+      (u >= 97 && u <= 122) ||
+      c == '_' ||
+      c == '-' ||
+      c == '.' ||
+      c == ':';
+}
+
+/// One attribute on a `<x-...>` tag. [bound] is a `:name="expr"` form.
+class _Attr {
+  _Attr(this.name, this.value, this.bound);
+  final String name;
+  final String value;
+  final bool bound;
+}
+
+class _ComponentOpen {
+  _ComponentOpen(this.name, this.attrs, this.selfClose, this.end);
+  final String name;
+  final List<_Attr> attrs;
+  final bool selfClose;
+  final int end;
+}
+
+class _ComponentClose {
+  _ComponentClose(this.name, this.end);
+  final String name;
+  final int end;
+}
+
+/// Parses `<x-name attr="v" :bound="expr" />` starting at [i] (`<x-`).
+_ComponentOpen _componentOpenAt(String src, int i) {
+  var j = i + 3; // past `<x-`
+  final nameStart = j;
+  while (j < src.length && _isNameChar(src[j])) {
+    j++;
+  }
+  final name = src.substring(nameStart, j);
+  final attrs = <_Attr>[];
+  while (j < src.length) {
+    while (j < src.length && _isWs(src[j])) {
+      j++;
+    }
+    if (j < src.length && src.startsWith('/>', j)) {
+      return _ComponentOpen(name, attrs, true, j + 2);
+    }
+    if (j < src.length && src[j] == '>') {
+      return _ComponentOpen(name, attrs, false, j + 1);
+    }
+    final attrStart = j;
+    while (j < src.length &&
+        src[j] != '=' &&
+        src[j] != '>' &&
+        !_isWs(src[j]) &&
+        !src.startsWith('/>', j)) {
+      j++;
+    }
+    final attrName = src.substring(attrStart, j);
+    String value = '';
+    if (j < src.length && src[j] == '=') {
+      j++; // past '='
+      final quote = src[j];
+      final valStart = j + 1;
+      j = src.indexOf(quote, valStart);
+      if (j < 0) throw TemplateError('unterminated attribute in <x-$name>');
+      value = src.substring(valStart, j);
+      j++; // past closing quote
+    }
+    final bound = attrName.startsWith(':');
+    attrs.add(_Attr(bound ? attrName.substring(1) : attrName, value, bound));
+  }
+  throw TemplateError('unterminated <x-$name>');
+}
+
+/// Parses `</x-name>` starting at [i] (`</x-`).
+_ComponentClose _componentCloseAt(String src, int i) {
+  var j = i + 4; // past `</x-`
+  final nameStart = j;
+  while (j < src.length && _isNameChar(src[j])) {
+    j++;
+  }
+  final name = src.substring(nameStart, j);
+  final end = src.indexOf('>', j);
+  if (end < 0) throw TemplateError('unterminated </x-$name>');
+  return _ComponentClose(name, end + 1);
+}
+
+bool _isWs(String c) => c == ' ' || c == '\t' || c == '\n' || c == '\r';
+
 // ---------------------------------------------------------------------------
 // Tokens + tree parser
 // ---------------------------------------------------------------------------
 
-enum _TokKind { text, echo, directive }
+enum _TokKind { text, echo, directive, componentOpen, componentClose }
 
 class _Tok {
   _Tok.text(this.value)
       : kind = _TokKind.text,
         raw = false,
-        args = '';
+        args = '',
+        attrs = const [],
+        selfClose = false;
   _Tok.echo(this.value, {this.raw = false})
       : kind = _TokKind.echo,
-        args = '';
+        args = '',
+        attrs = const [],
+        selfClose = false;
   _Tok.directive(this.value, this.args)
       : kind = _TokKind.directive,
-        raw = false;
+        raw = false,
+        attrs = const [],
+        selfClose = false;
+  _Tok.componentOpen(this.value, this.attrs, this.selfClose)
+      : kind = _TokKind.componentOpen,
+        raw = false,
+        args = '';
+  _Tok.componentClose(this.value)
+      : kind = _TokKind.componentClose,
+        raw = false,
+        args = '',
+        attrs = const [],
+        selfClose = false;
 
   final _TokKind kind;
-  final String value; // text, echo source, or directive name
+  final String value; // text, echo source, directive name, or component name
   final String args; // directive args
   final bool raw;
+  final List<_Attr> attrs; // component attributes
+  final bool selfClose; // component self-closing tag
 }
 
 class _DirMatch {
@@ -233,13 +358,18 @@ class _TreeParser {
   int _pos = 0;
   String? extendsName;
 
-  /// Parses nodes until one of [stops] directive names (consumed by caller).
-  List<_Node> parseBlock(Set<String> stops) {
+  /// Parses nodes until one of [stops] directive names, or the component close
+  /// matching [componentStop] (both consumed by the caller).
+  List<_Node> parseBlock(Set<String> stops, {String? componentStop}) {
     final nodes = <_Node>[];
     while (_pos < _toks.length) {
       final t = _toks[_pos];
       if (t.kind == _TokKind.directive && stops.contains(t.value)) {
         return nodes;
+      }
+      if (t.kind == _TokKind.componentClose) {
+        if (t.value == componentStop) return nodes;
+        throw TemplateError('unexpected </x-${t.value}>');
       }
       _pos++;
       switch (t.kind) {
@@ -249,9 +379,27 @@ class _TreeParser {
           nodes.add(_EchoNode(Expression.parse(t.value), t.raw));
         case _TokKind.directive:
           _directive(t, nodes);
+        case _TokKind.componentOpen:
+          nodes.add(_parseComponent(t));
+        case _TokKind.componentClose:
+          break; // handled above
       }
     }
     return nodes;
+  }
+
+  _Node _parseComponent(_Tok open) {
+    if (open.selfClose) {
+      return _ComponentNode(open.value, open.attrs, const []);
+    }
+    final body = parseBlock(const {}, componentStop: open.value);
+    if (!(_pos < _toks.length &&
+        _toks[_pos].kind == _TokKind.componentClose &&
+        _toks[_pos].value == open.value)) {
+      throw TemplateError('unclosed <x-${open.value}>');
+    }
+    _pos++; // consume the matching close
+    return _ComponentNode(open.value, open.attrs, body);
   }
 
   void _directive(_Tok t, List<_Node> nodes) {
@@ -440,6 +588,58 @@ class _IncludeNode extends _Node {
       Map<String, String> sections) {
     out.write(engine.render(name, ctx));
   }
+}
+
+/// A `<x-name attr=... >slot</x-name>` component: renders the template
+/// `components/<name>` with the attributes as props plus `slot` (default body)
+/// and any `<x-slot:foo>` named slots as additional context values.
+class _ComponentNode extends _Node {
+  _ComponentNode(this.name, this.attrs, this.body);
+  final String name;
+  final List<_Attr> attrs;
+  final List<_Node> body;
+
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final props = <String, Object?>{};
+    for (final a in attrs) {
+      props[_camelName(a.name)] = _attrValue(a, ctx);
+    }
+    // The body is the default slot, minus any <x-slot:foo> named slots.
+    final slots = <String, String>{};
+    final defaultSlot = StringBuffer();
+    for (final n in body) {
+      if (n is _ComponentNode && n.name.startsWith('slot:')) {
+        final sb = StringBuffer();
+        for (final c in n.body) {
+          c.render(sb, ctx, engine, sections);
+        }
+        slots[_camelName(n.name.substring(5))] = sb.toString();
+      } else {
+        n.render(defaultSlot, ctx, engine, sections);
+      }
+    }
+    final childCtx = <String, Object?>{
+      ...props,
+      'slot': defaultSlot.toString(),
+      ...slots,
+    };
+    out.write(engine.render('components.$name', childCtx));
+  }
+
+  static Object? _attrValue(_Attr a, Map<String, Object?> ctx) {
+    if (a.bound) return Expression.parse(a.value).evaluate(ctx); // :attr="expr"
+    if (!a.value.contains('{{')) return a.value; // plain string
+    return a.value.replaceAllMapped(
+        RegExp(r'\{\{(.*?)\}\}'),
+        (m) =>
+            '${Expression.parse(m.group(1)!.trim()).evaluate(ctx) ?? ''}');
+  }
+
+  // `user-name` -> `userName` so props are valid Blaze identifiers.
+  static String _camelName(String s) => s.replaceAllMapped(
+      RegExp(r'-([a-z])'), (m) => m.group(1)!.toUpperCase());
 }
 
 class _SectionNode extends _Node {
