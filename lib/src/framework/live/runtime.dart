@@ -212,6 +212,22 @@ const String liveRuntimeSource = r'''
     node.__liveTimer = setTimeout(fn, 150);
   }
 
+  // Collect a trigger element's data-live-* params into the action payload
+  // (e.g. data-live-id="5" -> {id: "5"}; data-live-item-id -> {itemId}).
+  var RESERVED = { click: 1, input: 1, change: 1, submit: 1, model: 1, key: 1, component: 1, state: 1 };
+  function payloadFrom(el) {
+    var out = {};
+    if (!el || !el.attributes) return out;
+    for (var i = 0; i < el.attributes.length; i++) {
+      var a = el.attributes[i];
+      if (a.name.indexOf('data-live-') !== 0) continue;
+      var key = a.name.slice(10);
+      if (RESERVED[key]) continue;
+      out[key.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })] = a.value;
+    }
+    return out;
+  }
+
   function run(el, action, payload) {
     act(el, action, payload).catch(function (e) {
       console.error('[dartisan-live]', e);
@@ -230,23 +246,23 @@ const String liveRuntimeSource = r'''
       var t = ev.target.closest('[data-live-click]');
       if (!t || !el.contains(t)) return;
       ev.preventDefault();
-      run(el, t.getAttribute('data-live-click'));
+      run(el, t.getAttribute('data-live-click'), payloadFrom(t));
     });
     el.addEventListener('input', function (ev) {
       var t = ev.target.closest('[data-live-input]');
       if (!t || !el.contains(t)) return;
-      debounce(t, function () { run(el, t.getAttribute('data-live-input')); });
+      debounce(t, function () { run(el, t.getAttribute('data-live-input'), payloadFrom(t)); });
     });
     el.addEventListener('change', function (ev) {
       var t = ev.target.closest('[data-live-change]');
       if (!t || !el.contains(t)) return;
-      run(el, t.getAttribute('data-live-change'));
+      run(el, t.getAttribute('data-live-change'), payloadFrom(t));
     });
     el.addEventListener('submit', function (ev) {
       var t = ev.target.closest('[data-live-submit]');
       if (!t || !el.contains(t)) return;
       ev.preventDefault();
-      run(el, t.getAttribute('data-live-submit'));
+      run(el, t.getAttribute('data-live-submit'), payloadFrom(t));
     });
   }
 

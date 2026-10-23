@@ -253,6 +253,28 @@ get a typed model and a runnable migration.
       Tested against a stateful loopback DB, and **live-verified** against a
       running `dart-db-server` (generated migration → insert/select → rollback).
 
+## 3j. Phase 10 — dynamic sample apps
+
+Real, runnable apps that exercise the pipeline end-to-end — the best docs are
+working code.
+
+- [x] **O0 — Live action params.** The client runtime folds a trigger
+      element's `data-live-*` attributes into the action payload
+      (`data-live-id="5"` → `{id: "5"}`, kebab→camel, reserved names excluded),
+      so Live components can act on a specific item (toggle/remove by id).
+      Validated over WebTransport in Edge (todo toggle/remove, poll vote).
+- [x] **O1 — Todo (Live).** `example/todo_app.dart` — a reactive list:
+      `data-live-model` input + add, keyed `<li>` toggle/remove, clear-completed,
+      a remaining count. **Playwright-verified over HTTP/3**
+      (`tool/browser-h3-test/todo_wt_test.js`): add ×2 → toggle #1 → remove #2.
+- [x] **O2 — Poll (Live).** `example/poll_app.dart` — vote buttons with live
+      tallies and server-rendered bars; richer state, bigger diff win.
+      **Playwright-verified over HTTP/3** (`poll_wt_test.js`): Dart×2 + PHP×1.
+- [x] **O3 — Guestbook (MVC).** `example/guestbook_app.dart` +
+      `example/guestbook_views/` — the server-rendered side: routes + Blaze +
+      validation + CSRF + sessions/flash + the data layer. **Playwright-verified
+      over HTTP/1.1**: CSRF token + flash + entry render + `min:2` rejection.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

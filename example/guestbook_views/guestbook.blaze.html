@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
+    .flash { color: #0a7d2c; }
+    .error { color: #c0261a; }
+    .entry { border-top: 1px solid #ddd; padding: .5rem 0; }
+    input, textarea { width: 100%; padding: .4rem; box-sizing: border-box; }
+    button { padding: .4rem .8rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  @if(flash)<p class="flash">{{ flash }}</p>@endif
+  @if(error)<p class="error">{{ error }}</p>@endif
+  <form method="post" action="/entries">
+    @csrf
+    <p><label>Name<br><input name="name" maxlength="40" autofocus></label></p>
+    <p><label>Message<br><textarea name="message" rows="3" maxlength="280"></textarea></label></p>
+    <button type="submit">Sign</button>
+  </form>
+  <h2>Signatures</h2>
+  @if(entries.isEmpty)
+    <p>No entries yet — be the first to sign.</p>
+  @else
+    @foreach(entries as entry)
+      <div class="entry"><strong>{{ entry.name }}</strong><br>{{ entry.message }}</div>
+    @endforeach
+  @endif
+</body>
+</html>
