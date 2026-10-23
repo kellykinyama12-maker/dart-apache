@@ -196,6 +196,18 @@ void main() {
       expect(fe.renderString(src, {'role': 'user'}), 'U');
       expect(fe.renderString(src, {'role': 'guest'}), '?');
     });
+
+    test('@includeIf skips a missing partial; @includeWhen gates on a cond', () {
+      File('${dir.path}/present.blaze.html').writeAsStringSync('[here]');
+      expect(fe.renderString("@includeIf('present')"), '[here]');
+      expect(fe.renderString("@includeIf('absent')"), '');
+      expect(
+          fe.renderString("@includeWhen(show, 'present')", {'show': true}),
+          '[here]');
+      expect(
+          fe.renderString("@includeWhen(show, 'present')", {'show': false}),
+          '');
+    });
   });
 
   group('components (<x-...>)', () {

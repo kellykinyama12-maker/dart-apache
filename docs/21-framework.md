@@ -440,6 +440,12 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AI1 — `redirectWith`.** `req.redirectWith('/done', {'status': 'Saved!'})`
       flashes the data (surviving one redirect) and redirects — the values show
       up in the next view's `flash` map (post/redirect/get).
+
+## 3ae. Phase 31 — conditional includes
+
+- [x] **AJ1 — `@includeIf` / `@includeWhen`.** `@includeIf('view')` renders the
+      partial only when it exists; `@includeWhen(cond, 'view'[, data])` renders
+      it only when the condition is truthy. `BlazeEngine.exists(name)` backs it.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

@@ -68,6 +68,10 @@ class BlazeEngine {
   /// Drops cached compiled templates (e.g. after editing files in dev).
   void clearCache() => _compiled.clear();
 
+  /// Whether a template [name] exists on disk (dotted name -> folder path).
+  bool exists(String name) =>
+      File('$directory/${name.replaceAll('.', '/')}$extension').existsSync();
+
   _Template _load(String name) {
     final cached = _compiled[name];
     if (cached != null) return cached;
@@ -110,7 +114,8 @@ class BlazeEngine {
     'csrf',
     'checked', 'selected', 'disabled', 'readonly', 'required',
     'switch', 'case', 'default', 'break', 'endswitch',
-    'include', 'extends', 'section', 'endsection', 'yield',
+    'include', 'includeIf', 'includeWhen', 'extends', 'section', 'endsection',
+    'yield',
   };
 
   List<_Tok> _tokenize(String src) {
@@ -450,6 +455,23 @@ class _TreeParser {
         nodes.add(_IncludeNode(
             _literal(parts[0]),
             parts.length > 1 ? Expression.parse(parts[1].trim()) : null));
+      case 'includeIf':
+        final parts = _splitFirstComma(t.args);
+        nodes.add(_IncludeNode(
+            _literal(parts[0]),
+            parts.length > 1 ? Expression.parse(parts[1].trim()) : null,
+            true));
+      case 'includeWhen':
+        final parts = _splitFirstComma(t.args);
+        if (parts.length < 2) {
+          throw TemplateError('@includeWhen expects (condition, "view"[, data])');
+        }
+        final rest = _splitFirstComma(parts[1].trim());
+        nodes.add(_IncludeNode(
+            _literal(rest[0]),
+            rest.length > 1 ? Expression.parse(rest[1].trim()) : null,
+            false,
+            Expression.parse(parts[0].trim())));
       case 'yield':
         nodes.add(_YieldNode(_literal(t.args)));
       case 'section':
@@ -795,12 +817,16 @@ class _ForelseNode extends _Node {
 }
 
 class _IncludeNode extends _Node {
-  _IncludeNode(this.name, [this.dataExpr]);
+  _IncludeNode(this.name, [this.dataExpr, this.ifExists = false, this.condition]);
   final String name;
   final Expression? dataExpr;
+  final bool ifExists;
+  final Expression? condition;
   @override
   void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
       Map<String, String> sections) {
+    if (condition != null && !condition!.evaluateTruthy(ctx)) return;
+    if (ifExists && !engine.exists(name)) return;
     var child = ctx;
     final data = dataExpr?.evaluate(ctx);
     if (data is Map) {
