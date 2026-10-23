@@ -313,6 +313,15 @@ class Request {
   /// Redirects to the referring page (the `Referer` header), or [fallback].
   Future<void> back({String fallback = '/', int status = 302}) =>
       redirect(header('referer') ?? fallback, status: status);
+
+  /// Flashes each entry of [data] to the session (surviving one redirect) and
+  /// redirects to [location]. The flashed values appear in the next view's
+  /// `flash` map (the post/redirect/get pattern).
+  Future<void> redirectWith(String location, Map<String, Object?> data,
+      {int status = 302}) {
+    data.forEach(session.flash);
+    return redirect(location, status: status);
+  }
 }
 
 /// A route handler receiving a [Request].

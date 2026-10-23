@@ -434,6 +434,12 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **AH1 — `@switch/@case/@default/@break`.** Value-matching branch selection
       in templates (`@switch(role) @case('admin')…@break @default… @endswitch`).
+
+## 3ad. Phase 30 — redirect with flash
+
+- [x] **AI1 — `redirectWith`.** `req.redirectWith('/done', {'status': 'Saved!'})`
+      flashes the data (surviving one redirect) and redirects — the values show
+      up in the next view's `flash` map (post/redirect/get).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

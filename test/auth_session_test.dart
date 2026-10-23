@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dart_apache/dart_apache.dart';
 import 'package:test/test.dart';
@@ -194,7 +195,28 @@ void main() {
       expect(ok.statusCode, 200);
       expect(ok.text, 'secret');
     });
+
+    test('redirectWith flashes data then shows it after the redirect', () async {
+      final app = (Router(sessions: sm, views: _flashViews())
+            ..get('/save', (r) => r.redirectWith('/done', {'status': 'Saved!'}))
+            ..get('/done', (r) => r.view('page')))
+          .toApp();
+
+      final saved = await run(app, 'GET', '/save');
+      expect(saved.statusCode, 302);
+      expect(saved.headers['location'], '/done');
+      final cookie = saved.headers['set-cookie']!.split(';').first;
+
+      final done = await run(app, 'GET', '/done', headers: {'cookie': cookie});
+      expect(done.text, contains('Saved!'));
+    });
   });
+}
+
+BlazeEngine _flashViews() {
+  final dir = Directory.systemTemp.createTempSync('blaze_flash');
+  File('${dir.path}/page.blaze.html').writeAsStringSync('[{{ flash.status }}]');
+  return BlazeEngine(dir.path, cache: false);
 }
 
 class _FakeExchange implements ServerExchange {
