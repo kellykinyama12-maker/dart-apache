@@ -67,6 +67,27 @@ void main() {
       await route.handler(ex, ex.response);
       expect(ex.response.text, 'clock=router');
     });
+
+    test('request.events + request.queue drive services off the handler',
+        () async {
+      final seen = <String>[];
+      final queue = Queue();
+      final events = EventDispatcher()
+        ..listen<Clock>((c) => queue.push(CallbackJob(() => seen.add(c.label))));
+      final router = Router()
+        ..instance<EventDispatcher>(events)
+        ..instance<Queue>(queue)
+        ..get('/ping', (r) async {
+          await r.events.dispatch(Clock('fired'));
+          await r.text('ok');
+        });
+      final route = router.toApp().match('GET', '/ping')!;
+      final ex = _FakeExchange('GET', Uri.parse('/ping'));
+      await route.handler(ex, ex.response);
+      await queue.settle();
+      expect(ex.response.text, 'ok');
+      expect(seen, ['fired']);
+    });
   });
 }
 

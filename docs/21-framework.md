@@ -121,6 +121,31 @@ layer Laravel leans on. All pure Dart, in-process, no sidecars.
       html/text), and `mailer.queue(message, queue)` for background delivery via
       H2. (SMTP is a later transport.) (`lib/src/framework/mail/mail.dart`.)
 
+## 3d. Phase 4 — cohesion & polish
+
+The primitives exist; Phase 4 makes them hang together and backs the claims with
+docs + numbers. No new external dependencies.
+
+- [x] **I1 — Wire services through DI.** Register `EventDispatcher`, `Queue`,
+      and `Mailer` on the container, expose `request.events` / `request.queue`
+      sugar, and demonstrate the flow in the showcase (adding a note fires a
+      `NoteAdded` event whose listener queues a `LogTransport` notification,
+      delivered off the request path). Verified: `[mail] to=…` logged after a
+      note POST.
+- [ ] **I2 — CSRF protection.** A session-backed CSRF token, a `verifyCsrf`
+      middleware for unsafe methods (POST/PUT/PATCH/DELETE), a Blaze `@csrf`
+      directive (hidden field) + `request.csrfToken`. Pairs with G2 sessions.
+- [ ] **I3 — Perf receipt for Live diffing.** A `tool/bench_*` (or test-backed
+      measurement) comparing bytes-on-the-wire per update, full-HTML vs H1
+      patch, so the diffing win is a measured number like everything else.
+- [ ] **I4 — Docs refresh.** Fold Phase 2 + Phase 3 (auth/sessions, DI,
+      events/queue/mail, Live diffing) into the getting-started tutorial so the
+      end-to-end story is complete.
+- [ ] *(parked)* **SMTP mail transport** — a real `MailTransport` over sockets.
+      Deprioritized.
+- [ ] *(parked)* **wire DB driver** — a pure-Dart Postgres `Database` impl.
+      Deprioritized.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

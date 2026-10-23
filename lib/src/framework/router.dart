@@ -6,6 +6,8 @@ import '../pipeline/server_exchange.dart';
 import '../wt/wt_handler.dart';
 import 'auth/session.dart';
 import 'container/container.dart';
+import 'events/events.dart';
+import 'queue/queue.dart';
 import 'template/blaze.dart';
 import 'validation.dart';
 
@@ -38,6 +40,12 @@ class Request {
 
   /// Resolves `T` from the service [container].
   T make<T>() => container.make<T>();
+
+  /// The app event dispatcher (requires it registered on the container).
+  EventDispatcher get events => make<EventDispatcher>();
+
+  /// The app job queue (requires it registered on the container).
+  Queue get queue => make<Queue>();
 
   /// The request's session (requires `Router(sessions: ...)`). Lazily decrypted
   /// from the `Cookie` header; mutations are persisted as a `Set-Cookie` by the

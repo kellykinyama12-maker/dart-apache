@@ -54,6 +54,13 @@ class CounterComponent extends LiveComponent {
 final Uint8List _demoKey =
     Uint8List.fromList(List<int>.generate(32, (i) => (i * 7 + 13) & 0xff));
 
+/// Fired when a note is created; a listener queues a notification (I1 demo).
+class NoteAdded {
+  NoteAdded(this.owner, this.text);
+  final String owner;
+  final String text;
+}
+
 /// Top-level so it can cross the worker-isolate boundary.
 DartApp buildApp(ServerConfig config) {
   final wtPath = config.wtPath ?? '/wt';
@@ -68,6 +75,26 @@ DartApp buildApp(ServerConfig config) {
 
   // DI: a single in-memory store for this worker, resolved in handlers.
   router.singleton<InMemoryDatabase>((_) => InMemoryDatabase());
+
+  // Application services, wired through the container (I1).
+  final events = EventDispatcher();
+  final queue = Queue(
+    onFailed: (job, error, _) => stderr.writeln('[queue] job failed: $error'),
+  );
+  final mailer = Mailer(LogTransport(stdout.writeln));
+  // Adding a note fires an event; its listener queues a notification off the
+  // request path (event -> queue -> mail transport).
+  events.listen<NoteAdded>((e) => mailer.queue(
+        Message(
+          to: '${e.owner}@example.test',
+          subject: 'New note',
+          text: 'You added: ${e.text}',
+        ),
+        queue,
+      ));
+  router.instance<EventDispatcher>(events);
+  router.instance<Queue>(queue);
+  router.instance<Mailer>(mailer);
 
   // Reactive channel for the Live counter.
   router.wt = liveWtHandler(LiveRegistry()..register(CounterComponent()));
@@ -127,9 +154,9 @@ DartApp buildApp(ServerConfig config) {
       final db = req.make<InMemoryDatabase>();
       try {
         final data = await req.validate({'text': 'required|min:1'});
-        await db
-            .table('notes')
-            .insert({'owner': req.auth.id, 'text': data['text']});
+        final text = data['text'].toString();
+        await db.table('notes').insert({'owner': req.auth.id, 'text': text});
+        await req.events.dispatch(NoteAdded(req.auth.id.toString(), text));
         req.session.flash('status', 'Note added.');
         await req.redirect('/dashboard');
       } on ValidationException catch (e) {
