@@ -19,7 +19,8 @@ class ValidationException implements Exception {
 /// `numeric`, `integer`, `boolean`, `url`, `alpha`, `alphanum`, `min:N`,
 /// `max:N`, `between:a,b`, `digits:N`, `in:a,b,c`, `not_in:a,b`, `same:field`,
 /// `different:field`, `starts_with:a,b`, `ends_with:a,b`, `regex:pattern`,
-/// `uuid`, `ip`, `json`, `size:N`, `confirmed`.
+/// `uuid`, `ip`, `json`, `size:N`, `date`, `before:date`, `after:date`,
+/// `confirmed`.
 class Validator {
   static final _email = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   static final _alpha = RegExp(r'^[A-Za-z]+$');
@@ -161,6 +162,24 @@ class Validator {
         return _uuid.hasMatch(s)
             ? null
             : 'The $field must be a valid UUID.';
+      case 'date':
+        return DateTime.tryParse(s) != null
+            ? null
+            : 'The $field must be a valid date.';
+      case 'before':
+        final d = DateTime.tryParse(s);
+        final limit = DateTime.tryParse(arg);
+        if (d == null) return 'The $field must be a valid date.';
+        return (limit != null && d.isBefore(limit))
+            ? null
+            : 'The $field must be a date before $arg.';
+      case 'after':
+        final d = DateTime.tryParse(s);
+        final limit = DateTime.tryParse(arg);
+        if (d == null) return 'The $field must be a valid date.';
+        return (limit != null && d.isAfter(limit))
+            ? null
+            : 'The $field must be a date after $arg.';
       case 'ip':
         return _isIp(s) ? null : 'The $field must be a valid IP address.';
       case 'json':

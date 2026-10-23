@@ -81,6 +81,22 @@ void main() {
       expect(Validator.validate({'s': 'abc'}, {'s': 'size:4'}), isNotEmpty);
       expect(Validator.validate({'n': '7'}, {'n': 'numeric|size:7'}), isEmpty);
     });
+
+    test('date / before / after', () {
+      expect(Validator.validate({'d': '2025-01-15'}, {'d': 'date'}), isEmpty);
+      expect(Validator.validate({'d': 'nope'}, {'d': 'date'}), isNotEmpty);
+      expect(
+          Validator.validate(
+              {'d': '2025-01-01'}, {'d': 'before:2025-06-01'}),
+          isEmpty);
+      expect(
+          Validator.validate(
+              {'d': '2025-12-01'}, {'d': 'before:2025-06-01'}),
+          isNotEmpty);
+      expect(
+          Validator.validate({'d': '2025-12-01'}, {'d': 'after:2025-06-01'}),
+          isEmpty);
+    });
   });
 
   group('scaffold', () {

@@ -527,6 +527,11 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AX1 — `has` / `filled` / `missing`.** Request input presence checks
       (`has` = key present, `filled` = present and non-empty, `missing` =
       absent).
+
+## 3at. Phase 46 — date validation
+
+- [x] **AY1 — `date` / `before` / `after`.** Parseable-date validation plus
+      `before:YYYY-MM-DD` / `after:YYYY-MM-DD` chronological comparisons.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
