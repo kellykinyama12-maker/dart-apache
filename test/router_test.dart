@@ -94,6 +94,25 @@ void main() {
       expect(jsonDecode(res.text), {'a': 1});
       expect(res.headers['content-type'], contains('application/json'));
     });
+
+    test('created / noContent / back responders', () async {
+      final app = (Router()
+            ..post('/c', (r) => r.created({'id': 1}, location: '/c/1'))
+            ..delete('/d', (r) => r.noContent())
+            ..get('/b', (r) => r.back(fallback: '/home')))
+          .toApp();
+      final c = await run(app, 'POST', '/c');
+      expect(c.statusCode, 201);
+      expect(c.headers['location'], '/c/1');
+      expect(jsonDecode(c.text), {'id': 1});
+      expect((await run(app, 'DELETE', '/d')).statusCode, 204);
+      final b = await run(app, 'GET', '/b',
+          headers: {'referer': '/prev'});
+      expect(b.statusCode, 302);
+      expect(b.headers['location'], '/prev');
+      final bf = await run(app, 'GET', '/b');
+      expect(bf.headers['location'], '/home');
+    });
   });
 
   group('middleware', () {

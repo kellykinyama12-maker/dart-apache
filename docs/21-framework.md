@@ -418,6 +418,12 @@ Small quality-of-life wins developers reach for daily.
       (`router.get('/users/:id', show, name: 'users.show')`) and build URLs with
       `router.urlFor('users.show', {'id': 42})` (`:param` substitution; leftover
       params become a query string).
+
+## 3aa. Phase 27 — response helpers
+
+- [x] **AF1 — `created` / `noContent` / `back`.** `req.created(data,
+      {location})` (201 JSON), `req.noContent()` (204), and `req.back({fallback})`
+      (redirect to the `Referer`).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

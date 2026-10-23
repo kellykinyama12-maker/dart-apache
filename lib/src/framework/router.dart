@@ -284,6 +284,22 @@ class Request {
     return response.writeJson(value, status: status);
   }
 
+  /// Responds `201 Created` with a JSON body, optionally setting `Location`.
+  Future<void> created(Object? value, {String? location}) {
+    if (location != null) response.setHeader('location', location);
+    return sendJson(value, status: 201);
+  }
+
+  /// Responds `204 No Content` (empty body).
+  Future<void> noContent() async {
+    _responded = true;
+    _persistSession();
+    response
+      ..setStatus(204)
+      ..setHeader('content-length', '0');
+    await response.close();
+  }
+
   Future<void> redirect(String location, {int status = 302}) async {
     _responded = true;
     _persistSession();
@@ -293,6 +309,10 @@ class Request {
       ..setHeader('content-length', '0');
     await response.close();
   }
+
+  /// Redirects to the referring page (the `Referer` header), or [fallback].
+  Future<void> back({String fallback = '/', int status = 302}) =>
+      redirect(header('referer') ?? fallback, status: status);
 }
 
 /// A route handler receiving a [Request].
