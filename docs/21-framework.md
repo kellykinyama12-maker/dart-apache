@@ -148,8 +148,8 @@ docs + numbers. No new external dependencies.
       DI, events/queue/mail, Live diffing) into the getting-started tutorial
       ([22-getting-started.md](22-getting-started.md) §7–§9) so the end-to-end
       story is complete.
-- [ ] *(parked)* **SMTP mail transport** — a real `MailTransport` over sockets.
-      Deprioritized.
+- [ ] *(parked)* **SMTP mail transport** — moved to Phase 6 (§3f) and in
+      progress.
 - [ ] *(parked)* **wire DB driver** — a pure-Dart Postgres `Database` impl.
       Deprioritized.
 
@@ -177,6 +177,21 @@ slice shippable + tested + PHP-safe.
 - [x] **J5 — Rate limiting.** A `rateLimit(max, window, {keyBy})` middleware —
       in-memory fixed-window per key (client IP by default) → `429` with
       `Retry-After`. Wired onto the showcase login group.
+
+## 3f. Phase 6 — real mail transport (SMTP)
+
+Unparks the SMTP transport. Our `MailTransport` seam (H3) means this is a
+drop-in: `Mailer(SmtpTransport(...))` with no other changes.
+
+- [x] **K1 — SMTP submission transport.** A self-contained
+      `SmtpTransport implements MailTransport` on `dart:io` only (no new
+      dependencies): connect (implicit-TLS / STARTTLS / plain), `EHLO`,
+      `AUTH LOGIN`/`PLAIN`, `MAIL FROM` / `RCPT TO` / `DATA` with RFC-5322
+      headers (`multipart/alternative` when both text + html), dot-stuffing and
+      CRLF. Tested against a loopback fake SMTP server (no external services).
+      For a full MTA (direct-MX delivery, DKIM, SPF/DMARC, DSN) the heavyweight
+      [`dart-email-server`](https://github.com/KellyKinyama/dart-email-server)
+      package can implement the same `MailTransport` instead.
 
 ## 4. Principles
 

@@ -17,6 +17,7 @@ export 'src/framework/container/container.dart';
 export 'src/framework/events/events.dart';
 export 'src/framework/queue/queue.dart';
 export 'src/framework/mail/mail.dart';
+export 'src/framework/mail/smtp_transport.dart';
 export 'src/client/alt_svc.dart';
 export 'src/client/alt_svc_client.dart';
 export 'src/client/cancel_token.dart';
