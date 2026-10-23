@@ -138,6 +138,15 @@ void main() {
       expect(fe.render('page', {'who': 'ada'}),
           '<html><body>Hi [inc:ada]</body></html>');
     });
+
+    test('@include with data merges a map into the partial context', () {
+      File('${dir.path}/row.blaze.html').writeAsStringSync('[row:{{ who }}]');
+      expect(
+          fe.renderString("@include('row', data)", {
+            'data': {'who': 'grace'}
+          }),
+          '[row:grace]');
+    });
   });
 
   group('components (<x-...>)', () {

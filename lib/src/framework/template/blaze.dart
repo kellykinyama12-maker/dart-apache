@@ -302,6 +302,25 @@ _ComponentClose _componentCloseAt(String src, int i) {
 
 bool _isWs(String c) => c == ' ' || c == '\t' || c == '\n' || c == '\r';
 
+/// Splits directive args on the first top-level comma (outside quotes), for
+/// `@include('name', expr)`.
+List<String> _splitFirstComma(String s) {
+  var inQuote = false;
+  String? quote;
+  for (var i = 0; i < s.length; i++) {
+    final c = s[i];
+    if (inQuote) {
+      if (c == quote) inQuote = false;
+    } else if (c == "'" || c == '"') {
+      inQuote = true;
+      quote = c;
+    } else if (c == ',') {
+      return [s.substring(0, i), s.substring(i + 1)];
+    }
+  }
+  return [s];
+}
+
 // ---------------------------------------------------------------------------
 // Tokens + tree parser
 // ---------------------------------------------------------------------------
@@ -412,7 +431,10 @@ class _TreeParser {
       case 'extends':
         extendsName = _literal(t.args);
       case 'include':
-        nodes.add(_IncludeNode(_literal(t.args)));
+        final parts = _splitFirstComma(t.args);
+        nodes.add(_IncludeNode(
+            _literal(parts[0]),
+            parts.length > 1 ? Expression.parse(parts[1].trim()) : null));
       case 'yield':
         nodes.add(_YieldNode(_literal(t.args)));
       case 'section':
@@ -652,12 +674,18 @@ class _ForelseNode extends _Node {
 }
 
 class _IncludeNode extends _Node {
-  _IncludeNode(this.name);
+  _IncludeNode(this.name, [this.dataExpr]);
   final String name;
+  final Expression? dataExpr;
   @override
   void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
       Map<String, String> sections) {
-    out.write(engine.render(name, ctx));
+    var child = ctx;
+    final data = dataExpr?.evaluate(ctx);
+    if (data is Map) {
+      child = <String, Object?>{...ctx, ...data.cast<String, Object?>()};
+    }
+    out.write(engine.render(name, child));
   }
 }
 

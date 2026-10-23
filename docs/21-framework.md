@@ -356,7 +356,14 @@ Small quality-of-life wins developers reach for daily.
       join`, e.g. `{{ upper(name) }}`, `{{ limit(body, 100) }}`,
       `{{ default(title, 'Untitled') }}`. No arbitrary calls — only the
       allow-listed helpers.
+## 3r. Phase 18 — more validation rules + `@include` data
 
+- [x] **V1 — More validation rules.** `same:field`, `different:field`,
+      `between:a,b`, `digits:N`, `not_in:a,b`, `starts_with:a,b`,
+      `ends_with:a,b`, `regex:pattern`.
+- [x] **W1 — `@include` with data.** `@include('users.row', item)` merges the
+      (map) value into the partial's context (the old single-arg form still
+      shares the caller's context).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
