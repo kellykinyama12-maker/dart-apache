@@ -86,6 +86,8 @@ Flags:
 | `--proxy=`       | (unset)     | Reverse-proxy route `/(prefix)=http://host:port[,http://host2:port]` (repeatable, round-robin) |
 | `--idle-timeout=`| `120`       | Keep-alive idle timeout in seconds (slowloris defense) |
 | `--max-body=`    | `10485760`  | Max request body in bytes (`413` beyond this) |
+| `--dart-cgi`     | off         | Run `.dart` files as CGI scripts via the Dart VM (edit, no compile — the Dart analog of `php-cgi`) |
+| `--dart-exe=`    | `dart`      | Path to the `dart` executable used by `--dart-cgi` |
 
 Then open `http://127.0.0.1:8080/`.
 

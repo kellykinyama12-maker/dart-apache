@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../config.dart';
+import '../dart_script/dart_cgi.dart';
 import '../mime_types.dart';
 import '../php/cgi_backend.dart';
 import '../php/fastcgi.dart';
@@ -31,6 +32,7 @@ class RequestPipeline {
         _php = config.phpFpm != null
             ? FastCgiBackend(config)
             : CgiBackend(config),
+        _dart = config.dartCgiEnabled ? DartCgiBackend(config) : null,
         _proxy = config.proxyRoutes.isEmpty
             ? null
             : ReverseProxyHandler(config.proxyRoutes),
@@ -44,6 +46,10 @@ class RequestPipeline {
   final DartApp? app;
   final RequestResolver _resolver;
   final PhpBackend _php;
+
+  /// Optional Dart script backend (`--dart-cgi`): runs `.dart` files via the
+  /// Dart VM, CGI-style. Null when disabled.
+  final PhpBackend? _dart;
   final ReverseProxyHandler? _proxy;
 
   /// Optional in-memory response cache (`--cache`), null when disabled.
@@ -55,6 +61,7 @@ class RequestPipeline {
 
   Future<void> close() async {
     await _php.close();
+    await _dart?.close();
     await _proxy?.close();
   }
 
@@ -181,7 +188,21 @@ class RequestPipeline {
     final resolution = _resolver.resolve(exchange.uri.path);
     switch (resolution.kind) {
       case ResolutionKind.staticFile:
-        await _serveStaticResource(exchange, response, resolution.filePath);
+        // `--dart-cgi`: run a resolved `.dart` file via the Dart VM, like PHP.
+        if (_dart != null && resolution.filePath.endsWith('.dart')) {
+          await _serveCgiResponse(
+            exchange,
+            response,
+            await _dart.handle(
+              exchange: exchange,
+              scriptFilename: resolution.filePath,
+              scriptName: exchange.uri.path,
+              pathInfo: '',
+            ),
+          );
+        } else {
+          await _serveStaticResource(exchange, response, resolution.filePath);
+        }
       case ResolutionKind.redirect:
         final q = exchange.uri.query;
         final location =
@@ -528,7 +549,15 @@ class RequestPipeline {
       scriptName: resolution.scriptName,
       pathInfo: resolution.pathInfo,
     );
+    await _serveCgiResponse(exchange, response, php);
+  }
 
+  /// Serves a CGI-style response (from PHP or the Dart script backend).
+  Future<void> _serveCgiResponse(
+    ServerExchange exchange,
+    ServerResponse response,
+    PhpResponse php,
+  ) async {
     response.setStatus(php.statusCode, php.reasonPhrase);
     var sawContentType = false;
     php.headers.forEach((name, values) {

@@ -4,6 +4,7 @@ library;
 
 export 'src/config.dart';
 export 'src/mime_types.dart';
+export 'src/dart_script/dart_cgi.dart';
 export 'src/client/alt_svc.dart';
 export 'src/client/alt_svc_client.dart';
 export 'src/client/cancel_token.dart';

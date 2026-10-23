@@ -44,6 +44,8 @@ class ServerConfig {
     this.cacheEnabled = false,
     this.cacheMaxBytes = 64 * 1024 * 1024,
     this.accessLogEnabled = true,
+    this.dartCgiEnabled = false,
+    this.dartExecutable = 'dart',
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],        wtTicketKey = wtTicketKey ?? WtTicket.generateKey(),        workers = (workers == null || workers < 1)
             ? Platform.numberOfProcessors
@@ -106,6 +108,13 @@ class ServerConfig {
   /// Maximum accepted request body size in bytes; larger declared bodies get a
   /// `413 Payload Too Large`.
   final int maxRequestBodyBytes;
+
+  /// Runs `.dart` files as CGI-style scripts via the Dart VM (`--dart-cgi`),
+  /// the direct analog of `php-cgi` for PHP: edit the script, no compile.
+  final bool dartCgiEnabled;
+
+  /// Path to the `dart` executable used by the Dart script backend.
+  final String dartExecutable;
 
   /// Whether the in-memory response micro-cache is enabled (`--cache`).
   final bool cacheEnabled;
@@ -245,6 +254,8 @@ class ServerConfig {
       cacheMaxBytes:
           int.tryParse(map['cache-max-bytes'] ?? '') ?? 64 * 1024 * 1024,
       accessLogEnabled: !args.contains('--no-access-log'),
+      dartCgiEnabled: args.contains('--dart-cgi'),
+      dartExecutable: map['dart-exe'] ?? 'dart',
       proxyRoutes: proxyRoutes,
       wtPath: wtPath,
       wtBridgePath: wtBridgePath,

@@ -173,7 +173,46 @@ dart run your_app.dart --root=./public --port=8443 --http3 --dev --wt-path=/wt
 See the WT types: [`WtMessage`], [`WtSession`], [`WtConnect`] in
 [`lib/src/wt/wt_handler.dart`](../lib/src/wt/wt_handler.dart).
 
-## 8. Running your app
+## 8. Running your app — compiled or not (like PHP)
+
+You never *have* to compile. `dart run` is the Dart VM (the interpreter/JIT) —
+the direct analog of PHP's interpreter — so you can **edit and run without a
+compile step**. Three models, by how fixed you want the server vs. how
+in-process you want the app:
+
+1. **Edit-and-run (dev loop).** Run everything with `dart run your_app.dart`;
+   edit handlers, restart (or hot-reload) to apply. No compile. Compile only to
+   ship a standalone binary (`dart compile exe`).
+
+2. **`.dart` as CGI — drop a file, like PHP (`--dart-cgi`).** A `.dart` file
+   under the document root is executed by the Dart VM per request, exactly as
+   `php-cgi` runs a `.php` file — edit the script, the next request runs the new
+   code, no compile, server untouched. See [`public/hello.dart`](../public/hello.dart):
+
+   ```sh
+   dart run bin/dart_apache.dart --root=./public --port=8080 --dart-cgi
+   # GET /hello.dart?name=ada   -> runs public/hello.dart on the Dart VM
+   ```
+
+   The script reads the CGI env from `Platform.environment` and the body from
+   `stdin`, then writes `Header: value` lines, a blank line, and the body to
+   `stdout`. Trade-off: Dart VM startup per request (fine for dev / low
+   traffic). For production, embed the app in-process or use model 3.
+
+3. **Compile the server once, iterate the app behind it (like nginx + PHP-FPM).**
+   Compile `bin/dart_apache.dart` once; point a route at a **persistent** Dart
+   app you run with `dart run` — rebuild only the app, never the server:
+
+   ```sh
+   dart compile exe bin/dart_apache.dart -o build/dart_apache          # once
+   ./build/dart_apache --root=./public --port=8080 --proxy=/=http://127.0.0.1:9000
+   dart run your_app_backend.dart   # :9000 — edit freely, no server rebuild
+   ```
+
+   A proxied app is reached over HTTP/1.1, so **in-process HTTP/3 / WebTransport
+   app handlers** need the embedded model (1), not the proxy.
+
+### Worker kinds &amp; flags
 
 Use `ServerSupervisor` (worker-per-core isolates, shared socket, graceful
 reload):
