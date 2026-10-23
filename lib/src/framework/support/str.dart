@@ -28,6 +28,34 @@ class Str {
   static String ucfirst(String value) =>
       value.isEmpty ? value : value[0].toUpperCase() + value.substring(1);
 
+  // Splits an identifier into lowercase words on spaces, _/-, and camelCase
+  // boundaries.
+  static List<String> _words(String value) => value
+      .replaceAllMapped(RegExp('([a-z0-9])([A-Z])'), (m) => '${m[1]} ${m[2]}')
+      .split(RegExp(r'[\s_-]+'))
+      .where((w) => w.isNotEmpty)
+      .map((w) => w.toLowerCase())
+      .toList();
+
+  /// `camelCase` (`foo_bar` / `foo-bar` / `FooBar` -> `fooBar`).
+  static String camel(String value) {
+    final words = _words(value);
+    if (words.isEmpty) return '';
+    return words.first +
+        words.skip(1).map((w) => w[0].toUpperCase() + w.substring(1)).join();
+  }
+
+  /// `StudlyCase` / `PascalCase` (`foo_bar` -> `FooBar`).
+  static String studly(String value) =>
+      _words(value).map((w) => w[0].toUpperCase() + w.substring(1)).join();
+
+  /// `snake_case` (`fooBar` / `foo-bar` -> `foo_bar`), using [separator].
+  static String snake(String value, [String separator = '_']) =>
+      _words(value).join(separator);
+
+  /// `kebab-case` (`fooBar` / `foo_bar` -> `foo-bar`).
+  static String kebab(String value) => snake(value, '-');
+
   /// Truncates to [limit] characters, appending [end] when cut.
   static String limit(String value, int limit, [String end = '...']) =>
       value.length <= limit ? value : '${value.substring(0, limit).trimRight()}$end';

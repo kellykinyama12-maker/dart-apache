@@ -446,6 +446,11 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AJ1 — `@includeIf` / `@includeWhen`.** `@includeIf('view')` renders the
       partial only when it exists; `@includeWhen(cond, 'view'[, data])` renders
       it only when the condition is truthy. `BlazeEngine.exists(name)` backs it.
+
+## 3af. Phase 32 — case helpers
+
+- [x] **AK1 — `Str` case conversions.** `Str.camel`, `Str.studly`, `Str.snake`,
+      and `Str.kebab` (split on spaces/`_`/`-`/camelCase boundaries).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

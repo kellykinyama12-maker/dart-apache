@@ -12,6 +12,13 @@ void main() {
       expect(Str.title('hello_world foo'), 'Hello World Foo');
       expect(Str.ucfirst('ada'), 'Ada');
     });
+    test('camel / studly / snake / kebab', () {
+      expect(Str.camel('foo_bar baz'), 'fooBarBaz');
+      expect(Str.studly('foo-bar'), 'FooBar');
+      expect(Str.snake('fooBar'), 'foo_bar');
+      expect(Str.snake('FooBarBaz'), 'foo_bar_baz');
+      expect(Str.kebab('fooBar'), 'foo-bar');
+    });
     test('limit + words', () {
       expect(Str.limit('abcdef', 3), 'abc...');
       expect(Str.limit('abc', 5), 'abc');
