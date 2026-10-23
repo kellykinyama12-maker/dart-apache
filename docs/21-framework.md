@@ -467,6 +467,12 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **AN1 — `sumBy` / `avgBy` / `maxBy` / `minBy`.** Numeric aggregates over
       any `Iterable` (e.g. totals/averages/extremes of query rows).
+
+## 3aj. Phase 36 — shared view data
+
+- [x] **AO1 — `BlazeEngine.share`.** `engine.share('app', 'Dartisan')` /
+      `shareAll({...})` injects global values into every rendered view (the
+      `View::share` analog; per-render context overrides).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

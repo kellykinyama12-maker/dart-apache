@@ -33,17 +33,27 @@ class BlazeEngine {
   final bool cache;
 
   final Map<String, _Template> _compiled = HashMap();
+  final Map<String, Object?> _shared = {};
+
+  /// Shares a value with every rendered view (per-view [context] overrides it).
+  /// The framework analog of Laravel's `View::share` — handy for layout
+  /// globals like the app name or the authenticated user.
+  void share(String key, Object? value) => _shared[key] = value;
+
+  /// Shares every entry of [values] with all views (see [share]).
+  void shareAll(Map<String, Object?> values) => _shared.addAll(values);
 
   /// Renders the template [name] with [context].
   String render(String name, [Map<String, Object?> context = const {}]) {
     final t = _load(name);
+    final ctx = _shared.isEmpty ? context : {..._shared, ...context};
     final sections = <String, String>{};
     final body = StringBuffer();
-    _renderNodes(t.nodes, context, sections, body);
+    _renderNodes(t.nodes, ctx, sections, body);
     if (t.extendsName != null) {
       final parent = _load(t.extendsName!);
       final out = StringBuffer();
-      _renderNodes(parent.nodes, context, sections, out);
+      _renderNodes(parent.nodes, ctx, sections, out);
       return out.toString();
     }
     return body.toString();
@@ -53,13 +63,14 @@ class BlazeEngine {
   /// beyond what the engine's [directory] provides). Handy for tests.
   String renderString(String source, [Map<String, Object?> context = const {}]) {
     final t = _compile(source);
+    final ctx = _shared.isEmpty ? context : {..._shared, ...context};
     final sections = <String, String>{};
     final body = StringBuffer();
-    _renderNodes(t.nodes, context, sections, body);
+    _renderNodes(t.nodes, ctx, sections, body);
     if (t.extendsName != null) {
       final parent = _load(t.extendsName!);
       final out = StringBuffer();
-      _renderNodes(parent.nodes, context, sections, out);
+      _renderNodes(parent.nodes, ctx, sections, out);
       return out.toString();
     }
     return body.toString();

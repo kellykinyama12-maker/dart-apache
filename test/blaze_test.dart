@@ -51,6 +51,15 @@ void main() {
       expect(ev("number_format(1234567)"), '1,234,567');
       expect(ev("number_format(1234.5, 2)"), '1,234.50');
     });
+
+    test('shared global data is available to every view', () {
+      final e = BlazeEngine('.', cache: false)
+        ..share('app', 'Dartisan')
+        ..shareAll({'year': 2025});
+      expect(e.renderString('{{ app }} {{ year }}'), 'Dartisan 2025');
+      // Per-render context overrides shared values.
+      expect(e.renderString('{{ app }}', {'app': 'Other'}), 'Other');
+    });
   });
 
   group('echo + escaping', () {
