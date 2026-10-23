@@ -221,8 +221,23 @@ class Request {
     return data;
   }
 
-  /// A value flashed as "old input" by the previous request (for form
-  /// repopulation), or [fallback].
+  /// Only the listed [keys] from [input] (for controlled mass-assignment).
+  Future<Map<String, Object?>> only(List<String> keys) async {
+    final data = await input();
+    return {
+      for (final k in keys)
+        if (data.containsKey(k)) k: data[k],
+    };
+  }
+
+  /// Everything from [input] except the listed [keys].
+  Future<Map<String, Object?>> except(List<String> keys) async {
+    final data = await input();
+    return {
+      for (final e in data.entries)
+        if (!keys.contains(e.key)) e.key: e.value,
+    };
+  }
   Object? old(String field, [Object? fallback]) {
     if (_sessions == null) return fallback;
     final o = session.flashed('_old');

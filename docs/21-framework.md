@@ -473,6 +473,12 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AO1 — `BlazeEngine.share`.** `engine.share('app', 'Dartisan')` /
       `shareAll({...})` injects global values into every rendered view (the
       `View::share` analog; per-render context overrides).
+
+## 3ak. Phase 37 — input subsets
+
+- [x] **AP1 — `only` / `except`.** `req.only(['title', 'body'])` /
+      `req.except(['_token'])` return a filtered slice of the request input (for
+      controlled mass-assignment).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

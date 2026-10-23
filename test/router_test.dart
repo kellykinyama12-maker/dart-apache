@@ -95,6 +95,21 @@ void main() {
       expect(res.headers['content-type'], contains('application/json'));
     });
 
+    test('only / except filter request input', () async {
+      final app = (Router()
+            ..post('/f', (r) async => r.sendJson(await r.only(['a', 'c'])))
+            ..post('/g', (r) async => r.sendJson(await r.except(['b']))))
+          .toApp();
+      final only = await run(app, 'POST', '/f',
+          body: utf8.encode('{"a":1,"b":2,"c":3}'),
+          headers: {'content-type': 'application/json'});
+      expect(jsonDecode(only.text), {'a': 1, 'c': 3});
+      final except = await run(app, 'POST', '/g',
+          body: utf8.encode('{"a":1,"b":2,"c":3}'),
+          headers: {'content-type': 'application/json'});
+      expect(jsonDecode(except.text), {'a': 1, 'c': 3});
+    });
+
     test('view renders with a custom status (e.g. 404 pages)', () async {
       final dir = Directory.systemTemp.createTempSync('blaze_status');
       File('${dir.path}/missing.blaze.html').writeAsStringSync('Not here');
