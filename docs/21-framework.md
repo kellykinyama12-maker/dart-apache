@@ -63,6 +63,29 @@ This is the thing PHP can't do without bolting on infrastructure.
       tutorial that leads with the HTTP/3 + Live story
       ([22-getting-started.md](22-getting-started.md)).
 
+## 3b. Phase 2 — close the Livewire/Laravel gaps (post-F6)
+
+The F1–F6 core is done. Phase 2 lands the features that make the framework feel
+production-real, in value order. Each slice stays shippable + tested + PHP-safe.
+
+- [x] **G1 — Live DOM morphing + input binding.** Replace the client's
+      `innerHTML =` full-replace with a **keyed DOM morph** (morphdom-lite) that
+      preserves focus, caret/selection, scroll, and uncommitted input state
+      across updates. Add two-way `data-live-model` (input value folds into
+      state on the next action) and `data-live-input` / `data-live-change` /
+      `data-live-submit` delegation (debounced). This closes the last real gap
+      vs Livewire and is the HTTP/3 showcase. Live-verified in Edge over real
+      HTTP/3 (counter +3/−1 → 2). (`public/app/dartisan-live.js`.)
+- [ ] **G2 — Auth + sessions.** A signed-cookie session store + `Session`
+      facade, login/logout helpers, a `requireAuth` middleware guard, and Blaze
+      `@auth / @guest` directives — built on the existing WT ticket primitive.
+- [ ] **G3 — Service container (DI).** `bind` / `singleton` / `make`, resolved
+      per-request and exposed to controllers and components.
+- [ ] **G4 — Showcase app.** one end-to-end example (routes + Blaze +
+      validation + data + Live) that doubles as a living demo + bench target.
+- [ ] *(parked)* **wire DB driver** — a pure-Dart Postgres `Database` impl for
+      shared, persistent state across workers. Deprioritized.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
