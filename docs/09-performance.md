@@ -60,25 +60,32 @@ Apache's static serving (~95k)** outright, so for hot files routed through
 | OFF — php-cgi every request | 740 req/s | 21.6 ms | baseline |
 | ON — `--cache` (`X-Cache: HIT`) | **130k** req/s | **130 µs** | 🟢 **~176× faster** |
 
-### App logic — PHP vs compiled in-process Dart (`tool/bench_php_vs_dart.sh`)
+### App logic — PHP vs compiled in-process Dart (`tool/bench_php_vs_dart.sh`, `tool/bench_fpm_vs_dart.sh`)
 
-Same server, **same endpoints**: the PHP file (`*.php` via php-cgi) vs the
-native Dart handler (`/parity/*`, AOT-compiled). The parity app serves both, so
-only the execution model differs.
+Same server, **same endpoints**: the PHP file (`*.php`) vs the native Dart
+handler (`/parity/*`, AOT-compiled). The parity app serves both, so only the
+execution model differs. PHP measured two ways — `php-cgi` (fork per request)
+and `php-fpm` (persistent pool, the modern setup).
 
-| Endpoint | PHP (php-cgi) | Compiled Dart (in-process) | Verdict |
-| --- | ---: | ---: | --- |
-| index (HTML: `htmlspecialchars`+date) | 425 req/s · 75 ms | **154,859** req/s · 229 µs | 🟢 **~365× faster** |
-| cacheable (dynamic text) | 643 req/s · 50 ms | **182,599** req/s · 186 µs | 🟢 **~284× faster** |
-| fc (JSON) | 631 req/s · 51 ms | **163,101** req/s · 216 µs | 🟢 **~258× faster** |
+| Endpoint | php-cgi | php-fpm | Compiled Dart (in-process) |
+| --- | ---: | ---: | ---: |
+| index (HTML) | 425 req/s · 75 ms | 21,085 req/s · 1.6 ms | **171,240** req/s · 198 µs |
+| cacheable (text) | 643 req/s · 50 ms | 18,370 req/s · 2.2 ms | **146,510** req/s · 267 µs |
+| fc (JSON) | 631 req/s · 51 ms | 26,461 req/s · 1.2 ms | **158,409** req/s · 231 µs |
 
-**Honest read:** most of that gap is **`php-cgi` forking an interpreter per
-request** (the CGI model), not the app logic — in-process Dart simply avoids the
-per-request process. Against **php-fpm** (a persistent pool) PHP is far faster
-and the gap shrinks a lot (still a process hop vs in-process). The fair takeaway:
-*for dynamic app code, compiled in-process Dart handlers are dramatically faster
-than php-cgi and have sub-millisecond latency* — this is the reason to write the
-hot paths as native Dart (or front php-fpm, or lean on `--cache`).
+**Dart vs php-cgi:** ~250–365× faster. **Dart vs php-fpm:** 🟢 **~6–8× faster**
+(and ~6–11× lower latency).
+
+**Honest read:**
+- `php-cgi` is slow because it **forks an interpreter per request** (CGI) —
+  that's the bulk of the 250×+ gap, not the app logic. `php-fpm` (a warm pool)
+  is **~30–50× faster than php-cgi**, so compare modern PHP against `php-fpm`.
+- Against `php-fpm`, compiled in-process Dart is still **~6–8× faster** — the
+  remaining gap is the **FastCGI process hop + interpreter overhead** vs native
+  code running in the serving isolate (no IPC, no re-parse).
+- Takeaway: for hot dynamic paths, **native Dart handlers win clearly even vs
+  modern PHP**; if you stay on PHP, use `php-fpm` (not `php-cgi`) and lean on
+  `--cache`.
 
 ### What the numbers say
 
