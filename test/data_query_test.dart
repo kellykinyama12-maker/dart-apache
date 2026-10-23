@@ -69,6 +69,20 @@ void main() {
       expect(await db.table('users').where('age', '>=', 54).count(), 2);
     });
 
+    test('find / value / exists / pluck / orderByDesc / whereNull', () async {
+      expect((await db.table('users').find(1))?['name'], 'ada');
+      expect(await db.table('users').find(99), isNull);
+      expect(await db.table('users').where('name', 'linus').value('age'), 54);
+      expect(await db.table('users').where('age', '>=', 54).exists(), isTrue);
+      expect(await db.table('users').where('name', 'nobody').exists(), isFalse);
+      final names = await db.table('users').orderByDesc('age').pluck('name');
+      expect(names, ['grace', 'linus', 'ada']);
+      await db.table('users').insert({'name': 'nn', 'age': null});
+      expect((await db.table('users').whereNull('age').get()).single['name'],
+          'nn');
+      expect(await db.table('users').whereNotNull('age').count(), 3);
+    });
+
     test('paginate returns a page + metadata', () async {
       final p = await db.table('users').orderBy('age').paginate(page: 1, perPage: 2);
       expect(p.items.map((r) => r['name']), ['ada', 'linus']);

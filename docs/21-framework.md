@@ -491,6 +491,12 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AR1 — `@each('view', items, 'var'[, 'empty'])`.** Renders a partial once
       per item (binding `var`), or the optional empty view when the collection
       is empty — the `@foreach`+`@include` shorthand.
+
+## 3an. Phase 40 — query builder conveniences
+
+- [x] **AS1 — `find` / `value` / `exists` / `pluck` / `orderByDesc` /
+      `whereNull`.** Common Eloquent-style shortcuts on `QueryBuilder` (all
+      delegate to existing operators, so both drivers support them).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

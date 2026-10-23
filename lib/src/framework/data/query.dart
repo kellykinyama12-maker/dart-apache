@@ -121,11 +121,20 @@ class QueryBuilder {
     return this;
   }
 
+  /// `WHERE field IS NULL`.
+  QueryBuilder whereNull(String field) => where(field, '=', null);
+
+  /// `WHERE field IS NOT NULL`.
+  QueryBuilder whereNotNull(String field) => where(field, '!=', null);
+
   QueryBuilder orderBy(String field, {bool descending = false}) {
     orderByField = field;
     this.descending = descending;
     return this;
   }
+
+  /// `orderBy(field, descending: true)`.
+  QueryBuilder orderByDesc(String field) => orderBy(field, descending: true);
 
   QueryBuilder limit(int n) {
     limitCount = n;
@@ -145,6 +154,19 @@ class QueryBuilder {
     final rows = await (limit(1).get());
     return rows.isEmpty ? null : rows.first;
   }
+
+  /// The row with the given `id` (shorthand for `where('id', id).first()`).
+  Future<Map<String, Object?>?> find(Object? id) => where('id', id).first();
+
+  /// A single column [field] from the first matching row, or null.
+  Future<Object?> value(String field) async => (await first())?[field];
+
+  /// Whether any row matches the current filter.
+  Future<bool> exists() async => (await count()) > 0;
+
+  /// A list of one column [field] across all matching rows.
+  Future<List<Object?>> pluck(String field) async =>
+      (await get()).map((r) => r[field]).toList();
 
   /// Counts rows matching the filter (ignoring limit/offset).
   Future<int> count() => _db.runCount(this);
