@@ -43,9 +43,13 @@ This is the thing PHP can't do without bolting on infrastructure.
       middleware — on top of the existing `DartApp` pipeline.
 - [ ] **F3 — `dartisan` CLI.** scaffold a project, `make:controller/view`,
       `serve` (dev, hot-reload via `dart run`), `routes` listing.
-- [ ] **F4 — Dartisan Live.** reactive components over WebTransport: a
-      component base, server-side render + diff, a tiny client runtime that
-      applies diffs and sends events back over the WT session.
+- [x] **F4 — Dartisan Live.** reactive components over WebTransport:
+      `LiveComponent` (state round-trips to the client), `LiveRegistry`,
+      `liveWtHandler` (parses an action, updates + re-renders, streams the new
+      HTML back over the WT stream), and `liveMount` (initial render + client
+      runtime `public/app/dartisan-live.js`). **Live-verified in Edge** over
+      real HTTP/3: a counter's +/- clicks drive state over WebTransport
+      (`example/live_app.dart`, `tool/browser-h3-test/live_wt_test.js`).
 - [ ] **F5 — Data layer.** request validation (FormRequest), then a thin
       record/query layer and a first DB driver.
 - [ ] **F6 — Docs site.** guides, API reference, a "build a Dartisan app in 10

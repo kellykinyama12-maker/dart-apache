@@ -1,0 +1,115 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dart_apache/dart_apache.dart';
+import 'package:test/test.dart';
+
+/// Server-side unit tests for Dartisan Live (no browser): component update/
+/// render, the mount markup, and the WebTransport action handler.
+class _Counter extends LiveComponent {
+  @override
+  String get name => 'counter';
+  @override
+  Map<String, Object?> initialState() => {'count': 0};
+  @override
+  Map<String, Object?> update(
+      String action, Map<String, Object?> state, Map<String, Object?> p) {
+    final c = (state['count'] as num?)?.toInt() ?? 0;
+    return switch (action) {
+      'increment' => {'count': c + 1},
+      'decrement' => {'count': c - 1},
+      _ => state,
+    };
+  }
+
+  @override
+  String render(Map<String, Object?> state) =>
+      '<span>${state['count']}</span>';
+}
+
+class _FakeWtSession implements WtSession {
+  final List<String> sent = [];
+  @override
+  WtConnect get connect => const WtConnect(path: '/wt', authority: 'x', headers: {});
+  @override
+  void send(List<int> bytes) => sent.add(utf8.decode(bytes));
+  @override
+  void sendUni(List<int> bytes) => sent.add(utf8.decode(bytes));
+  @override
+  void sendDatagram(List<int> bytes) {}
+}
+
+WtMessage _action(Map<String, Object?> body) => WtMessage(
+      data: Uint8List.fromList(utf8.encode(jsonEncode(body))),
+      isDatagram: false,
+      sessionId: 0,
+      bidiStreamId: 4,
+    );
+
+void main() {
+  group('LiveComponent', () {
+    final c = _Counter();
+    test('update applies actions', () {
+      expect(c.update('increment', {'count': 4}, {}), {'count': 5});
+      expect(c.update('decrement', {'count': 4}, {}), {'count': 3});
+      expect(c.update('noop', {'count': 4}, {}), {'count': 4});
+    });
+    test('render reflects state', () {
+      expect(c.render({'count': 7}), contains('7'));
+    });
+  });
+
+  group('liveMount', () {
+    test('emits container with name + escaped state + boot', () {
+      final html = liveMount(_Counter(), wtPath: '/live');
+      expect(html, contains('data-live-component="counter"'));
+      expect(html, contains('data-live-state='));
+      expect(html, contains('window.DARTISAN_LIVE_PATH="/live"'));
+      expect(html, contains('<script src="/app/dartisan-live.js">'));
+    });
+    test('inlineRuntime embeds the runtime', () {
+      final html = liveMount(_Counter(), inlineRuntime: 'CODE();');
+      expect(html, contains('<script>CODE();</script>'));
+      expect(html, isNot(contains('<script src=')));
+    });
+  });
+
+  group('liveWtHandler', () {
+    test('applies action + replies with re-rendered html + state', () {
+      final registry = LiveRegistry()..register(_Counter());
+      final handler = liveWtHandler(registry);
+      final session = _FakeWtSession();
+
+      handler(session, _action({
+        'id': 9,
+        'component': 'counter',
+        'action': 'increment',
+        'state': {'count': 41},
+      }));
+
+      expect(session.sent, hasLength(1));
+      final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
+      expect(reply['id'], 9);
+      expect(reply['state'], {'count': 42});
+      expect(reply['html'], contains('42'));
+    });
+
+    test('ignores unknown components and datagrams', () {
+      final handler = liveWtHandler(LiveRegistry()..register(_Counter()));
+      final s1 = _FakeWtSession();
+      handler(s1, _action({'component': 'missing', 'action': 'x'}));
+      expect(s1.sent, isEmpty);
+
+      final s2 = _FakeWtSession();
+      handler(
+        s2,
+        WtMessage(
+          data: Uint8List.fromList(utf8.encode('{}')),
+          isDatagram: true,
+          sessionId: 0,
+        ),
+      );
+      expect(s2.sent, isEmpty);
+    });
+  });
+}
