@@ -116,6 +116,7 @@ class BlazeEngine {
   static const Set<String> _knownDirectives = {
     'if', 'elseif', 'else', 'endif',
     'unless', 'endunless',
+    'isset', 'endisset',
     'foreach', 'endforeach',
     'forelse', 'empty', 'endforelse',
     'error', 'enderror',
@@ -554,6 +555,10 @@ class _TreeParser {
         final body = parseBlock({'endunless'});
         _expect('endunless');
         nodes.add(_IfNode([_Branch(Expression.parse('!(${t.args})'), body)]));
+      case 'isset':
+        final body = parseBlock({'endisset'});
+        _expect('endisset');
+        nodes.add(_IssetNode(Expression.parse(t.args), body));
       case 'forelse':
         final parts = t.args.split(' as ');
         if (parts.length != 2) {
@@ -787,6 +792,23 @@ class _IfNode extends _Node {
           n.render(out, ctx, engine, sections);
         }
         return;
+      }
+    }
+  }
+}
+
+/// `@isset(expr) … @endisset`: renders its body when the expression is not null
+/// (unlike `@if`, a `0`/`''`/`false` still counts as set).
+class _IssetNode extends _Node {
+  _IssetNode(this.expr, this.body);
+  final Expression expr;
+  final List<_Node> body;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    if (expr.evaluate(ctx) != null) {
+      for (final n in body) {
+        n.render(out, ctx, engine, sections);
       }
     }
   }

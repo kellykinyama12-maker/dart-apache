@@ -251,6 +251,12 @@ void main() {
           '<s>123');
     });
 
+    test('@isset renders when the value is non-null (even if falsy)', () {
+      expect(fe.renderString('@isset(v)[{{ v }}]@endisset', {'v': 0}), '[0]');
+      expect(fe.renderString('@isset(v)x@endisset', {'v': null}), '');
+      expect(fe.renderString('@isset(v)x@endisset', {}), '');
+    });
+
     test('@includeIf skips a missing partial; @includeWhen gates on a cond', () {
       File('${dir.path}/present.blaze.html').writeAsStringSync('[here]');
       expect(fe.renderString("@includeIf('present')"), '[here]');

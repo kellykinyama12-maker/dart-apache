@@ -548,6 +548,11 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **BB1 — `ip` / `userAgent` / `host` / `bearerToken`.** Request metadata
       getters (`bearerToken` parses `Authorization: Bearer …`).
+
+## 3ax. Phase 50 — @isset
+
+- [x] **BC1 — `@isset(expr) … @endisset`.** Renders its body when the expression
+      is non-null (unlike `@if`, a `0`/`''`/`false` still counts as set).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
