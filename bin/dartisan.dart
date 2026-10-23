@@ -23,6 +23,10 @@ Future<void> main(List<String> args) async {
       _make('controllers', rest, controllerSource, suffix: '_controller');
     case 'make:component':
       _make('components', rest, componentSource, suffix: '_component');
+    case 'make:model':
+      _make('models', rest, modelSource, suffix: '');
+    case 'make:middleware':
+      _make('middleware', rest, middlewareSource, suffix: '');
     case 'make:view':
       _makeView(rest);
     case 'serve':
@@ -149,6 +153,8 @@ Usage:
   dartisan new <name>               scaffold a new app
   dartisan make:controller <Name>   create controllers/<name>_controller.dart
   dartisan make:component <Name>    create components/<name>_component.dart (Live)
+  dartisan make:model <Name>        create models/<name>.dart (record + repository)
+  dartisan make:middleware <Name>   create middleware/<name>.dart
   dartisan make:view <name>         create views/<name>.blaze.html
   dartisan serve [entry] [args]     run the app (dart run; dev)
 ''');

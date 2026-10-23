@@ -67,12 +67,46 @@ void main() {
       expect(src, contains('data-live-click'));
     });
 
-    test('newProjectFiles includes pubspec, bin, views', () {
+    test('modelSource is a record + repository over the Database', () {
+      final src = modelSource('Post');
+      expect(src, contains('class Post'));
+      expect(src, contains('Post.fromRow'));
+      expect(src, contains('class PostRepository'));
+      expect(src, contains("static const table = 'posts'"));
+      expect(src, contains('final Database db'));
+    });
+
+    test('middlewareSource is a Middleware stub', () {
+      final src = middlewareSource('EnsureAdmin');
+      expect(src, contains('final Middleware ensureAdmin ='));
+      expect(src, contains('await next();'));
+    });
+
+    test('newProjectFiles includes the full starter', () {
       final files = newProjectFiles('MyApp');
       expect(files.keys, contains('pubspec.yaml'));
       expect(files.keys, contains('bin/my_app.dart'));
-      expect(files.keys, contains('views/home.blaze.html'));
-      expect(files['bin/my_app.dart'], contains('Router(views:'));
+      expect(
+          files.keys,
+          containsAll([
+            'views/layout.blaze.html',
+            'views/home.blaze.html',
+            'views/about.blaze.html',
+            'views/login.blaze.html',
+            'views/dashboard.blaze.html',
+          ]));
+      final bin = files['bin/my_app.dart']!;
+      expect(bin, contains('Router('));
+      expect(bin, contains('SessionManager(_appKey'));
+      expect(bin, contains('verifyCsrf()'));
+      expect(bin, contains('liveWtHandler'));
+      expect(bin, contains('inlineRuntime: liveRuntimeSource'));
+      expect(bin, contains("requireAuth(redirectTo: '/login')"));
+    });
+
+    test('newProjectFiles writes the given dart-apache path', () {
+      final files = newProjectFiles('demo', dartApachePath: '/abs/dart-apache');
+      expect(files['pubspec.yaml'], contains('path: /abs/dart-apache'));
     });
   });
 }

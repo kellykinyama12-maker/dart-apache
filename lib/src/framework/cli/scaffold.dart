@@ -17,6 +17,12 @@ String snakeCase(String s) => s
     .replaceAll(RegExp(r'^_+'), '')
     .replaceAll(RegExp(r'_+'), '_');
 
+/// Converts `EnsureAdmin` / `ensure-admin` to `ensureAdmin`.
+String camelCase(String s) {
+  final p = pascalCase(s);
+  return p.isEmpty ? p : p[0].toLowerCase() + p.substring(1);
+}
+
 /// A controller class with an `index` action.
 String controllerSource(String name) {
   final cls = '${pascalCase(name)}Controller';
@@ -72,6 +78,70 @@ String viewSource(String name) => '''
 @endsection
 ''';
 
+/// A typed record + repository over the [Database] (edit fields to match your
+/// schema). The table name is the pluralized snake_case of [name].
+String modelSource(String name) {
+  final cls = pascalCase(name);
+  final table = '${snakeCase(name)}s';
+  return '''
+import 'package:dart_apache/dart_apache.dart';
+
+/// A record for the `$table` table. Add fields to match your schema.
+class $cls {
+  $cls({this.id, required this.name});
+
+  final int? id;
+  final String name;
+
+  factory $cls.fromRow(Map<String, Object?> row) => $cls(
+        id: row['id'] as int?,
+        name: row['name'] as String? ?? '',
+      );
+
+  Map<String, Object?> toMap() => {'name': name};
+}
+
+/// Query helper for [$cls] over any [Database] driver.
+class ${cls}Repository {
+  ${cls}Repository(this.db);
+
+  final Database db;
+  static const table = '$table';
+
+  Future<List<$cls>> all() async =>
+      (await db.table(table).get()).map($cls.fromRow).toList();
+
+  Future<$cls?> find(Object id) async {
+    final row = await db.table(table).where('id', id).first();
+    return row == null ? null : $cls.fromRow(row);
+  }
+
+  Future<$cls> create($cls model) async =>
+      $cls.fromRow(await db.table(table).insert(model.toMap()));
+
+  Future<int> update(Object id, Map<String, Object?> values) =>
+      db.table(table).where('id', id).update(values);
+
+  Future<int> delete(Object id) => db.table(table).where('id', id).delete();
+}
+''';
+}
+
+/// A middleware stub; register it with `router.use(...)`.
+String middlewareSource(String name) {
+  final fn = camelCase(name);
+  return '''
+import 'package:dart_apache/dart_apache.dart';
+
+/// Register with `router.use($fn)`.
+final Middleware $fn = (request, next) async {
+  // TODO: pre-processing (auth checks, headers, logging, ...).
+  await next();
+  // TODO: post-processing.
+};
+''';
+}
+
 /// All files for a fresh project named [app]. Keys are relative paths.
 /// [dartApachePath] is written into the generated pubspec as the path to this
 /// framework (the CLI passes an absolute path so the app builds from anywhere).
@@ -92,20 +162,113 @@ dependencies:
 ''',
     'bin/$slug.dart': '''
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dart_apache/dart_apache.dart';
 
+/// A reactive counter streamed over WebTransport/HTTP3 (run with --http3).
+class CounterComponent extends LiveComponent {
+  @override
+  String get name => 'counter';
+
+  @override
+  Map<String, Object?> initialState() => {'count': 0};
+
+  @override
+  Map<String, Object?> update(String action, Map<String, Object?> state,
+      Map<String, Object?> payload) {
+    final count = (state['count'] as num?)?.toInt() ?? 0;
+    return switch (action) {
+      'increment' => {'count': count + 1},
+      'decrement' => {'count': count - 1},
+      _ => state,
+    };
+  }
+
+  @override
+  String render(Map<String, Object?> state) =>
+      '<p style="font-size:1.5rem">Count: '
+      '<strong id="live-count">\${state['count']}</strong></p>'
+      '<button data-live-click="decrement">- 1</button> '
+      '<button data-live-click="increment">+ 1</button>';
+}
+
+// Demo session key. Replace with a 32-byte secret (env var) in production.
+final Uint8List _appKey =
+    Uint8List.fromList(List<int>.generate(32, (i) => (i * 7 + 11) & 0xff));
+
 /// Top-level so it crosses the worker-isolate boundary.
 DartApp buildApp(ServerConfig config) {
-  final router = Router(views: BlazeEngine('views'));
-  router.get('/', (req) => req.view('home', {'name': req.query('name') ?? 'world'}));
-  router.get('/hello/:name', (req) => req.view('home', {'name': req.param('name')}));
+  final wtPath = config.wtPath ?? '/wt';
+  final live = liveMount(CounterComponent(),
+      wtPath: wtPath, inlineRuntime: liveRuntimeSource);
+
+  final router = Router(
+    views: BlazeEngine('views'),
+    sessions: SessionManager(_appKey, secure: false),
+    maxBodyBytes: 1 << 20,
+    onError: (error, _) => stderr.writeln('error: \$error'),
+  );
+  router.singleton<InMemoryDatabase>((_) => InMemoryDatabase());
+  router.wt = liveWtHandler(LiveRegistry()..register(CounterComponent()));
+  router.use(verifyCsrf());
+
+  router.get('/', (req) => req.view('home', {
+        'title': 'Home',
+        'auth': req.auth.check,
+        'user': req.auth.id,
+        'name': req.query('name') ?? 'world',
+      }));
+  router.get('/about', (req) => req.view('about', {
+        'title': 'About',
+        'auth': req.auth.check,
+        'user': req.auth.id,
+      }));
+
+  router.get('/login', (req) => req.view('login', {
+        'title': 'Log in',
+        'auth': req.auth.check,
+        'error': null,
+        'csrf': req.csrfToken(),
+      }));
+  router.post('/login', (req) async {
+    try {
+      final data = await req.validate({'name': 'required|min:2'});
+      req.auth.login(data['name'].toString());
+      await req.redirect('/dashboard');
+    } on ValidationException catch (e) {
+      return req.view('login', {
+        'title': 'Log in',
+        'auth': req.auth.check,
+        'error': e.errors.values.first.first,
+        'csrf': req.csrfToken(),
+      });
+    }
+  });
+  router.post('/logout', (req) async {
+    req.auth.logout();
+    await req.redirect('/');
+  });
+
+  router.group('', () {
+    router.get('/dashboard', (req) => req.view('dashboard', {
+          'title': 'Dashboard',
+          'auth': true,
+          'user': req.auth.id,
+          'csrf': req.csrfToken(),
+          'live': live,
+        }));
+  }, middleware: [requireAuth(redirectTo: '/login')]);
+
   return router.toApp();
 }
 
 Future<void> main(List<String> args) async {
   final config = ServerConfig.fromArgs(args);
-  final server = ServerSupervisor(config, appBuilder: buildApp);
+  final http3 = args.contains('--http3');
+  final server = ServerSupervisor(config,
+      kind: http3 ? WorkerKind.unified : WorkerKind.http1,
+      appBuilder: buildApp);
   ProcessSignal.sigint.watch().listen((_) async {
     await server.stop();
     exit(0);
@@ -115,10 +278,25 @@ Future<void> main(List<String> args) async {
 ''',
     'views/layout.blaze.html': '''
 <!DOCTYPE html>
-<html>
-<head><title>$slug</title></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · $slug</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    nav a { margin-right: 1rem; }
+    .error { color: #c0261a; }
+  </style>
+</head>
 <body>
-@yield('content')
+  <nav>
+    <a href="/">Home</a>
+    <a href="/about">About</a>
+    @auth<a href="/dashboard">Dashboard</a>@endauth
+    @guest<a href="/login">Log in</a>@endguest
+  </nav>
+  @yield('content')
 </body>
 </html>
 ''',
@@ -127,17 +305,72 @@ Future<void> main(List<String> args) async {
 @section('content')
 <h1>Hello, {{ name }}!</h1>
 <p>Your Dartisan app is running. Edit views/home.blaze.html.</p>
+@auth<p>Signed in as <strong>{{ user }}</strong>.</p>@endauth
+@endsection
+''',
+    'views/about.blaze.html': '''
+@extends('layout')
+@section('content')
+<h1>About</h1>
+<p>This starter shows routing, Blaze views, sessions + auth, CSRF, DI, and a
+reactive Live component — all in one compiled binary.</p>
+@endsection
+''',
+    'views/login.blaze.html': '''
+@extends('layout')
+@section('content')
+<h1>Log in</h1>
+@if(error)<p class="error">{{ error }}</p>@endif
+<form method="post" action="/login">
+  @csrf
+  <label>Name <input name="name" autofocus></label>
+  <button type="submit">Log in</button>
+</form>
+<p style="color:#888">Demo auth: any name of 2+ characters.</p>
+@endsection
+''',
+    'views/dashboard.blaze.html': '''
+@extends('layout')
+@section('content')
+<h1>Dashboard</h1>
+<p>Welcome, <strong>{{ user }}</strong>.
+  <form method="post" action="/logout" style="display:inline">@csrf<button>Log out</button></form>
+</p>
+<h2>Live counter</h2>
+<p style="color:#888">Run with <code>--http3 --dev</code> (HTTPS) so the
+WebTransport channel can connect, then click the buttons.</p>
+{!! live !!}
 @endsection
 ''',
     'README.md': '''
 # $slug
 
-A Dartisan app on dart-apache.
+A Dartisan app on dart-apache — routing, Blaze views, sessions + auth, CSRF,
+DI, and a reactive Live component in one binary.
+
+## Run
 
 ```sh
 dart pub get
 dart run bin/$slug.dart --root=. --port=8080
-# or: dartisan serve
+```
+
+Open http://127.0.0.1:8080 — `/`, `/about`, `/login` (any name), `/dashboard`.
+
+For the Live counter over WebTransport/HTTP3, run with TLS:
+
+```sh
+dart run bin/$slug.dart --root=. --port=8443 --http3 --dev --wt-path=/wt
+```
+
+## Generate more
+
+```sh
+dartisan make:controller User
+dartisan make:component Counter
+dartisan make:model Post
+dartisan make:middleware EnsureAdmin
+dartisan make:view profile
 ```
 ''',
   };

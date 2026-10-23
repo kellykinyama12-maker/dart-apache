@@ -211,6 +211,26 @@ map — giving **shared, persistent state across worker isolates**.
       `dart-db-server` via `tool/smoke_sql_db.dart` (CREATE → insert w/ returned
       auto-id → filtered select/first/count → update → delete).
 
+## 3h. Phase 8 — scaffold enrichment
+
+Make `dartisan new` produce a *real* starter and add the generators an app
+developer reaches for next, so you're productive from the first command.
+
+- [x] **M1 — Embed the Live runtime.** Exposes the client runtime as a Dart
+      constant (`liveRuntimeSource`) generated from
+      `public/app/dartisan-live.js` by `tool/gen_live_runtime.dart`, so any app
+      can `liveMount(…, inlineRuntime: liveRuntimeSource)` with no asset file.
+- [x] **M2 — A batteries-included `new` starter.** The generated app ships a
+      shared layout + nav, home/about pages, sessions + CSRF, a login/logout +
+      a `requireAuth`-guarded dashboard, and a Live counter (inline runtime) —
+      a working tour of the framework. Verified: scaffold → `pub get` →
+      `dart analyze` (clean) → runs (home/about/guard/CSRF-login/dashboard+Live).
+- [x] **M3 — `make:model`.** Generates a typed record + repository over the
+      `Database` (`fromRow`/`toMap`, `all/find/create/update/delete` via the
+      `QueryBuilder`), wired to a table.
+- [x] **M4 — `make:middleware`.** Generates a `Middleware` stub (before/after
+      `next()`), ready to `router.use(...)`.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
