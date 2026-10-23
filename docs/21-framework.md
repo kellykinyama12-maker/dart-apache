@@ -532,6 +532,12 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **AY1 — `date` / `before` / `after`.** Parseable-date validation plus
       `before:YYYY-MM-DD` / `after:YYYY-MM-DD` chronological comparisons.
+
+## 3au. Phase 47 — response cookies
+
+- [x] **AZ1 — `withCookie`.** `req.withCookie('pref', 'dark', maxAge: …,
+      httpOnly: true)` queues a `Set-Cookie` header (Path/Max-Age/Domain/
+      HttpOnly/Secure/SameSite) for non-session cookies.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

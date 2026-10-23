@@ -146,6 +146,22 @@ void main() {
       expect(res.text, 'true/false/true'); // a present but empty; z missing
     });
 
+    test('withCookie queues a Set-Cookie header', () async {
+      final app = (Router()
+            ..get('/c', (r) {
+              r.withCookie('pref', 'dark',
+                  maxAge: const Duration(hours: 1), httpOnly: true);
+              return r.text('ok');
+            }))
+          .toApp();
+      final res = await run(app, 'GET', '/c');
+      final sc = res.headers['set-cookie']!;
+      expect(sc, startsWith('pref=dark; Path=/'));
+      expect(sc, contains('Max-Age=3600'));
+      expect(sc, contains('HttpOnly'));
+      expect(sc, contains('SameSite=Lax'));
+    });
+
     test('view renders with a custom status (e.g. 404 pages)', () async {
       final dir = Directory.systemTemp.createTempSync('blaze_status');
       File('${dir.path}/missing.blaze.html').writeAsStringSync('Not here');

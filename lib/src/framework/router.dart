@@ -143,6 +143,27 @@ class Request {
     return null;
   }
 
+  /// Queues a `Set-Cookie` header on the response. Call before a responder.
+  void withCookie(
+    String name,
+    String value, {
+    Duration? maxAge,
+    String path = '/',
+    String? domain,
+    bool httpOnly = false,
+    bool secure = false,
+    String sameSite = 'Lax',
+  }) {
+    final b = StringBuffer(
+        '${Uri.encodeComponent(name)}=${Uri.encodeComponent(value)}; Path=$path');
+    if (maxAge != null) b.write('; Max-Age=${maxAge.inSeconds}');
+    if (domain != null) b.write('; Domain=$domain');
+    if (httpOnly) b.write('; HttpOnly');
+    if (secure) b.write('; Secure');
+    b.write('; SameSite=$sameSite');
+    response.setHeader('set-cookie', b.toString());
+  }
+
   /// The raw request body bytes (buffered once, so multiple readers — e.g. CSRF
   /// middleware then `validate` — all see the same body). Throws
   /// [PayloadTooLargeException] when a body-size limit is set and exceeded.
