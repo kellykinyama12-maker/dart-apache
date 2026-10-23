@@ -372,6 +372,14 @@ Small quality-of-life wins developers reach for daily.
       styles bubbling up to the layout).
 - [x] **X2 — Typed query helpers.** `req.queryInt('page', 1)` and
       `req.queryBool('all')` (`1/true/on/yes`) over query parameters.
+
+## 3t. Phase 20 — Str helpers + inline sections
+
+- [x] **Y1 — `Str` helpers.** A pure, app-facing utility class (exported from
+      `package:dart_apache`): `Str.slug`, `title`, `ucfirst`, `limit`, `words`,
+      `mask`, `random`, and naive `plural`/`singular`.
+- [x] **Y2 — Inline `@section('name', value)`.** The two-argument form sets a
+      yielded section without a closing `@endsection` (block form unchanged).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

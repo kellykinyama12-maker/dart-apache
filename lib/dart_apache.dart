@@ -12,6 +12,7 @@ export 'src/framework/live/diff.dart';
 export 'src/framework/live/runtime.dart';
 export 'src/framework/router.dart';
 export 'src/framework/validation.dart';
+export 'src/framework/support/str.dart';
 export 'src/framework/data/query.dart';
 export 'src/framework/data/sql_database.dart';
 export 'src/framework/data/migration.dart';

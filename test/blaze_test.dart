@@ -155,6 +155,14 @@ void main() {
           '@extends("base")@push("s")<a>@endpush@push("s")<b>@endpush');
       expect(fe.render('child'), '<head><a><b></head>');
     });
+
+    test('inline @section("name", value) sets a yielded section', () {
+      File('${dir.path}/shell.blaze.html')
+          .writeAsStringSync('<title>@yield("title")</title>');
+      File('${dir.path}/pg.blaze.html').writeAsStringSync(
+          '@extends("shell")@section("title", t)');
+      expect(fe.render('pg', {'t': 'Home'}), '<title>Home</title>');
+    });
   });
 
   group('components (<x-...>)', () {

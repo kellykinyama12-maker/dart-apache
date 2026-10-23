@@ -439,9 +439,16 @@ class _TreeParser {
       case 'yield':
         nodes.add(_YieldNode(_literal(t.args)));
       case 'section':
-        final body = parseBlock({'endsection'});
-        _expect('endsection');
-        nodes.add(_SectionNode(_literal(t.args), body));
+        final parts = _splitFirstComma(t.args);
+        if (parts.length > 1) {
+          // Inline form: @section('name', value) — no @endsection.
+          nodes.add(_SectionNode(_literal(parts[0]),
+              [_EchoNode(Expression.parse(parts[1].trim()), false)]));
+        } else {
+          final body = parseBlock({'endsection'});
+          _expect('endsection');
+          nodes.add(_SectionNode(_literal(parts[0]), body));
+        }
       case 'foreach':
         final body = parseBlock({'endforeach'});
         _expect('endforeach');
