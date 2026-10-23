@@ -58,3 +58,24 @@ WebTransport session over HTTP/3 and echoes a datagram:
 node wt_test.js --port 8443 --cert ../../build/cert.pem --path /wt
 # -> { "ok": true, "echoed": "ping-webtransport" }
 ```
+
+## Dartisan Live tests
+
+Each exercises a **Dartisan Live** feature end-to-end over real HTTP/3 +
+WebTransport, driving `example/live_app.dart`:
+
+```sh
+# start the Live demo over h3 (from the repo root)
+dart run example/live_app.dart --root=./public --port=8651 --http3 \
+    --wt-path=/wt --tls-cert=build/cert.pem --tls-key=build/key.pem
+
+cd tool/browser-h3-test
+node live_wt_test.js        --port 8651 --cert ../../build/cert.pem  # counter (actions)
+node live_signup_wt_test.js --port 8651 --cert ../../build/cert.pem  # validation round-trip
+node live_b2_wt_test.js     --port 8651 --cert ../../build/cert.pem  # polling + live search
+node live_b3_wt_test.js     --port 8651 --cert ../../build/cert.pem  # nested components
+node live_b4_wt_test.js     --port 8651 --cert ../../build/cert.pem  # cross-component events
+node live_b5_wt_test.js     --port 8651 --cert ../../build/cert.pem  # dirty state
+# each prints { "ok": true, ... } on success
+```
+

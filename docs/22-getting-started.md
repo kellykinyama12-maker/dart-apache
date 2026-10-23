@@ -276,6 +276,17 @@ browser-verified example.
 > fragment. A toggle in a 200-item list goes out as ~36 bytes instead of ~21 KB
 > (see [tool/bench_live_diff.dart](../tool/bench_live_diff.dart)). On by default.
 
+> **Beyond the counter.** Live components also support server-side **validation
+> round-trips** (`component.validate(state, rules)` → errors fold back into the
+> re-render, input preserved), **loading** and **dirty** states
+> (`data-live-loading` / `data-live-dirty`), **polling** (`data-live-poll`),
+> eager **live models** (`data-live-model-live`), **nested components** with
+> independent state (`liveMount(child, includeRuntime: false, key: …)`), and
+> cross-component **events** (`emit` → `data-live-listen="event:action"`). Each
+> is browser-verified over real HTTP/3 + WebTransport in
+> [tool/browser-h3-test/](../tool/browser-h3-test/) and demoed in
+> [example/live_app.dart](../example/live_app.dart).
+
 ## 7. Sessions, auth, and CSRF
 
 Add a session store and an auth guard to the router. Sessions are stateless,
