@@ -8,6 +8,7 @@ export 'src/dart_script/dart_cgi.dart';
 export 'src/framework/template/blaze.dart';
 export 'src/framework/template/expression.dart' show Expression, ExpressionError;
 export 'src/framework/live/live.dart';
+export 'src/framework/router.dart';
 export 'src/client/alt_svc.dart';
 export 'src/client/alt_svc_client.dart';
 export 'src/client/cancel_token.dart';

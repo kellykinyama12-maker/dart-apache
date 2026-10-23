@@ -1,0 +1,175 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dart_apache/dart_apache.dart';
+import 'package:test/test.dart';
+
+void main() {
+  Future<_FakeResponse> run(
+    DartApp app,
+    String method,
+    String path, {
+    Map<String, String> headers = const {},
+    List<int>? body,
+  }) async {
+    final uri = Uri.parse(path);
+    final route = app.match(method, uri.path);
+    expect(route, isNotNull, reason: 'no route for $method $path');
+    final ex = _FakeExchange(method, uri, headers, body ?? const []);
+    await route!.handler(ex, ex.response);
+    return ex.response;
+  }
+
+  group('path params', () {
+    test('captures :id and matches on segment count', () async {
+      final app = (Router()
+            ..get('/users/:id', (r) => r.text('id=${r.param('id')}')))
+          .toApp();
+      expect((await run(app, 'GET', '/users/42')).text, 'id=42');
+      expect(app.match('GET', '/users'), isNull); // arity mismatch
+      expect(app.match('GET', '/users/1/2'), isNull);
+    });
+
+    test('multiple params', () async {
+      final app = (Router()
+            ..get('/p/:a/:b', (r) => r.text('${r.param('a')}-${r.param('b')}')))
+          .toApp();
+      expect((await run(app, 'GET', '/p/x/y')).text, 'x-y');
+    });
+  });
+
+  group('query + body + json', () {
+    test('query parameter', () async {
+      final app =
+          (Router()..get('/s', (r) => r.text('q=${r.query('q')}'))).toApp();
+      expect((await run(app, 'GET', '/s?q=hi')).text, 'q=hi');
+    });
+
+    test('json body echoed', () async {
+      final app = (Router()
+            ..post('/echo', (r) async => r.sendJson(await r.json())))
+          .toApp();
+      final res = await run(app, 'POST', '/echo', body: utf8.encode('{"a":1}'));
+      expect(jsonDecode(res.text), {'a': 1});
+      expect(res.headers['content-type'], contains('application/json'));
+    });
+  });
+
+  group('middleware', () {
+    test('runs before the action and can mutate the response', () async {
+      final router = Router()
+        ..use((req, next) {
+          req.response.setHeader('x-mw', 'on');
+          return next();
+        })
+        ..get('/', (r) => r.text('ok'));
+      final res = await run(router.toApp(), 'GET', '/');
+      expect(res.text, 'ok');
+      expect(res.headers['x-mw'], 'on');
+    });
+
+    test('short-circuits when next is not called', () async {
+      final router = Router()
+        ..use((req, next) => req.text('blocked', status: 403))
+        ..get('/', (r) => r.text('should not run'));
+      final res = await run(router.toApp(), 'GET', '/');
+      expect(res.statusCode, 403);
+      expect(res.text, 'blocked');
+    });
+  });
+
+  group('groups', () {
+    test('prefix + group middleware', () async {
+      final router = Router();
+      router.group('/api', () {
+        router.get('/ping', (r) => r.text('pong'));
+      }, middleware: [
+        (req, next) {
+          req.response.setHeader('x-api', '1');
+          return next();
+        }
+      ]);
+      final res = await run(router.toApp(), 'GET', '/api/ping');
+      expect(res.text, 'pong');
+      expect(res.headers['x-api'], '1');
+    });
+  });
+
+  group('view engine', () {
+    late Directory dir;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('router_');
+      File('${dir.path}/hi.blaze.html').writeAsStringSync('Hello {{ name }}');
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('req.view renders a Blaze template', () async {
+      final router = Router(views: BlazeEngine(dir.path, cache: false))
+        ..get('/', (r) => r.view('hi', {'name': 'ada'}));
+      final res = await run(router.toApp(), 'GET', '/');
+      expect(res.text, 'Hello ada');
+      expect(res.headers['content-type'], contains('text/html'));
+    });
+  });
+}
+
+class _FakeExchange implements ServerExchange {
+  _FakeExchange(this.method, this.uri, this._headers, this._body);
+  @override
+  final String method;
+  @override
+  final Uri uri;
+  final Map<String, String> _headers;
+  final List<int> _body;
+  final _FakeResponse response = _FakeResponse();
+
+  @override
+  String get protocolVersion => '1.1';
+  @override
+  String get scheme => 'http';
+  @override
+  String get authority => 'localhost';
+  @override
+  String get protocol => 'http/1.1';
+  @override
+  String get remoteAddress => '127.0.0.1';
+  @override
+  int get remotePort => 1234;
+  @override
+  int get contentLength => _body.length;
+  @override
+  String? get contentType => _headers['content-type'];
+  @override
+  void forEachHeader(void Function(String name, String value) action) =>
+      _headers.forEach(action);
+  @override
+  Stream<List<int>> get body => Stream<List<int>>.value(_body);
+  @override
+  ServerResponse respond() => response;
+}
+
+class _FakeResponse implements ServerResponse {
+  int _status = 200;
+  final Map<String, String> headers = {};
+  final List<int> body = [];
+  bool closed = false;
+
+  String get text => utf8.decode(body);
+
+  @override
+  int get statusCode => _status;
+  @override
+  void setStatus(int statusCode, [String? reasonPhrase]) => _status = statusCode;
+  @override
+  void setHeader(String name, String value) => headers[name.toLowerCase()] = value;
+  @override
+  Future<void> addStream(Stream<List<int>> stream) async {
+    await for (final chunk in stream) {
+      body.addAll(chunk);
+    }
+  }
+
+  @override
+  Future<void> close() async => closed = true;
+}

@@ -64,6 +64,7 @@ class DartRoute {
     this.handler, {
     this.exact = false,
     this.methods,
+    this.segments,
   });
 
   /// Exact-path route: matches [path] only when equal to it.
@@ -80,6 +81,16 @@ class DartRoute {
     Set<String>? methods,
   }) : this(prefix, handler, exact: false, methods: methods);
 
+  /// Parameterized route: `:name` segments match any single non-empty segment
+  /// (e.g. `/users/:id` matches `/users/42`). Extract them with [paramsFor].
+  factory DartRoute.path(
+    String pattern,
+    DartHandler handler, {
+    Set<String>? methods,
+  }) =>
+      DartRoute(pattern, handler,
+          exact: true, methods: methods, segments: _split(pattern));
+
   final String pattern;
   final DartHandler handler;
   final bool exact;
@@ -87,9 +98,37 @@ class DartRoute {
   /// Allowed request methods (upper-case), or null to accept any method.
   final Set<String>? methods;
 
+  /// Non-null for a parameterized route: the pattern split into segments.
+  final List<String>? segments;
+
+  static List<String> _split(String p) =>
+      p.split('/').where((s) => s.isNotEmpty).toList();
+
+  /// Extracts `:name` path parameters from [path] for this route's pattern.
+  Map<String, String> paramsFor(String path) {
+    final segs = segments;
+    if (segs == null) return const {};
+    final ps = _split(path);
+    final out = <String, String>{};
+    for (var i = 0; i < segs.length && i < ps.length; i++) {
+      if (segs[i].startsWith(':')) out[segs[i].substring(1)] = ps[i];
+    }
+    return out;
+  }
+
   bool matches(String method, String path) {
     if (methods != null && !methods!.contains(method.toUpperCase())) {
       return false;
+    }
+    final segs = segments;
+    if (segs != null) {
+      final ps = _split(path);
+      if (ps.length != segs.length) return false;
+      for (var i = 0; i < segs.length; i++) {
+        if (segs[i].startsWith(':')) continue; // param matches any segment
+        if (segs[i] != ps[i]) return false;
+      }
+      return true;
     }
     if (exact) return path == pattern;
     if (path == pattern) return true;

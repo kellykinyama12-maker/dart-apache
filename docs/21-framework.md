@@ -38,9 +38,10 @@ This is the thing PHP can't do without bolting on infrastructure.
       (`@extends/@section/@yield`), `{{-- comments --}}`; a safe mini
       expression language (paths, literals, comparisons, logic) that runs under
       AOT (no `eval`). *This doc's first deliverable.*
-- [ ] **F2 — View + Router/Controller sugar.** `View.make('home', {...})`,
-      `Route.get('/users/:id', UsersController.show)`, route groups, params,
-      middleware — on top of the existing `DartApp` pipeline.
+- [x] **F2 — View + Router/Controller sugar.** `Router.get('/users/:id', …)`
+      with `:param` paths, route groups (prefix + middleware), global
+      middleware, and a `Request` facade (params/query/body/json +
+      view/json/text/html/redirect responders) over the `DartApp` pipeline.
 - [ ] **F3 — `dartisan` CLI.** scaffold a project, `make:controller/view`,
       `serve` (dev, hot-reload via `dart run`), `routes` listing.
 - [x] **F4 — Dartisan Live.** reactive components over WebTransport:
@@ -63,3 +64,48 @@ This is the thing PHP can't do without bolting on infrastructure.
 - **h3/WebTransport native** — reactivity is a first-class, in-binary feature.
 - **Backward compatible** — never break PHP/static/`--dart-cgi`.
 - **Measured** — every perf claim backed by `tool/bench_*`.
+
+## 5. Parity map — vs Laravel (features)
+
+Tracked as we build. Status: ✅ done · 🟡 in progress · ⬜ planned.
+
+| Laravel | Dartisan | Status |
+| --- | --- | --- |
+| Blade templating | Blaze (`{{ }}`, `@if/@foreach/@include`, layouts) | ✅ |
+| Livewire (reactive) | Dartisan Live over WebTransport/HTTP‑3 | ✅ |
+| Routing (`Route::get`, params) | `Router.get('/users/:id', …)` + params | ✅ F2 |
+| Controllers | handler classes / methods bound to routes | ✅ F2 |
+| Request / Response | `Request` (params/query/body/json) + responders | ✅ F2 |
+| Middleware | before/after hooks, groups | ✅ F2 |
+| Views / `view()` helper | `req.view('home', {...})` (Blaze) | ✅ F2 |
+| Validation / FormRequest | typed request validation | ⬜ F5 |
+| Eloquent ORM + migrations | record/query layer + a DB driver | ⬜ F5 |
+| Artisan CLI | `dartisan` CLI (`new`, `make:*`, `serve`) | ⬜ F3 |
+| Service container / DI | per-worker app container | ⬜ F3 |
+| Auth / sessions | session + auth guards (WT ticket already exists) | ⬜ later |
+| Queues / events / mail | background isolates + event bus | ⬜ later |
+| Cache | `--cache` (dynamic) + app cache API | 🟡 partial |
+
+## 6. Parity map — vs Flutter (programming model)
+
+Dartisan Live borrows Flutter's **declarative, reactive, same-language** model —
+but renders on the server and streams updates over HTTP/3 instead of painting a
+canvas. The goal: a Flutter developer feels at home writing server UI.
+
+| Flutter | Dartisan Live | Status |
+| --- | --- | --- |
+| `Widget` (composable UI) | `LiveComponent` (composable server UI) | ✅ |
+| `StatelessWidget` | a component that only `render`s | ✅ |
+| `StatefulWidget` + `setState` | `LiveComponent` state + `update(action, …)` | ✅ |
+| `build(context)` | `render(state)` → HTML (via Blaze) | ✅ |
+| Reactive rebuild on state change | re-render + stream diff/HTML over WebTransport | ✅ (full HTML today; diffing ⬜) |
+| Hot reload | `dart run` edit-refresh / `--dart-cgi` | ✅ |
+| One language (Dart) front-to-back | Dart server + Dart client (+ tiny JS runtime) | ✅ |
+| Widget tree composition / slots | nested components + Blaze `@include`/sections | 🟡 |
+| Navigator / routing | Dartisan Router | ✅ F2 |
+| Provider / Riverpod (state mgmt) | component state + (later) shared stores | ⬜ later |
+| `flutter create` scaffolding | `dartisan new` | ⬜ F3 |
+
+**Positioning:** *Laravel's batteries + Livewire's reactivity + Flutter's
+Dart/declarative model — in one compiled binary, reactive over HTTP/3.*
+

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:dart_apache/dart_apache.dart';
+import 'package:dart_apache/dart_apache.dart' hide Router;
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:test/test.dart';
