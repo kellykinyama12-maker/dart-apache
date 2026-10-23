@@ -178,6 +178,14 @@ void main() {
           fe.renderString('<button @disabled(busy)>', {'busy': true}),
           '<button disabled>');
     });
+
+    test('@verbatim passes {{ }} and @-directives through literally', () {
+      expect(
+          fe.renderString(
+              'A @verbatim<span x-text="{{ count }}">@if(x)</span>@endverbatim B',
+              {'count': 5}),
+          'A <span x-text="{{ count }}">@if(x)</span> B');
+    });
   });
 
   group('components (<x-...>)', () {

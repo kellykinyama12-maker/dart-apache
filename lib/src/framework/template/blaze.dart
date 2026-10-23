@@ -147,6 +147,18 @@ class BlazeEngine {
         continue;
       }
       if (src[i] == '@') {
+        // @verbatim ... @endverbatim: emit the inner content literally so that
+        // client-side `{{ }}` (Alpine/Vue) and @-directives pass through.
+        if (src.startsWith('@verbatim', i) &&
+            !_isLetter(src.length > i + 9 ? src[i + 9] : ' ')) {
+          final start = i + 9;
+          final end = src.indexOf('@endverbatim', start);
+          if (end < 0) throw TemplateError('unterminated @verbatim');
+          flush();
+          toks.add(_Tok.text(src.substring(start, end)));
+          i = end + '@endverbatim'.length;
+          continue;
+        }
         final m = _directiveAt(src, i);
         if (m != null) {
           flush();

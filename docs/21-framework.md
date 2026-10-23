@@ -405,6 +405,12 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **AC1 — `Iterable` helpers.** `sortedBy`/`sortedByDesc`, `groupBy`,
       `keyBy`, and `pluck` (on rows) for working with query-builder results.
+
+## 3y. Phase 25 — @verbatim
+
+- [x] **AD1 — `@verbatim ... @endverbatim`.** Emits its inner content literally,
+      so client-side `{{ }}` (Alpine/Vue) and `@`-directives pass through
+      untouched by Blaze.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
