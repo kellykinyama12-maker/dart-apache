@@ -147,6 +147,15 @@ class Request {
   /// Validates request input (query + body, JSON or form-encoded) against
   /// [rules] and returns the merged data, or throws [ValidationException].
   Future<Map<String, Object?>> validate(Map<String, String> rules) async {
+    final data = await input();
+    final errors = Validator.validate(data, rules);
+    if (errors.isNotEmpty) throw ValidationException(errors);
+    return data;
+  }
+
+  /// All request input merged: query string + body (JSON object or
+  /// form-urlencoded).
+  Future<Map<String, Object?>> input() async {
     final data = <String, Object?>{...exchange.uri.queryParameters};
     final raw = await body();
     if (raw.isNotEmpty) {
@@ -163,22 +172,45 @@ class Request {
         }
       }
     }
-    final errors = Validator.validate(data, rules);
-    if (errors.isNotEmpty) throw ValidationException(errors);
     return data;
+  }
+
+  /// A value flashed as "old input" by the previous request (for form
+  /// repopulation), or [fallback].
+  Object? old(String field, [Object? fallback]) {
+    if (_sessions == null) return fallback;
+    final o = session.flashed('_old');
+    return (o is Map && o.containsKey(field)) ? o[field] : fallback;
+  }
+
+  /// Flashes [e]'s errors + the current input and redirects back (to the
+  /// `Referer`, or [fallback]) — the Laravel `back()->withErrors()->withInput()`.
+  Future<void> backWithErrors(ValidationException e,
+      {String fallback = '/'}) async {
+    session.flash('_errors', e.errors);
+    session.flash('_old', await input());
+    await redirect(header('referer') ?? fallback);
   }
 
   // ---- responders (each sets status + content-type, writes, and closes) ----
 
   /// Renders a Blaze [view] with [data] (requires a view engine on the router).
+  /// When a session is configured, `errors` and `old` (from the flash) are
+  /// injected into the view data so `@error` / `{{ old.x }}` work automatically
+  /// ([data] overrides them).
   Future<void> view(String view, [Map<String, Object?> data = const {}]) {
     final engine = _views;
     if (engine == null) {
       throw StateError('Router has no view engine; pass Router(views: ...)');
     }
     _responded = true;
+    final enriched = <String, Object?>{
+      if (_sessions != null) 'errors': session.flashed('_errors') ?? const {},
+      if (_sessions != null) 'old': session.flashed('_old') ?? const {},
+      ...data,
+    };
     _persistSession();
-    return response.writeText(engine.render(view, data),
+    return response.writeText(engine.render(view, enriched),
         contentType: 'text/html; charset=UTF-8');
   }
 

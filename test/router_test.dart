@@ -112,6 +112,41 @@ void main() {
       expect(res.headers['content-type'], contains('text/html'));
     });
   });
+
+  group('form DX (old + @error)', () {
+    late Directory dir;
+    final sm = SessionManager(SessionManager.generateKey(), secure: false);
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('formdx_');
+      File('${dir.path}/form.blaze.html').writeAsStringSync(
+          "@error('name')[{{ message }}]@enderror old=[{{ old.name }}]");
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('backWithErrors flashes errors+old; view repopulates', () async {
+      final app = (Router(views: BlazeEngine(dir.path, cache: false), sessions: sm)
+            ..get('/form', (r) => r.view('form'))
+            ..post('/submit', (r) async {
+              try {
+                await r.validate({'name': 'required|min:3'});
+                await r.text('ok');
+              } on ValidationException catch (e) {
+                await r.backWithErrors(e, fallback: '/form');
+              }
+            }))
+          .toApp();
+
+      final posted = await run(app, 'POST', '/submit', headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+      }, body: utf8.encode('name=A'));
+      expect(posted.statusCode, 302);
+      final cookie = posted.headers['set-cookie']!.split(';').first;
+
+      final form = await run(app, 'GET', '/form', headers: {'cookie': cookie});
+      expect(form.text,
+          '[The name must be at least 3 characters.] old=[A]');
+    });
+  });
 }
 
 class _FakeExchange implements ServerExchange {

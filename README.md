@@ -58,7 +58,7 @@ DartApp buildApp(ServerConfig config) {
 | **Security** | CSRF, `rateLimit`, body-size limits, timing-safe compares, error boundary |
 | **DI** | a `Container` (`bind`/`singleton`/`make`), resolved in handlers |
 | **Services** | `EventDispatcher`, in-memory `Queue`, `Mailer` (Array/Log/SMTP transports) |
-| **CLI** | `dartisan new / make:controller / make:component / make:model / make:migration / make:middleware / make:view / migrate / serve` |
+| **CLI** | `dartisan new / make:controller / make:component / make:model / make:migration / make:middleware / make:view / migrate / routes / serve` |
 
 Start here:
 

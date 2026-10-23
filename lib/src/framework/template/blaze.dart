@@ -102,6 +102,7 @@ class BlazeEngine {
     'unless', 'endunless',
     'foreach', 'endforeach',
     'forelse', 'empty', 'endforelse',
+    'error', 'enderror',
     'auth', 'endauth', 'guest', 'endguest',
     'csrf',
     'include', 'extends', 'section', 'endsection', 'yield',
@@ -455,6 +456,10 @@ class _TreeParser {
         nodes.add(_IfNode([_Branch(Expression.parse('!auth'), body)]));
       case 'csrf':
         nodes.add(_CsrfNode());
+      case 'error':
+        final body = parseBlock({'enderror'});
+        _expect('enderror');
+        nodes.add(_ErrorNode(_literal(t.args), body));
       default:
         throw TemplateError('unexpected @${t.value}');
     }
@@ -649,6 +654,26 @@ class _IncludeNode extends _Node {
   void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
       Map<String, String> sections) {
     out.write(engine.render(name, ctx));
+  }
+}
+
+/// `@error('field') … @enderror`: renders the body (with `message` bound to the
+/// first error) when `errors[field]` has messages.
+class _ErrorNode extends _Node {
+  _ErrorNode(this.field, this.body);
+  final String field;
+  final List<_Node> body;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final errors = ctx['errors'];
+    if (errors is! Map) return;
+    final messages = errors[field];
+    if (messages is! List || messages.isEmpty) return;
+    final child = Map<String, Object?>.of(ctx)..['message'] = messages.first;
+    for (final n in body) {
+      n.render(out, child, engine, sections);
+    }
   }
 }
 

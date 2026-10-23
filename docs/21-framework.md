@@ -328,6 +328,16 @@ Small quality-of-life wins developers reach for daily.
       `@if(x.isEmpty) … @else @foreach … @endforeach @endif`.
 - [x] **R3 — `@unless / @endunless`.** Negated `@if` sugar.
 
+## 3o. Phase 15 — form DX + route listing
+
+- [x] **S1 — Old input + validation errors in views.** On a failed validation,
+      `req.backWithErrors(e)` flashes the errors + old input and redirects back
+      (to the `Referer`). `req.view(...)` auto-injects `errors` and `old` from
+      the session flash, so Blaze `@error('field') {{ message }} @enderror` and
+      `value="{{ old.name }}"` repopulate forms with zero boilerplate.
+- [x] **S2 — `dartisan routes`.** Lists an app's routes (method + pattern) by
+      loading its `buildApp` and walking `DartApp.routes`.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

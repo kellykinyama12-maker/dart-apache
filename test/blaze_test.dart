@@ -82,6 +82,19 @@ void main() {
       expect(render('@unless(ok)hidden@endunless', {'ok': false}), 'hidden');
       expect(render('@unless(ok)hidden@endunless', {'ok': true}), '');
     });
+
+    test('@error renders with {{ message }} when the field has errors', () {
+      const tpl = "@error('name')<b>{{ message }}</b>@enderror";
+      expect(
+          render(tpl, {
+            'errors': {
+              'name': ['Required.']
+            }
+          }),
+          '<b>Required.</b>');
+      expect(render(tpl, {'errors': <String, Object?>{}}), '');
+      expect(render(tpl), '');
+    });
   });
 
   group('layouts + includes (file-backed)', () {
