@@ -12,6 +12,7 @@ export 'src/framework/router.dart';
 export 'src/framework/validation.dart';
 export 'src/framework/data/query.dart';
 export 'src/framework/auth/session.dart';
+export 'src/framework/container/container.dart';
 export 'src/client/alt_svc.dart';
 export 'src/client/alt_svc_client.dart';
 export 'src/client/cancel_token.dart';

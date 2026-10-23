@@ -5,6 +5,7 @@ import '../pipeline/dart_handler.dart';
 import '../pipeline/server_exchange.dart';
 import '../wt/wt_handler.dart';
 import 'auth/session.dart';
+import 'container/container.dart';
 import 'template/blaze.dart';
 import 'validation.dart';
 
@@ -13,7 +14,7 @@ import 'validation.dart';
 /// Laravel's `Request` + response helpers.
 class Request {
   Request(this.exchange, this.response, this.params, this._views,
-      [this._sessions]);
+      [this._sessions, this._container]);
 
   final ServerExchange exchange;
   final ServerResponse response;
@@ -23,7 +24,20 @@ class Request {
 
   final BlazeEngine? _views;
   final SessionManager? _sessions;
+  final Container? _container;
   Session? _session;
+
+  /// The app's service container (requires `Router(container: ...)`).
+  Container get container {
+    final c = _container;
+    if (c == null) {
+      throw StateError('Router has no container; pass Router(container: ...)');
+    }
+    return c;
+  }
+
+  /// Resolves `T` from the service [container].
+  T make<T>() => container.make<T>();
 
   /// The request's session (requires `Router(sessions: ...)`). Lazily decrypted
   /// from the `Cookie` header; mutations are persisted as a `Set-Cookie` by the
@@ -168,16 +182,32 @@ Middleware requireAuth({String redirectTo = '/login'}) {
 /// view engine. Build it into a [DartApp] with [toApp].
 class Router {
   // Named params can't be underscore-prefixed, so no initializing formal here.
-  Router({BlazeEngine? views, SessionManager? sessions})
+  Router({BlazeEngine? views, SessionManager? sessions, Container? container})
       // ignore: prefer_initializing_formals
       : _views = views,
         // ignore: prefer_initializing_formals
-        _sessions = sessions;
+        _sessions = sessions,
+        _container = container ?? Container();
 
   final BlazeEngine? _views;
   final SessionManager? _sessions;
+  final Container _container;
   final List<DartRoute> _routes = [];
   final List<Middleware> _globalMiddleware = [];
+
+  /// The app service container (DI). Register services with [bind] / [singleton]
+  /// / [instance], resolve them in handlers via `request.make<T>()`.
+  Container get container => _container;
+
+  /// Registers a transient factory for `T` on the [container].
+  void bind<T>(ServiceFactory<T> factory) => _container.bind<T>(factory);
+
+  /// Registers a shared (singleton) factory for `T` on the [container].
+  void singleton<T>(ServiceFactory<T> factory) =>
+      _container.singleton<T>(factory);
+
+  /// Registers an existing [value] as the singleton for `T`.
+  void instance<T>(T value) => _container.instance<T>(value);
 
   /// Optional native WebTransport session handler (e.g. Dartisan Live).
   WtHandler? wt;
@@ -218,7 +248,8 @@ class Router {
     final chain = [..._globalMiddleware, ..._scoped];
     final route = DartRoute.path(full, (exchange, response) async {
       final params = _paramsFor(full, exchange.uri.path);
-      final request = Request(exchange, response, params, _views, _sessions);
+      final request =
+          Request(exchange, response, params, _views, _sessions, _container);
       await _runChain(request, chain, action);
     }, methods: {method});
     _routes.add(route);

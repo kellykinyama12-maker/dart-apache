@@ -83,8 +83,10 @@ production-real, in value order. Each slice stays shippable + tested + PHP-safe.
       `flash`, an `Auth` helper (login/logout/check/id), a `requireAuth`
       middleware guard, and Blaze `@auth / @guest` directives.
       (`lib/src/framework/auth/session.dart`.)
-- [ ] **G3 — Service container (DI).** `bind` / `singleton` / `make`, resolved
-      per-request and exposed to controllers and components.
+- [x] **G3 — Service container (DI).** `bind` / `singleton` / `instance` /
+      `make` — a type-keyed IoC container (one per worker isolate), registered
+      on the `Router` (`router.singleton<T>(...)`) and resolved in handlers via
+      `request.make<T>()`. (`lib/src/framework/container/container.dart`.)
 - [ ] **G4 — Showcase app.** one end-to-end example (routes + Blaze +
       validation + data + Live) that doubles as a living demo + bench target.
 - [ ] *(parked)* **wire DB driver** — a pure-Dart Postgres `Database` impl for
