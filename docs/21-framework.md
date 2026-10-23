@@ -380,6 +380,13 @@ Small quality-of-life wins developers reach for daily.
       `mask`, `random`, and naive `plural`/`singular`.
 - [x] **Y2 — Inline `@section('name', value)`.** The two-argument form sets a
       yielded section without a closing `@endsection` (block form unchanged).
+
+## 3u. Phase 21 — abort helpers
+
+- [x] **Z1 — `abort` / `HttpException`.** `abort(404)`, `abort(403, 'Nope')`,
+      `abortIf(cond, 400)`, and `abortUnless(cond, 401)` raise an `HttpException`
+      the router's error boundary turns into a response with that status (and a
+      sensible default reason phrase when no message is given).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

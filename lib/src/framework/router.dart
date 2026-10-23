@@ -292,6 +292,30 @@ class PayloadTooLargeException implements Exception {
   String toString() => 'PayloadTooLargeException: body exceeds $maxBytes bytes';
 }
 
+/// An HTTP error with a status code, caught by the router's error boundary and
+/// turned into a response with that status. Raise it with [abort].
+class HttpException implements Exception {
+  HttpException(this.status, [this.message]);
+  final int status;
+  final String? message;
+  @override
+  String toString() => 'HttpException($status): ${message ?? ''}';
+}
+
+/// Aborts the current request with [status] (e.g. `abort(404)`), optionally with
+/// a [message] body. The router's error boundary writes the response.
+Never abort(int status, [String? message]) => throw HttpException(status, message);
+
+/// Aborts with [status] when [condition] is true.
+void abortIf(bool condition, int status, [String? message]) {
+  if (condition) throw HttpException(status, message);
+}
+
+/// Aborts with [status] unless [condition] is true.
+void abortUnless(bool condition, int status, [String? message]) {
+  if (!condition) throw HttpException(status, message);
+}
+
 /// Length-aware, value-constant-time string comparison (no early-out on the
 /// first differing byte), for comparing secrets/tokens without a timing oracle.
 bool constantTimeEquals(String a, String b) {
@@ -477,9 +501,35 @@ class Router {
       await request.sendJson({'errors': error.errors}, status: 422);
     } else if (error is PayloadTooLargeException) {
       await request.text('Payload Too Large', status: 413);
+    } else if (error is HttpException) {
+      await request.text(error.message ?? _statusText(error.status),
+          status: error.status);
     } else {
       (_onError ?? _logError)(error, stackTrace);
       await request.text('Internal Server Error', status: 500);
+    }
+  }
+
+  static String _statusText(int status) {
+    switch (status) {
+      case 400:
+        return 'Bad Request';
+      case 401:
+        return 'Unauthorized';
+      case 403:
+        return 'Forbidden';
+      case 404:
+        return 'Not Found';
+      case 405:
+        return 'Method Not Allowed';
+      case 409:
+        return 'Conflict';
+      case 422:
+        return 'Unprocessable Entity';
+      case 429:
+        return 'Too Many Requests';
+      default:
+        return 'Error $status';
     }
   }
 

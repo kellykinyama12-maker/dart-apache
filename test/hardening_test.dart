@@ -60,6 +60,31 @@ void main() {
       expect(res.text, isNot(contains('secret detail')));
       expect(caught, isA<StateError>());
     });
+
+    test('abort / abortIf / abortUnless -> status + message', () async {
+      final app = (Router()
+            ..get('/missing', (r) => abort(404))
+            ..get('/custom', (r) => abort(403, 'Nope'))
+            ..get('/if', (r) {
+              abortIf(r.query('x') == '1', 400, 'Bad x');
+              return r.text('ok');
+            })
+            ..get('/unless', (r) {
+              abortUnless(r.query('ok') == '1', 401);
+              return r.text('ok');
+            }))
+          .toApp();
+      final nf = await run(app, 'GET', '/missing');
+      expect(nf.statusCode, 404);
+      expect(nf.text, 'Not Found');
+      final custom = await run(app, 'GET', '/custom');
+      expect(custom.statusCode, 403);
+      expect(custom.text, 'Nope');
+      expect((await run(app, 'GET', '/if?x=1')).statusCode, 400);
+      expect((await run(app, 'GET', '/if')).statusCode, 200);
+      expect((await run(app, 'GET', '/unless')).statusCode, 401);
+      expect((await run(app, 'GET', '/unless?ok=1')).statusCode, 200);
+    });
   });
 
   group('J5 rate limiting', () {
