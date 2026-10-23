@@ -580,6 +580,11 @@ Small quality-of-life wins developers reach for daily.
 - [x] **BH1 — `Paginator.pages`.** `paginator.pages(onEachSide: 2)` returns a
       clamped window of page numbers (also in `toMap()['pages']`) for rendering
       a pager.
+
+## 3bd. Phase 56 — numeric comparison rules
+
+- [x] **BI1 — `gt` / `gte` / `lt` / `lte`.** Numeric validation against another
+      field's value or a literal (e.g. `min` → `lt:max`, `age` → `gte:18`).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

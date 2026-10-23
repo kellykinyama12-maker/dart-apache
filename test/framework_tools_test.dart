@@ -97,6 +97,20 @@ void main() {
           Validator.validate({'d': '2025-12-01'}, {'d': 'after:2025-06-01'}),
           isEmpty);
     });
+
+    test('gt / gte / lt / lte against a field or literal', () {
+      expect(Validator.validate({'n': '5'}, {'n': 'gt:3'}), isEmpty);
+      expect(Validator.validate({'n': '3'}, {'n': 'gt:3'}), isNotEmpty);
+      expect(Validator.validate({'n': '3'}, {'n': 'gte:3'}), isEmpty);
+      expect(Validator.validate({'n': '2'}, {'n': 'lt:3'}), isEmpty);
+      expect(Validator.validate({'n': '3'}, {'n': 'lte:3'}), isEmpty);
+      expect(
+          Validator.validate({'max': '10', 'min': '4'}, {'min': 'lt:max'}),
+          isEmpty);
+      expect(
+          Validator.validate({'max': '3', 'min': '4'}, {'min': 'lt:max'}),
+          isNotEmpty);
+    });
   });
 
   group('scaffold', () {

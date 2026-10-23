@@ -20,7 +20,7 @@ class ValidationException implements Exception {
 /// `max:N`, `between:a,b`, `digits:N`, `in:a,b,c`, `not_in:a,b`, `same:field`,
 /// `different:field`, `starts_with:a,b`, `ends_with:a,b`, `regex:pattern`,
 /// `uuid`, `ip`, `json`, `size:N`, `date`, `before:date`, `after:date`,
-/// `confirmed`.
+/// `gt:field|N`, `gte:field|N`, `lt:field|N`, `lte:field|N`, `confirmed`.
 class Validator {
   static final _email = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   static final _alpha = RegExp(r'^[A-Za-z]+$');
@@ -124,6 +124,34 @@ class Validator {
         return '${data[arg]}' == s
             ? null
             : 'The $field and $arg must match.';
+      case 'gt':
+      case 'gte':
+      case 'lt':
+      case 'lte':
+        final left = num.tryParse(s);
+        // The argument is another field's value when present, else a literal.
+        final right = data.containsKey(arg)
+            ? num.tryParse('${data[arg]}')
+            : num.tryParse(arg);
+        if (left == null || right == null) {
+          return 'The $field must be numeric.';
+        }
+        final ok = rule == 'gt'
+            ? left > right
+            : rule == 'gte'
+                ? left >= right
+                : rule == 'lt'
+                    ? left < right
+                    : left <= right;
+        if (ok) return null;
+        final word = rule == 'gt'
+            ? 'greater than'
+            : rule == 'gte'
+                ? 'greater than or equal to'
+                : rule == 'lt'
+                    ? 'less than'
+                    : 'less than or equal to';
+        return 'The $field must be $word $arg.';
       case 'different':
         return '${data[arg]}' != s
             ? null
