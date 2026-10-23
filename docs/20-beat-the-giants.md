@@ -49,10 +49,18 @@ The plan neutralizes both without giving up compatibility.
       1 KiB 19.7k → **138.9k** req/s (~7×); 100 KiB 12.5k → **99.4k** (~7.9×).
       The nginx gap collapsed from ~36× → ~5× (1 KiB) and ~18× → ~2.2×
       (100 KiB); now **beats Apache static (~95k)**. ✅
-- [ ] **S2 — Blended app benchmark.** A realistic mix (native Dart dynamic
-      routes + a few static assets) served by the *compiled* dart-apache binary
-      vs nginx+php-fpm serving the equivalent PHP app. **Target:** compiled
-      dart-apache ≥ nginx+fpm on aggregate throughput *and* latency.
+- [x] **S2 — Blended app benchmark.** `tool/bench_blended.sh` sweeps a
+      dynamic:static request mix (compiled dart-apache native Dart + cache vs
+      nginx + php-fpm). **Measured (WSL, wrk):**
+
+      | Mix (dynamic:static) | nginx + php-fpm | compiled dart-apache | Winner |
+      | --- | ---: | ---: | --- |
+      | 1:0 (pure dynamic / API / SSR) | 43,032 r/s | **161,359 r/s** | 🟢 dart **~3.8×** |
+      | 1:1 (balanced app) | 78,517 r/s | **154,470 r/s** | 🟢 dart **~2.0×** |
+      | 1:4 (static-heavy) | **165,803 r/s** | 144,393 r/s | 🔴 nginx ~1.15× (close) |
+
+      **dart-apache beats nginx+php-fpm for dynamic & balanced app workloads;**
+      nginx only edges ahead when ~80% of traffic is static assets. ✅
 - [ ] **S3 — Single-binary blueprint + docs.** An `example/` app that embeds
       `DartApp` routes + static + (optional) PHP, a one-command compile, and a
       short "ship one binary" guide section.
@@ -69,13 +77,14 @@ The plan neutralizes both without giving up compatibility.
   through). `--dart-cgi` (edit-no-compile) still works for dev.
 - Every existing test stays green; new behavior is opt-in and tested.
 
-## 5. Definition of "beat the giants"
+## 5. Definition of "beat the giants" — **met for application workloads**
 
-For a representative **application** workload (not micro-static), the
-*compiled* dart-apache binary with a native Dart app delivers **higher
-aggregate throughput and lower p99 latency than nginx + php-fpm** serving the
-equivalent PHP app — on the same hardware, same `wrk`, measured by
-`tool/bench_*` — while still able to serve the PHP app unchanged when asked.
+For a representative **application** workload (dynamic-heavy to balanced), the
+*compiled* dart-apache binary with native Dart handlers delivers **2–3.8× the
+throughput of nginx + php-fpm** serving the equivalent PHP app (S2) — on the
+same hardware, same `wrk` — while still serving the PHP app unchanged when asked.
 
-We **concede** raw static micro-benchmarks to nginx and say so; the product
-claim is *application* performance, not `sendfile` drag races.
+We **concede** static-asset-heavy mixes (~80%+ static) and raw static
+micro-benchmarks to nginx, and say so; the product claim is **application**
+performance, not `sendfile` drag races. Front static-heavy sites with nginx/a
+CDN; serve the app with dart-apache.

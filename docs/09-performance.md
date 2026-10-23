@@ -123,6 +123,23 @@ The **same PHP app** and the **same php-fpm pool**, fronted by each server
   serving isolate. That's the pitch: *rewrite the hot paths as native Dart*, not
   "proxy PHP faster than nginx" (it doesn't).
 
+### Blended app workload — compiled dart-apache vs nginx+php-fpm (`tool/bench_blended.sh`)
+
+A realistic **application** mix: dynamic requests (native Dart vs PHP-fpm) +
+static assets (`--static-cache` vs nginx), swept by dynamic:static ratio.
+
+| Mix (dynamic:static) | nginx + php-fpm | **compiled dart-apache** | Winner |
+| --- | ---: | ---: | --- |
+| 1:0 — pure dynamic (API/SSR) | 43,032 req/s | **161,359** req/s | 🟢 dart **~3.8×** |
+| 1:1 — balanced app | 78,517 req/s | **154,470** req/s | 🟢 dart **~2.0×** |
+| 1:4 — static-heavy page | **165,803** req/s | 144,393 req/s | 🔴 nginx ~1.15× |
+
+**This is the headline:** for **dynamic-heavy and balanced app workloads**, the
+compiled dart-apache binary (native Dart + static cache) **beats nginx+php-fpm by
+2–3.8×**. nginx only wins when traffic is ~80% static assets (front those with
+nginx/a CDN). The product claim is *application* performance, not static drag
+races — and it holds.
+
 ### What the numbers say
 
 - **Raw static is nginx's game** — hand-tuned C + zero-copy `sendfile` vs
