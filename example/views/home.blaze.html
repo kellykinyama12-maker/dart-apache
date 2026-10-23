@@ -1,0 +1,13 @@
+@extends('layout')
+@section('content')
+<h1>Hello, {{ name }}!</h1>
+@if(items.length > 0)
+<ul>
+@foreach(items as item)
+  <li>{{ loop.count }}. {{ item }}</li>
+@endforeach
+</ul>
+@else
+<p>No items yet.</p>
+@endif
+@endsection
