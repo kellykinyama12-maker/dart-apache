@@ -13,6 +13,7 @@ import '../wt/ticket.dart';
 import 'dart_handler.dart';
 import 'response_cache.dart';
 import 'server_exchange.dart';
+import 'static_cache.dart';
 
 /// Outcome of parsing a `Range` header: whole body, a partial slice, or an
 /// unsatisfiable range (416).
@@ -38,6 +39,9 @@ class RequestPipeline {
             : ReverseProxyHandler(config.proxyRoutes),
         _cache = config.cacheEnabled
             ? ResponseCache(maxBytes: config.cacheMaxBytes)
+            : null,
+        _staticCache = config.staticCacheEnabled
+            ? StaticFileCache(maxFileBytes: config.staticCacheMaxFileBytes)
             : null;
 
   final ServerConfig config;
@@ -54,6 +58,9 @@ class RequestPipeline {
 
   /// Optional in-memory response cache (`--cache`), null when disabled.
   final ResponseCache? _cache;
+
+  /// Optional static hot-file cache (`--static-cache`), null when disabled.
+  final StaticFileCache? _staticCache;
 
   /// Called with a Common Log Format line after each request (defaults to
   /// stdout). Transports can override to centralize logging.
@@ -286,6 +293,24 @@ class RequestPipeline {
     ServerResponse response,
     String filePath,
   ) async {
+    // Hot-file cache: serve bytes + precomputed gzip from memory (no per-
+    // request stat/open/gzip) when enabled and the file fits.
+    final cache = _staticCache;
+    if (cache != null) {
+      final contentType = mimeTypeFor(filePath);
+      final entry = await cache.load(
+        filePath,
+        contentType: contentType,
+        compressible: _isCompressible(contentType),
+        gzipMin: _gzipMinBytes,
+        gzipMax: _gzipMaxBytes,
+      );
+      if (entry != null) {
+        await _serveStaticFromEntry(exchange, response, entry);
+        return;
+      }
+    }
+
     final file = File(filePath);
     final stat = await file.stat();
     final length = stat.size;
@@ -371,6 +396,88 @@ class RequestPipeline {
     }
 
     await response.addStream(file.openRead());
+    await response.close();
+  }
+
+  /// Serves a static response entirely from a cached [StaticEntry] (bytes +
+  /// precomputed gzip), with the same validators / range / gzip semantics as
+  /// the disk path — just no filesystem access.
+  Future<void> _serveStaticFromEntry(
+    ServerExchange exchange,
+    ServerResponse response,
+    StaticEntry entry,
+  ) async {
+    final reqHeaders = _requestHeaders(exchange);
+    final length = entry.length;
+    final etag = entry.etag;
+    final modified = entry.modified;
+
+    response
+      ..setHeader(HttpHeaders.lastModifiedHeader, HttpDate.format(modified))
+      ..setHeader(HttpHeaders.etagHeader, etag)
+      ..setHeader(HttpHeaders.acceptRangesHeader, 'bytes');
+
+    if (_isNotModified(reqHeaders, etag, modified)) {
+      response.setStatus(HttpStatus.notModified);
+      await response.close();
+      return;
+    }
+
+    response.setHeader(HttpHeaders.contentTypeHeader, entry.contentType);
+
+    final (kind, start, end) = _parseRange(
+      reqHeaders[HttpHeaders.rangeHeader],
+      length,
+      ifRange: reqHeaders[HttpHeaders.ifRangeHeader],
+      etag: etag,
+      modified: modified,
+    );
+    if (kind == _RangeKind.unsatisfiable) {
+      response
+        ..setStatus(HttpStatus.requestedRangeNotSatisfiable)
+        ..setHeader(HttpHeaders.contentRangeHeader, 'bytes */$length')
+        ..setHeader(HttpHeaders.contentLengthHeader, '0');
+      await response.close();
+      return;
+    }
+    if (kind == _RangeKind.partial) {
+      response
+        ..setStatus(HttpStatus.partialContent)
+        ..setHeader(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$length')
+        ..setHeader(HttpHeaders.contentLengthHeader, '${end - start + 1}');
+      if (exchange.method == 'HEAD') {
+        await response.close();
+        return;
+      }
+      await response
+          .addStream(Stream<List<int>>.value(entry.bytes.sublist(start, end + 1)));
+      await response.close();
+      return;
+    }
+
+    response
+      ..setStatus(HttpStatus.ok)
+      ..setHeader(HttpHeaders.contentLengthHeader, '$length');
+    if (exchange.method == 'HEAD') {
+      await response.close();
+      return;
+    }
+
+    if (_isCompressible(entry.contentType)) {
+      response.setHeader(HttpHeaders.varyHeader, 'Accept-Encoding');
+    }
+    final gz = entry.gzip;
+    if (gz != null && _acceptsGzip(reqHeaders)) {
+      response
+        ..setHeader(HttpHeaders.contentEncodingHeader, 'gzip')
+        ..setHeader(HttpHeaders.etagHeader, 'W/$etag')
+        ..setHeader(HttpHeaders.contentLengthHeader, '${gz.length}');
+      await response.addStream(Stream<List<int>>.value(gz));
+      await response.close();
+      return;
+    }
+
+    await response.addStream(Stream<List<int>>.value(entry.bytes));
     await response.close();
   }
 

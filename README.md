@@ -88,6 +88,8 @@ Flags:
 | `--max-body=`    | `10485760`  | Max request body in bytes (`413` beyond this) |
 | `--dart-cgi`     | off         | Run `.dart` files as CGI scripts via the Dart VM (edit, no compile — the Dart analog of `php-cgi`) |
 | `--dart-exe=`    | `dart`      | Path to the `dart` executable used by `--dart-cgi` |
+| `--static-cache` | off         | Cache hot static files in memory (bytes + ETag + gzip; `open_file_cache` analog) — ~7–8× faster static |
+| `--static-cache-max-bytes=` | `1048576` | Largest file the static cache holds per entry |
 
 Then open `http://127.0.0.1:8080/`.
 

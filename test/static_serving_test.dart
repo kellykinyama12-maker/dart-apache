@@ -191,6 +191,64 @@ void main() {
       expect(r.headers['allow'], 'GET, HEAD, POST, OPTIONS');
     });
   });
+
+  group('static serving: --static-cache (memory hot-path)', () {
+    late Directory dir;
+    late RequestPipeline pipeline;
+
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('da_scache_');
+      File('${dir.path}/data.txt').writeAsStringSync('0123456789');
+      File('${dir.path}/page.html').writeAsStringSync('<h1>hi</h1>' * 200);
+      pipeline = RequestPipeline(
+        ServerConfig(documentRoot: dir.path, staticCacheEnabled: true),
+      );
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    Future<_FakeResponse> req(String method,
+        {String path = '/data.txt',
+        Map<String, String> headers = const {}}) async {
+      final ex = _FakeExchange(method, Uri.parse(path), headers);
+      await pipeline.serve(ex);
+      return ex.response;
+    }
+
+    test('cached 200 is byte-correct with ETag (and stable across hits)',
+        () async {
+      final a = await req('GET');
+      expect(a.statusCode, 200);
+      expect(a.headers['etag'], isNotNull);
+      expect(utf8.decode(a.body), '0123456789');
+      // Second request is a cache hit — identical bytes + ETag.
+      final b = await req('GET');
+      expect(b.statusCode, 200);
+      expect(utf8.decode(b.body), '0123456789');
+      expect(b.headers['etag'], a.headers['etag']);
+    });
+
+    test('conditional GET from cache -> 304', () async {
+      final first = await req('GET');
+      final r = await req('GET', headers: {'if-none-match': first.headers['etag']!});
+      expect(r.statusCode, 304);
+      expect(r.body, isEmpty);
+    });
+
+    test('byte range from cache -> 206', () async {
+      final r = await req('GET', headers: {'range': 'bytes=2-5'});
+      expect(r.statusCode, 206);
+      expect(r.headers['content-range'], 'bytes 2-5/10');
+      expect(utf8.decode(r.body), '2345');
+    });
+
+    test('gzip from cache for compressible asset', () async {
+      final r = await req('GET',
+          path: '/page.html', headers: {'accept-encoding': 'gzip'});
+      expect(r.statusCode, 200);
+      expect(r.headers['content-encoding'], 'gzip');
+      expect(r.headers['vary'], contains('Accept-Encoding'));
+    });
+  });
 }
 
 class _FakeExchange implements ServerExchange {

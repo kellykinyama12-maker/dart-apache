@@ -46,6 +46,8 @@ class ServerConfig {
     this.accessLogEnabled = true,
     this.dartCgiEnabled = false,
     this.dartExecutable = 'dart',
+    this.staticCacheEnabled = false,
+    this.staticCacheMaxFileBytes = 1024 * 1024,
     int? workers,
   })  : directoryIndex = directoryIndex ?? const ['index.php', 'index.html'],        wtTicketKey = wtTicketKey ?? WtTicket.generateKey(),        workers = (workers == null || workers < 1)
             ? Platform.numberOfProcessors
@@ -115,6 +117,14 @@ class ServerConfig {
 
   /// Path to the `dart` executable used by the Dart script backend.
   final String dartExecutable;
+
+  /// Caches hot static files in memory (`--static-cache`): bytes + ETag +
+  /// precomputed gzip, re-`stat`ed at most once per second (nginx
+  /// `open_file_cache` analog). Responses are identical, just faster.
+  final bool staticCacheEnabled;
+
+  /// Largest file (bytes) the static cache will hold in memory per entry.
+  final int staticCacheMaxFileBytes;
 
   /// Whether the in-memory response micro-cache is enabled (`--cache`).
   final bool cacheEnabled;
@@ -256,6 +266,9 @@ class ServerConfig {
       accessLogEnabled: !args.contains('--no-access-log'),
       dartCgiEnabled: args.contains('--dart-cgi'),
       dartExecutable: map['dart-exe'] ?? 'dart',
+      staticCacheEnabled: args.contains('--static-cache'),
+      staticCacheMaxFileBytes:
+          int.tryParse(map['static-cache-max-bytes'] ?? '') ?? 1024 * 1024,
       proxyRoutes: proxyRoutes,
       wtPath: wtPath,
       wtBridgePath: wtBridgePath,

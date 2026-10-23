@@ -23,6 +23,7 @@ export 'src/pipeline/dart_handler.dart';
 export 'src/pipeline/request_pipeline.dart';
 export 'src/pipeline/response_cache.dart';
 export 'src/pipeline/server_exchange.dart';
+export 'src/pipeline/static_cache.dart';
 export 'src/proxy/reverse_proxy.dart';
 export 'src/request_resolver.dart';
 export 'src/server.dart';

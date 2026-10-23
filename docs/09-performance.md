@@ -53,6 +53,20 @@ apples with nginx and dart-apache. Loopback rates are noisy run-to-run; the
 Apache's static serving (~95k)** outright, so for hot files routed through
 `--cache` we're already past httpd.
 
+### Static files — with `--static-cache` (`tool/bench_static_cache.sh`)
+
+The static hot-path cache (`open_file_cache` analog: bytes + ETag + precomputed
+gzip, re-`stat` ≤ 1×/s) serves repeated assets from memory.
+
+| File | dart-apache no cache | **`--static-cache`** | nginx | gap to nginx |
+| --- | ---: | ---: | ---: | --- |
+| 1 KiB | 19,732 req/s · 3.3 ms | **138,855** req/s · 503 µs | 701,572 | ~36× → **~5×** |
+| 100 KiB | 12,540 req/s · 5.2 ms | **99,401** req/s · 689 µs | 222,530 | ~18× → **~2.2×** |
+
+`--static-cache` is a **~7–8×** win and makes dart-apache **beat Apache static
+(~95k)**. nginx still leads (C + `sendfile`), but the gap is now small enough
+that static stops dragging a whole-app number down.
+
 ### Dynamic PHP — cache OFF vs ON (same endpoint, same dart-apache)
 
 | Mode | Throughput | Latency | vs. OFF |
