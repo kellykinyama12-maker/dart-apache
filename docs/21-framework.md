@@ -76,9 +76,13 @@ production-real, in value order. Each slice stays shippable + tested + PHP-safe.
       `data-live-submit` delegation (debounced). This closes the last real gap
       vs Livewire and is the HTTP/3 showcase. Live-verified in Edge over real
       HTTP/3 (counter +3/−1 → 2). (`public/app/dartisan-live.js`.)
-- [ ] **G2 — Auth + sessions.** A signed-cookie session store + `Session`
-      facade, login/logout helpers, a `requireAuth` middleware guard, and Blaze
-      `@auth / @guest` directives — built on the existing WT ticket primitive.
+- [x] **G2 — Auth + sessions.** A stateless **encrypted-cookie** session
+      (`SessionManager` / `Session`, AES-GCM — the whole session rides in the
+      cookie, so it works across the worker-per-isolate model with no shared
+      store), `Request.session` with get/put/forget/pull/flush + one-request
+      `flash`, an `Auth` helper (login/logout/check/id), a `requireAuth`
+      middleware guard, and Blaze `@auth / @guest` directives.
+      (`lib/src/framework/auth/session.dart`.)
 - [ ] **G3 — Service container (DI).** `bind` / `singleton` / `make`, resolved
       per-request and exposed to controllers and components.
 - [ ] **G4 — Showcase app.** one end-to-end example (routes + Blaze +

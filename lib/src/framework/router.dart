@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../pipeline/dart_handler.dart';
 import '../pipeline/server_exchange.dart';
 import '../wt/wt_handler.dart';
+import 'auth/session.dart';
 import 'template/blaze.dart';
 import 'validation.dart';
 
@@ -11,7 +12,8 @@ import 'validation.dart';
 /// convenient responders (view/json/text/html/redirect). The Dartisan analog of
 /// Laravel's `Request` + response helpers.
 class Request {
-  Request(this.exchange, this.response, this.params, this._views);
+  Request(this.exchange, this.response, this.params, this._views,
+      [this._sessions]);
 
   final ServerExchange exchange;
   final ServerResponse response;
@@ -20,6 +22,31 @@ class Request {
   final Map<String, String> params;
 
   final BlazeEngine? _views;
+  final SessionManager? _sessions;
+  Session? _session;
+
+  /// The request's session (requires `Router(sessions: ...)`). Lazily decrypted
+  /// from the `Cookie` header; mutations are persisted as a `Set-Cookie` by the
+  /// responders below.
+  Session get session {
+    final manager = _sessions;
+    if (manager == null) {
+      throw StateError('Router has no session manager; pass Router(sessions: ...)');
+    }
+    return _session ??= manager.load(header('cookie'));
+  }
+
+  /// Authentication helper backed by [session].
+  Auth get auth => Auth(session);
+
+  // Writes the session cookie (if dirty) before the response headers are sent.
+  void _persistSession() {
+    final manager = _sessions;
+    final s = _session;
+    if (manager == null || s == null) return;
+    final cookie = manager.setCookie(s);
+    if (cookie != null) response.setHeader('set-cookie', cookie);
+  }
 
   String get method => exchange.method;
   String get path => exchange.uri.path;
@@ -82,20 +109,29 @@ class Request {
     if (engine == null) {
       throw StateError('Router has no view engine; pass Router(views: ...)');
     }
+    _persistSession();
     return response.writeText(engine.render(view, data),
         contentType: 'text/html; charset=UTF-8');
   }
 
-  Future<void> html(String markup, {int status = 200}) => response
-      .writeText(markup, status: status, contentType: 'text/html; charset=UTF-8');
+  Future<void> html(String markup, {int status = 200}) {
+    _persistSession();
+    return response.writeText(markup,
+        status: status, contentType: 'text/html; charset=UTF-8');
+  }
 
-  Future<void> text(String body, {int status = 200}) =>
-      response.writeText(body, status: status);
+  Future<void> text(String body, {int status = 200}) {
+    _persistSession();
+    return response.writeText(body, status: status);
+  }
 
-  Future<void> sendJson(Object? value, {int status = 200}) =>
-      response.writeJson(value, status: status);
+  Future<void> sendJson(Object? value, {int status = 200}) {
+    _persistSession();
+    return response.writeJson(value, status: status);
+  }
 
   Future<void> redirect(String location, {int status = 302}) async {
+    _persistSession();
     response
       ..setStatus(status)
       ..setHeader('location', location)
@@ -114,15 +150,32 @@ typedef Middleware = FutureOr<void> Function(
   FutureOr<void> Function() next,
 );
 
+/// Middleware that requires an authenticated session: unauthenticated requests
+/// are redirected to [redirectTo], or answered `401` when it is empty.
+Middleware requireAuth({String redirectTo = '/login'}) {
+  return (request, next) {
+    if (!request.auth.check) {
+      return redirectTo.isEmpty
+          ? request.text('Unauthorized', status: 401)
+          : request.redirect(redirectTo);
+    }
+    return next();
+  };
+}
+
 /// A Laravel-style router over the in-process [DartApp] pipeline: methods,
 /// `:param` paths, groups (prefix + middleware), global middleware, and a Blaze
 /// view engine. Build it into a [DartApp] with [toApp].
 class Router {
   // Named params can't be underscore-prefixed, so no initializing formal here.
-  // ignore: prefer_initializing_formals
-  Router({BlazeEngine? views}) : _views = views;
+  Router({BlazeEngine? views, SessionManager? sessions})
+      // ignore: prefer_initializing_formals
+      : _views = views,
+        // ignore: prefer_initializing_formals
+        _sessions = sessions;
 
   final BlazeEngine? _views;
+  final SessionManager? _sessions;
   final List<DartRoute> _routes = [];
   final List<Middleware> _globalMiddleware = [];
 
@@ -165,7 +218,7 @@ class Router {
     final chain = [..._globalMiddleware, ..._scoped];
     final route = DartRoute.path(full, (exchange, response) async {
       final params = _paramsFor(full, exchange.uri.path);
-      final request = Request(exchange, response, params, _views);
+      final request = Request(exchange, response, params, _views, _sessions);
       await _runChain(request, chain, action);
     }, methods: {method});
     _routes.add(route);

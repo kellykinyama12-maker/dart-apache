@@ -100,6 +100,7 @@ class BlazeEngine {
   static const Set<String> _knownDirectives = {
     'if', 'elseif', 'else', 'endif',
     'foreach', 'endforeach',
+    'auth', 'endauth', 'guest', 'endguest',
     'include', 'extends', 'section', 'endsection', 'yield',
   };
 
@@ -275,6 +276,14 @@ class _TreeParser {
             Expression.parse(parts[0].trim()), parts[1].trim(), body));
       case 'if':
         nodes.add(_parseIf(t));
+      case 'auth':
+        final body = parseBlock({'endauth'});
+        _expect('endauth');
+        nodes.add(_IfNode([_Branch(Expression.parse('auth'), body)]));
+      case 'guest':
+        final body = parseBlock({'endguest'});
+        _expect('endguest');
+        nodes.add(_IfNode([_Branch(Expression.parse('!auth'), body)]));
       default:
         throw TemplateError('unexpected @${t.value}');
     }
