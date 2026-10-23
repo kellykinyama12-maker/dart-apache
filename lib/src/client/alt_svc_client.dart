@@ -6,6 +6,7 @@ import 'package:dart_quiche/dart_quiche.dart' show TrustStore;
 
 import 'alt_svc.dart';
 import 'cancel_token.dart';
+import 'cert_pinning.dart';
 import 'client_response.dart';
 import 'h3_client.dart';
 import 'interceptor.dart';
@@ -23,6 +24,7 @@ class AltSvcHttpClient {
     this.verbose = false,
     bool allowInsecure = false,
     String? caBundlePem,
+    this.certificatePinner,
     this.interceptors = const [],
     this.retryPolicy = RetryPolicy.none,
   })  : _h3 = H3Client(
@@ -30,10 +32,15 @@ class AltSvcHttpClient {
           trustStore:
               caBundlePem != null ? (TrustStore()..addPem(caBundlePem)) : null,
         ),
-        _http = _buildHttpClient(allowInsecure, caBundlePem);
+        _http = _buildHttpClient(allowInsecure, caBundlePem, certificatePinner);
 
   final String userAgent;
   final bool verbose;
+
+  /// When set, TLS trust comes from these certificate pins (not a CA), and
+  /// HTTP/3 auto-upgrade is disabled so every request stays on the pinned
+  /// TLS/HTTP-1.1 transport.
+  final CertificatePinner? certificatePinner;
 
   /// Hooks applied, in order, around every request (auth, logging, mutation).
   final List<Interceptor> interceptors;
@@ -45,9 +52,22 @@ class AltSvcHttpClient {
   final H3Client _h3;
   final Map<String, H3AltService> _altSvc = {};
 
-  /// Builds the HTTP/1.1 client: a private [caBundlePem] is added to a trusting
-  /// [SecurityContext]; [allowInsecure] accepts any cert (dev only).
-  static HttpClient _buildHttpClient(bool allowInsecure, String? caBundlePem) {
+  /// Builds the HTTP/1.1 client. With a [pinner], trust is pin-only (no CA
+  /// roots): the server's leaf cert is accepted iff it matches a pin.
+  /// Otherwise a private [caBundlePem] is trusted, and [allowInsecure] accepts
+  /// any cert (dev only).
+  static HttpClient _buildHttpClient(
+      bool allowInsecure, String? caBundlePem, CertificatePinner? pinner) {
+    if (pinner != null) {
+      final ctx = SecurityContext(withTrustedRoots: false);
+      if (caBundlePem != null) {
+        ctx.setTrustedCertificatesBytes(caBundlePem.codeUnits);
+      }
+      // Every cert is untrusted (no roots), so the callback runs for each
+      // connection and admits only pinned leaf certificates.
+      return HttpClient(context: ctx)
+        ..badCertificateCallback = (cert, _, _) => pinner.allows(cert);
+    }
     HttpClient client;
     if (caBundlePem != null) {
       final ctx = SecurityContext(withTrustedRoots: true)
@@ -317,7 +337,9 @@ class AltSvcHttpClient {
     final origin = '${url.host}:${url.port}';
     final alt = _altSvc[origin];
 
-    if (!options.forceH1 && alt != null && alt.isFresh) {
+    // With pinning on, stay on the pinned TLS/HTTP-1.1 transport (QUIC trust
+    // isn't pin-verified here).
+    if (!options.forceH1 && certificatePinner == null && alt != null && alt.isFresh) {
       try {
         _log('→ HTTP/3 ${options.method} '
             '${alt.host}:${alt.port}${_target(url)}');
@@ -364,7 +386,7 @@ class AltSvcHttpClient {
     );
 
     final altSvc = respHeaders['alt-svc'];
-    if (altSvc != null) {
+    if (altSvc != null && certificatePinner == null) {
       final discovered = parseAltSvcH3(altSvc, url.host);
       if (discovered != null) {
         _altSvc[origin] = discovered;

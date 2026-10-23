@@ -275,6 +275,18 @@ working code.
       validation + CSRF + sessions/flash + the data layer. **Playwright-verified
       over HTTP/1.1**: CSRF token + flash + entry render + `min:2` rejection.
 
+## 3k. Phase 11 — client certificate pinning
+
+- [x] **P1 — `CertificatePinner`.** Client-side certificate pinning for
+      `AltSvcHttpClient`: trust comes from a set of SHA-256 pins of the server's
+      DER certificate (not a CA). With a pinner set, the HTTP/1.1 client uses a
+      roots-less `SecurityContext` and admits only a pinned leaf cert, and
+      HTTP/3 auto-upgrade is suppressed so every request rides the pinned
+      transport. `CertificatePinner.pinForCertFile/pinForPem/pinForDer` compute
+      pins. Unit-tested (`test/cert_pinning_test.dart`) and **live-verified**
+      (`tool/smoke_cert_pin.dart`): correct pin → 200, wrong pin →
+      `HandshakeException`. (`lib/src/client/cert_pinning.dart`.)
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

@@ -256,6 +256,19 @@ Demo (run the h1 server with `--advertise-h3=4433` and the h3 server on 4433):
 dart run bin/dart_apache_client.dart http://127.0.0.1:8080/
 ```
 
+### Certificate pinning
+
+Pin the server's certificate so TLS trust comes from a known key, not a CA.
+With a `CertificatePinner`, the client admits only a leaf certificate whose
+SHA-256 matches a pin (and stays on the pinned HTTP/1.1 transport):
+
+```dart
+final pin = CertificatePinner.pinForCertFile('build/cert.pem');
+final client = AltSvcHttpClient(certificatePinner: CertificatePinner([pin]));
+await client.get(Uri.parse('https://127.0.0.1:8600/')); // ok only if pinned
+// a non-matching certificate fails the TLS handshake.
+```
+
 ## Native Dart app handlers (and PHP parity)
 
 Besides static + PHP, dart-apache can serve **in-process Dart handlers** on the

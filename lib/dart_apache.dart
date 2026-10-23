@@ -24,6 +24,7 @@ export 'src/framework/mail/smtp_transport.dart';
 export 'src/client/alt_svc.dart';
 export 'src/client/alt_svc_client.dart';
 export 'src/client/cancel_token.dart';
+export 'src/client/cert_pinning.dart';
 export 'src/client/client_response.dart';
 export 'src/client/h3_client.dart';
 export 'src/client/interceptor.dart';
