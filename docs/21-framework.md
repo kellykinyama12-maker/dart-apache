@@ -479,6 +479,12 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AP1 — `only` / `except`.** `req.only(['title', 'body'])` /
       `req.except(['_token'])` return a filtered slice of the request input (for
       controlled mass-assignment).
+
+## 3al. Phase 38 — typed body input
+
+- [x] **AQ1 — `string` / `integer` / `boolean`.** Typed getters over the merged
+      request input (query + body), complementing the query-only
+      `queryInt`/`queryBool`.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

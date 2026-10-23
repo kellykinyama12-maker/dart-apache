@@ -238,6 +238,27 @@ class Request {
         if (!keys.contains(e.key)) e.key: e.value,
     };
   }
+
+  /// An input [field] (query or body) as a string, or [fallback].
+  Future<String?> string(String field, [String? fallback]) async {
+    final v = (await input())[field];
+    return v == null ? fallback : '$v';
+  }
+
+  /// An input [field] parsed as an int, or [fallback].
+  Future<int> integer(String field, [int fallback = 0]) async {
+    final v = (await input())[field];
+    return v is int ? v : int.tryParse('${v ?? ''}') ?? fallback;
+  }
+
+  /// An input [field] read as a boolean (`1/true/on/yes` are true).
+  Future<bool> boolean(String field) async {
+    final v = '${(await input())[field] ?? ''}'.toLowerCase();
+    return v == '1' || v == 'true' || v == 'on' || v == 'yes';
+  }
+
+  /// A value flashed as "old input" by the previous request (for form
+  /// repopulation), or [fallback].
   Object? old(String field, [Object? fallback]) {
     if (_sessions == null) return fallback;
     final o = session.flashed('_old');

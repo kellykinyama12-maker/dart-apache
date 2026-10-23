@@ -110,6 +110,21 @@ void main() {
       expect(jsonDecode(except.text), {'a': 1, 'c': 3});
     });
 
+    test('string / integer / boolean typed input', () async {
+      final app = (Router()
+            ..post(
+                '/t',
+                (r) async => r.text('${await r.string('name')}/'
+                    '${await r.integer('age', 0)}/${await r.boolean('ok')}')))
+          .toApp();
+      final res = await run(app, 'POST', '/t',
+          body: utf8.encode('name=ada&age=30&ok=yes'),
+          headers: {'content-type': 'application/x-www-form-urlencoded'});
+      expect(res.text, 'ada/30/true');
+      final empty = await run(app, 'POST', '/t', body: const []);
+      expect(empty.text, 'null/0/false');
+    });
+
     test('view renders with a custom status (e.g. 404 pages)', () async {
       final dir = Directory.systemTemp.createTempSync('blaze_status');
       File('${dir.path}/missing.blaze.html').writeAsStringSync('Not here');
