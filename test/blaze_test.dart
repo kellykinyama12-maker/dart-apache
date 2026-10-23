@@ -41,6 +41,16 @@ void main() {
       expect(ev("join(xs, '-')", {'xs': [1, 2, 3]}), '1-2-3');
       expect(ev("upper(trim('  hi '))"), 'HI'); // nested calls
     });
+
+    test('collection + number built-ins', () {
+      expect(ev("first(xs)", {'xs': [1, 2, 3]}), 1);
+      expect(ev("last(xs)", {'xs': [1, 2, 3]}), 3);
+      expect(ev("reverse('abc')"), 'cba');
+      expect(ev("contains(xs, 2)", {'xs': [1, 2, 3]}), true);
+      expect(ev("contains('hello', 'ell')"), true);
+      expect(ev("number_format(1234567)"), '1,234,567');
+      expect(ev("number_format(1234.5, 2)"), '1,234.50');
+    });
   });
 
   group('echo + escaping', () {

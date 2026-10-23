@@ -451,6 +451,12 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **AK1 — `Str` case conversions.** `Str.camel`, `Str.studly`, `Str.snake`,
       and `Str.kebab` (split on spaces/`_`/`-`/camelCase boundaries).
+
+## 3ag. Phase 33 — more expression built-ins
+
+- [x] **AL1 — collection/number helpers.** `first`, `last`, `reverse`,
+      `contains`, `keys`, `values`, and `number_format(n[, decimals])` added to
+      the template expression allow-list.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

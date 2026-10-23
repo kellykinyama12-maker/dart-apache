@@ -112,6 +112,53 @@ final Map<String, Object? Function(List<Object?>)> _builtins = {
     final sep = a.length > 1 ? '${a[1]}' : ', ';
     return v is Iterable ? v.map((e) => '$e').join(sep) : '$v';
   },
+  'first': (a) {
+    final v = a.isEmpty ? null : a[0];
+    if (v is Iterable) return v.isEmpty ? null : v.first;
+    if (v is String) return v.isEmpty ? '' : v[0];
+    return null;
+  },
+  'last': (a) {
+    final v = a.isEmpty ? null : a[0];
+    if (v is Iterable) return v.isEmpty ? null : v.last;
+    if (v is String) return v.isEmpty ? '' : v[v.length - 1];
+    return null;
+  },
+  'reverse': (a) {
+    final v = a.isEmpty ? null : a[0];
+    if (v is String) return String.fromCharCodes(v.runes.toList().reversed);
+    if (v is Iterable) return v.toList().reversed.toList();
+    return v;
+  },
+  'contains': (a) {
+    final v = a.isEmpty ? null : a[0];
+    final needle = a.length > 1 ? a[1] : null;
+    if (v is String) return v.contains('$needle');
+    if (v is Iterable) return v.contains(needle);
+    if (v is Map) return v.containsKey(needle);
+    return false;
+  },
+  'keys': (a) =>
+      (a.isEmpty ? null : a[0]) is Map ? (a[0] as Map).keys.toList() : const [],
+  'values': (a) => (a.isEmpty ? null : a[0]) is Map
+      ? (a[0] as Map).values.toList()
+      : const [],
+  'number_format': (a) {
+    final n = a.isEmpty ? 0 : (a[0] as num);
+    final decimals = a.length > 1 ? (a[1] as num).toInt() : 0;
+    final fixed = n.toStringAsFixed(decimals);
+    final parts = fixed.split('.');
+    final intPart = parts[0];
+    final neg = intPart.startsWith('-');
+    final digits = neg ? intPart.substring(1) : intPart;
+    final buf = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
+      buf.write(digits[i]);
+    }
+    final grouped = (neg ? '-' : '') + buf.toString();
+    return parts.length > 1 ? '$grouped.${parts[1]}' : grouped;
+  },
 };
 
 class _Member extends _Node {
