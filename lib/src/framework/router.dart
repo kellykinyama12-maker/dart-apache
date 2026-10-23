@@ -257,6 +257,19 @@ class Request {
     return v == '1' || v == 'true' || v == 'on' || v == 'yes';
   }
 
+  /// Whether [field] is present in the request input (even if empty).
+  Future<bool> has(String field) async => (await input()).containsKey(field);
+
+  /// Whether [field] is present and non-empty.
+  Future<bool> filled(String field) async {
+    final v = (await input())[field];
+    return v != null && '$v'.isNotEmpty;
+  }
+
+  /// Whether [field] is absent from the request input.
+  Future<bool> missing(String field) async =>
+      !(await input()).containsKey(field);
+
   /// A value flashed as "old input" by the previous request (for form
   /// repopulation), or [fallback].
   Object? old(String field, [Object? fallback]) {

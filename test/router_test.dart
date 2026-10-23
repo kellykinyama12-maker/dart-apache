@@ -133,6 +133,19 @@ void main() {
       expect(empty.text, 'null/0/false');
     });
 
+    test('has / filled / missing input presence', () async {
+      final app = (Router()
+            ..post(
+                '/p',
+                (r) async => r.text('${await r.has('a')}/'
+                    '${await r.filled('a')}/${await r.missing('z')}')))
+          .toApp();
+      final res = await run(app, 'POST', '/p',
+          body: utf8.encode('a=&b=2'),
+          headers: {'content-type': 'application/x-www-form-urlencoded'});
+      expect(res.text, 'true/false/true'); // a present but empty; z missing
+    });
+
     test('view renders with a custom status (e.g. 404 pages)', () async {
       final dir = Directory.systemTemp.createTempSync('blaze_status');
       File('${dir.path}/missing.blaze.html').writeAsStringSync('Not here');

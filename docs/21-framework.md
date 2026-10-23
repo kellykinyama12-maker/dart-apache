@@ -521,6 +521,12 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **AW1 — `@once … @endonce`.** Renders its body at most once per render pass
       (keyed by a unique id) — pairs with `@push` for one-off component scripts.
+
+## 3as. Phase 45 — input presence
+
+- [x] **AX1 — `has` / `filled` / `missing`.** Request input presence checks
+      (`has` = key present, `filled` = present and non-empty, `missing` =
+      absent).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
