@@ -86,7 +86,18 @@
       state: st,
       payload: payload || {}
     });
-    morph(el, reply.html);
+    // Server may send a full `html`, or a `patch` (changed region) to splice
+    // against our exact base string (seeded at mount, so bytes match).
+    var html;
+    if (reply.patch) {
+      var base = el.__liveHtml != null ? el.__liveHtml : el.innerHTML;
+      var p = reply.patch;
+      html = base.slice(0, p.s) + p.i + base.slice(p.e);
+    } else {
+      html = reply.html;
+    }
+    el.__liveHtml = html;
+    morph(el, html);
     el.setAttribute('data-live-state', JSON.stringify(reply.state));
     // Expose last state for tests / debugging.
     window.__dartisanLive = reply.state;
@@ -204,6 +215,10 @@
   function bind(el) {
     if (el.__liveBound) return; // one set of listeners per container, even if
     el.__liveBound = true;      // the runtime script is evaluated more than once
+    // Exact base string from the server's mount render (for patch splicing).
+    var init = window.DARTISAN_LIVE_INIT || {};
+    el.__liveHtml = init[el.getAttribute('data-live-component')];
+    if (el.__liveHtml == null) el.__liveHtml = el.innerHTML;
     // Delegated listeners live on the container, so they survive DOM morphs.
     el.addEventListener('click', function (ev) {
       var t = ev.target.closest('[data-live-click]');

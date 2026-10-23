@@ -6,6 +6,7 @@
 import 'dart:convert';
 
 import '../../wt/wt_handler.dart';
+import 'diff.dart';
 
 /// A reactive component: given a state map, [render] produces HTML; [update]
 /// applies a named [action] to produce the next state. State is JSON-round-
@@ -42,8 +43,13 @@ class LiveRegistry {
 
 /// Builds a [WtHandler] that drives Dartisan Live: it parses an inbound action
 /// message `{id, component, action, state, payload}`, updates + re-renders the
-/// component, and replies `{id, html, state}` on the same WebTransport stream.
-WtHandler liveWtHandler(LiveRegistry registry) {
+/// component, and replies on the same WebTransport stream.
+///
+/// When [diff] is true (default) the reply is `{id, patch, state}` carrying only
+/// the changed region of HTML (the server renders both old and new state and
+/// splices) — the client rebuilds against its base and morphs. With [diff]
+/// false the reply is the full `{id, html, state}`.
+WtHandler liveWtHandler(LiveRegistry registry, {bool diff = true}) {
   return (session, message) {
     if (message.isDatagram) return; // Live uses reliable streams.
     final Map<String, Object?> msg;
@@ -64,12 +70,21 @@ WtHandler liveWtHandler(LiveRegistry registry) {
     final next = action.isEmpty
         ? state
         : component.update(action, state, payload);
-    final reply = jsonEncode({
-      'id': msg['id'],
-      'html': component.render(next),
-      'state': next,
-    });
-    session.send(utf8.encode(reply));
+    final newHtml = component.render(next);
+
+    final Map<String, Object?> reply;
+    if (diff) {
+      // Diff against the old state's render — exactly the client's base string.
+      final oldHtml = component.render(state);
+      reply = {
+        'id': msg['id'],
+        'patch': computeHtmlPatch(oldHtml, newHtml).toJson(),
+        'state': next,
+      };
+    } else {
+      reply = {'id': msg['id'], 'html': newHtml, 'state': next};
+    }
+    session.send(utf8.encode(jsonEncode(reply)));
   };
 }
 
@@ -88,11 +103,15 @@ String liveMount(
   final s = state ?? component.initialState();
   final attrEsc = const HtmlEscape(HtmlEscapeMode.attribute);
   final stateAttr = attrEsc.convert(jsonEncode(s));
+  final initial = component.render(s);
   final boot = inlineRuntime != null
       ? '<script>$inlineRuntime</script>'
       : '<script src="$scriptUrl"></script>';
+  // Seed the client's exact base string so server-side patches splice cleanly.
   return '<div data-live-component="${component.name}" '
-      'data-live-state="$stateAttr">${component.render(s)}</div>\n'
-      '<script>window.DARTISAN_LIVE_PATH=${jsonEncode(wtPath)};</script>\n'
+      'data-live-state="$stateAttr">$initial</div>\n'
+      '<script>window.DARTISAN_LIVE_PATH=${jsonEncode(wtPath)};'
+      '(window.DARTISAN_LIVE_INIT=window.DARTISAN_LIVE_INIT||{})'
+      '[${jsonEncode(component.name)}]=${jsonEncode(initial)};</script>\n'
       '$boot';
 }

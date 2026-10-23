@@ -8,6 +8,7 @@ export 'src/dart_script/dart_cgi.dart';
 export 'src/framework/template/blaze.dart';
 export 'src/framework/template/expression.dart' show Expression, ExpressionError;
 export 'src/framework/live/live.dart';
+export 'src/framework/live/diff.dart';
 export 'src/framework/router.dart';
 export 'src/framework/validation.dart';
 export 'src/framework/data/query.dart';

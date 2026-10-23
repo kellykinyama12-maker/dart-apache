@@ -97,6 +97,27 @@ production-real, in value order. Each slice stays shippable + tested + PHP-safe.
 - [ ] *(parked)* **wire DB driver** — a pure-Dart Postgres `Database` impl for
       shared, persistent state across workers. Deprioritized.
 
+## 3c. Phase 3 — application services
+
+With the request/view/reactive stack done, Phase 3 adds the background-service
+layer Laravel leans on. All pure Dart, in-process, no sidecars.
+
+- [x] **H1 — Live server-side diffing.** The server is stateless but holds both
+      the old state (round-tripped from the client) and the new state, so it can
+      render *both* and send a compact **patch** (changed substring) instead of
+      the full HTML. The client reconstructs against its exact base string
+      (seeded from the mount) and still morphs the DOM. Big wire savings for
+      small updates (a counter sends a few bytes, not the whole fragment).
+      Default on (`liveWtHandler(registry, diff: true)`); live-verified in Edge
+      over HTTP/3. (`lib/src/framework/live/diff.dart`.)
+- [ ] **H2 — Events + queue.** A type-keyed `EventDispatcher`
+      (`listen<T>` / `dispatch`) and an in-memory async `Queue` (`push`, delayed
+      jobs, retries, a drain loop) for `Job`s — fire-and-forget work off the
+      request path.
+- [ ] **H3 — Mail.** A `Mailer` over a `MailTransport` seam with pure-Dart
+      `ArrayTransport` (tests) and `LogTransport` (dev); `Message` (to/subject/
+      html/text), optionally queued via H2. (SMTP is a later transport.)
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

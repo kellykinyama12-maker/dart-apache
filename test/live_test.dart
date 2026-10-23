@@ -60,11 +60,12 @@ void main() {
   });
 
   group('liveMount', () {
-    test('emits container with name + escaped state + boot', () {
+    test('emits container with name + escaped state + boot + base seed', () {
       final html = liveMount(_Counter(), wtPath: '/live');
       expect(html, contains('data-live-component="counter"'));
       expect(html, contains('data-live-state='));
       expect(html, contains('window.DARTISAN_LIVE_PATH="/live"'));
+      expect(html, contains('DARTISAN_LIVE_INIT'));
       expect(html, contains('<script src="/app/dartisan-live.js">'));
     });
     test('inlineRuntime embeds the runtime', () {
@@ -75,7 +76,7 @@ void main() {
   });
 
   group('liveWtHandler', () {
-    test('applies action + replies with re-rendered html + state', () {
+    test('replies with a patch that rebuilds the new html (default diff)', () {
       final registry = LiveRegistry()..register(_Counter());
       final handler = liveWtHandler(registry);
       final session = _FakeWtSession();
@@ -91,6 +92,28 @@ void main() {
       final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
       expect(reply['id'], 9);
       expect(reply['state'], {'count': 42});
+      expect(reply['html'], isNull);
+      final patch = (reply['patch'] as Map).cast<String, Object?>();
+      // The client applies the patch to its base (render of the old state).
+      final base = _Counter().render({'count': 41});
+      final rebuilt = base.substring(0, patch['s'] as int) +
+          (patch['i'] as String) +
+          base.substring(patch['e'] as int);
+      expect(rebuilt, _Counter().render({'count': 42}));
+    });
+
+    test('diff:false replies with full html', () {
+      final handler =
+          liveWtHandler(LiveRegistry()..register(_Counter()), diff: false);
+      final session = _FakeWtSession();
+      handler(session, _action({
+        'id': 1,
+        'component': 'counter',
+        'action': 'increment',
+        'state': {'count': 41},
+      }));
+      final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
+      expect(reply['patch'], isNull);
       expect(reply['html'], contains('42'));
     });
 
@@ -110,6 +133,25 @@ void main() {
         ),
       );
       expect(s2.sent, isEmpty);
+    });
+  });
+
+  group('computeHtmlPatch', () {
+    test('minimal splice rebuilds the new string', () {
+      final p = computeHtmlPatch('<span>41</span>', '<span>42</span>');
+      expect(p.insert, '2');
+      expect(p.applyTo('<span>41</span>'), '<span>42</span>');
+    });
+    test('identical strings yield an empty patch', () {
+      final p = computeHtmlPatch('abc', 'abc');
+      expect(p.isEmpty, isTrue);
+      expect(p.applyTo('abc'), 'abc');
+    });
+    test('handles pure insertion and deletion', () {
+      expect(computeHtmlPatch('<b></b>', '<b>hi</b>').applyTo('<b></b>'),
+          '<b>hi</b>');
+      expect(computeHtmlPatch('<b>hi</b>', '<b></b>').applyTo('<b>hi</b>'),
+          '<b></b>');
     });
   });
 }
