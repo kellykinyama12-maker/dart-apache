@@ -22,7 +22,7 @@ Future<void> main(List<String> args) async {
     case 'make:controller':
       _make('controllers', rest, controllerSource, suffix: '_controller');
     case 'make:component':
-      _make('components', rest, componentSource, suffix: '_component');
+      _makeComponent(rest);
     case 'make:model':
       _makeModel(rest);
     case 'make:migration':
@@ -102,6 +102,24 @@ void _makeView(List<String> rest) {
     return;
   }
   _write('views/${snakeCase(rest.first)}.blaze.html', viewSource(rest.first));
+}
+
+void _makeComponent(List<String> rest) {
+  // `--view` scaffolds a Blaze view component; otherwise a Live component.
+  final view = rest.contains('--view');
+  final args = rest.where((a) => a != '--view').toList();
+  if (args.isEmpty) {
+    stderr.writeln('usage: dartisan make:component <Name> [--view]');
+    exitCode = 2;
+    return;
+  }
+  final name = args.first;
+  if (view) {
+    _write('views/components/${snakeCase(name)}.blaze.html',
+        viewComponentSource(name));
+  } else {
+    _write('components/${snakeCase(name)}_component.dart', componentSource(name));
+  }
 }
 
 void _makeModel(List<String> rest) {
@@ -262,6 +280,7 @@ Usage:
   dartisan new <name>               scaffold a new app
   dartisan make:controller <Name>   create controllers/<name>_controller.dart
   dartisan make:component <Name>    create components/<name>_component.dart (Live)
+                                    (add --view for a views/components/<name>.blaze.html)
   dartisan make:model <Name> [f:t]  create models/<name>.dart (record + repository)
   dartisan make:migration <Name>    create migrations/<ts>_<name>.dart (up/down)
   dartisan make:middleware <Name>   create middleware/<name>.dart

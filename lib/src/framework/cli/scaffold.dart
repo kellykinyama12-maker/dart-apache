@@ -78,6 +78,18 @@ String viewSource(String name) => '''
 @endsection
 ''';
 
+/// A Blaze view component (props + default slot) for `<x-$name>`.
+String viewComponentSource(String name) {
+  final slug = snakeCase(name);
+  return '''
+{{-- Use: <x-$slug title="...">body</x-$slug> --}}
+<div class="$slug">
+  <h2>{{ title }}</h2>
+  {!! slot !!}
+</div>
+''';
+}
+
 /// A typed record + repository over the [Database] (edit fields to match your
 /// schema). The table name is the pluralized snake_case of [name].
 String modelSource(String name, {List<FieldSpec> fields = const []}) {

@@ -315,6 +315,19 @@ working code.
       Self-closing (`<x-divider/>`) and nesting supported. Parsed in the Blaze
       tokenizer/tree-parser; 6 tests in `test/blaze_test.dart`.
 
+## 3n. Phase 14 — DX polish
+
+Small quality-of-life wins developers reach for daily.
+
+- [x] **R1 — `make:component --view`.** A view-component generator:
+      `dartisan make:component Card --view` scaffolds
+      `views/components/card.blaze.html` (props + slot skeleton). Without
+      `--view` it still generates a Live component.
+- [x] **R2 — `@forelse / @empty / @endforelse`.** Iterate with an empty
+      fallback in one construct (Blade's `@forelse`), instead of
+      `@if(x.isEmpty) … @else @foreach … @endforeach @endif`.
+- [x] **R3 — `@unless / @endunless`.** Negated `@if` sugar.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

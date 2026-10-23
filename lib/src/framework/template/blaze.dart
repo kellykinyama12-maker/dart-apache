@@ -99,7 +99,9 @@ class BlazeEngine {
 
   static const Set<String> _knownDirectives = {
     'if', 'elseif', 'else', 'endif',
+    'unless', 'endunless',
     'foreach', 'endforeach',
+    'forelse', 'empty', 'endforelse',
     'auth', 'endauth', 'guest', 'endguest',
     'csrf',
     'include', 'extends', 'section', 'endsection', 'yield',
@@ -425,6 +427,24 @@ class _TreeParser {
             Expression.parse(parts[0].trim()), parts[1].trim(), body));
       case 'if':
         nodes.add(_parseIf(t));
+      case 'unless':
+        final body = parseBlock({'endunless'});
+        _expect('endunless');
+        nodes.add(_IfNode([_Branch(Expression.parse('!(${t.args})'), body)]));
+      case 'forelse':
+        final parts = t.args.split(' as ');
+        if (parts.length != 2) {
+          throw TemplateError('@forelse expects "list as item"');
+        }
+        final body = parseBlock({'empty', 'endforelse'});
+        var emptyBody = const <_Node>[];
+        if (_peekDirective('empty')) {
+          _pos++;
+          emptyBody = parseBlock({'endforelse'});
+        }
+        _expect('endforelse');
+        nodes.add(_ForelseNode(Expression.parse(parts[0].trim()),
+            parts[1].trim(), body, emptyBody));
       case 'auth':
         final body = parseBlock({'endauth'});
         _expect('endauth');
@@ -561,6 +581,48 @@ class _ForeachNode extends _Node {
         : value is Iterable
             ? value
             : const [];
+    var index = 0;
+    final last = items.length - 1;
+    for (final item in items) {
+      final child = Map<String, Object?>.of(ctx)
+        ..[itemVar] = item
+        ..['loop'] = {
+          'index': index,
+          'first': index == 0,
+          'last': index == last,
+          'count': index + 1,
+        };
+      for (final n in body) {
+        n.render(out, child, engine, sections);
+      }
+      index++;
+    }
+  }
+}
+
+/// `@forelse(list as item) … @empty … @endforelse`: iterate, or render the
+/// empty branch when the list has no items.
+class _ForelseNode extends _Node {
+  _ForelseNode(this.listExpr, this.itemVar, this.body, this.emptyBody);
+  final Expression listExpr;
+  final String itemVar;
+  final List<_Node> body;
+  final List<_Node> emptyBody;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final value = listExpr.evaluate(ctx);
+    final items = value is Map
+        ? value.values
+        : value is Iterable
+            ? value
+            : const [];
+    if (items.isEmpty) {
+      for (final n in emptyBody) {
+        n.render(out, ctx, engine, sections);
+      }
+      return;
+    }
     var index = 0;
     final last = items.length - 1;
     for (final item in items) {

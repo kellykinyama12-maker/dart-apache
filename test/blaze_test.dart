@@ -71,6 +71,17 @@ void main() {
         'm': {'a': 1, 'b': 2}
       }), '12');
     });
+
+    test('@forelse renders items, @empty on no items', () {
+      const tpl = '@forelse(xs as x){{ x }}@empty none@endforelse';
+      expect(render(tpl, {'xs': [1, 2, 3]}), '123');
+      expect(render(tpl, {'xs': []}), ' none');
+    });
+
+    test('@unless renders when the condition is falsy', () {
+      expect(render('@unless(ok)hidden@endunless', {'ok': false}), 'hidden');
+      expect(render('@unless(ok)hidden@endunless', {'ok': true}), '');
+    });
   });
 
   group('layouts + includes (file-backed)', () {

@@ -124,6 +124,14 @@ void main() {
       expect(src, contains('await next();'));
     });
 
+    test('viewComponentSource is a props + slot skeleton', () {
+      final src = viewComponentSource('AlertBox');
+      expect(src, contains('class="alert_box"'));
+      expect(src, contains('{{ title }}'));
+      expect(src, contains('{!! slot !!}'));
+      expect(src, contains('<x-alert_box'));
+    });
+
     test('newProjectFiles includes the full starter', () {
       final files = newProjectFiles('MyApp');
       expect(files.keys, contains('pubspec.yaml'));
