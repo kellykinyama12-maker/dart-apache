@@ -50,7 +50,7 @@ DartApp buildApp(ServerConfig config) {
 | | |
 | --- | --- |
 | **Routing** | `Router` with `:param` paths, groups, middleware, a `Request`/response facade |
-| **Blaze** (Blade) | `{{ }}`/`{!! !!}`, `@if/@foreach/@forelse/@unless/@switch/@include/@each`, layouts with `@section/@yield/@push/@stack`, `@auth/@guest/@csrf/@error/@json`, `@checked/@selected/@disabled`, `@verbatim`, and `<x-component>` with props + slots |
+| **Blaze** (Blade) | `{{ }}`/`{!! !!}`, `@if/@foreach/@forelse/@unless/@switch/@include/@each`, layouts with `@section/@yield/@push/@stack`, `@auth/@guest/@csrf/@error/@json`, `@checked/@selected/@disabled/@class/@style`, `@verbatim`, and `<x-component>` with props + slots |
 | **Dartisan Live** (Livewire) | reactive server-rendered components over **WebTransport/HTTP‑3**, with **server-side diffing** (a counter update is ~30 B, not the whole fragment) |
 | **Validation** | `req.validate({'email': 'required|email'})`, Laravel-style rules |
 | **Data** | one `Database` API, two drivers: in-memory (zero-config) and `SqlDatabase` (networked SQL, shared across workers) |

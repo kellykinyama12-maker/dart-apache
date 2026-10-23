@@ -509,6 +509,13 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AU1 — list literals in expressions.** `[1, 2, 3]` / `[a, 'x', 2 + 1]` in
       template expressions (e.g. `@foreach(['a', 'b'] as x)`, `in`/`join`/`length`
       over inline lists).
+
+## 3aq. Phase 43 — map literals + @class/@style
+
+- [x] **AV1 — map literals + `@class` / `@style`.** `{key: value}` map literals
+      (bare identifier keys are strings); `@class(['btn', {'active': on}])` and
+      `@style([{'color: red': bad}])` build `class`/`style` attributes from
+      always-on strings plus condition maps.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

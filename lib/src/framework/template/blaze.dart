@@ -124,6 +124,7 @@ class BlazeEngine {
     'auth', 'endauth', 'guest', 'endguest',
     'csrf',
     'checked', 'selected', 'disabled', 'readonly', 'required',
+    'class', 'style',
     'switch', 'case', 'default', 'break', 'endswitch',
     'include', 'includeIf', 'includeWhen', 'each', 'extends', 'section',
     'endsection', 'yield',
@@ -583,6 +584,10 @@ class _TreeParser {
       case 'readonly':
       case 'required':
         nodes.add(_AttrFlagNode(Expression.parse(t.args), t.value));
+      case 'class':
+        nodes.add(_ClassNode(Expression.parse(t.args), false));
+      case 'style':
+        nodes.add(_ClassNode(Expression.parse(t.args), true));
       case 'json':
         nodes.add(_JsonNode(Expression.parse(t.args)));
       case 'push':
@@ -713,6 +718,35 @@ class _AttrFlagNode extends _Node {
   void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
       Map<String, String> sections) {
     if (expr.evaluateTruthy(ctx)) out.write(attribute);
+  }
+}
+
+/// `@class([...])` / `@style([...])`: builds a `class="…"` / `style="…"`
+/// attribute from strings (always included) and `{'name': condition}` maps
+/// (included when the condition is truthy).
+class _ClassNode extends _Node {
+  _ClassNode(this.expr, this.isStyle);
+  final Expression expr;
+  final bool isStyle;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final parts = <String>[];
+    void consume(Object? item) {
+      if (item is String) {
+        if (item.isNotEmpty) parts.add(item);
+      } else if (item is Map) {
+        item.forEach((k, v) {
+          if (Expression.truthy(v)) parts.add('$k');
+        });
+      } else if (item is Iterable) {
+        item.forEach(consume);
+      }
+    }
+
+    consume(expr.evaluate(ctx));
+    final joined = parts.join(isStyle ? '; ' : ' ');
+    out.write('${isStyle ? 'style' : 'class'}="${_escapeHtml(joined)}"');
   }
 }
 

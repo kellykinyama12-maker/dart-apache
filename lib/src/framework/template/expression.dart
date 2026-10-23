@@ -73,6 +73,16 @@ class _ListLiteral extends _Node {
       [for (final e in elements) e.eval(ctx)];
 }
 
+/// A `{key: value}` map literal (bare identifier keys are strings).
+class _MapLiteral extends _Node {
+  _MapLiteral(this.entries);
+  final List<MapEntry<_Node, _Node>> entries;
+  @override
+  Object? eval(Map<String, Object?> ctx) => <Object?, Object?>{
+        for (final e in entries) e.key.eval(ctx): e.value.eval(ctx),
+      };
+}
+
 /// A call to one of the allow-listed [_builtins] helper functions.
 class _Call extends _Node {
   _Call(this.name, this.args);
@@ -391,6 +401,24 @@ class _Parser {
     }
   }
 
+  // A map entry `key: value`; a bare identifier key is treated as a string.
+  MapEntry<_Node, _Node> _parseMapEntry() {
+    _skipWs();
+    final c = _peek();
+    _Node key;
+    if (c == "'" || c == '"') {
+      key = _Literal(_readString(c!));
+    } else if (c != null && _isIdentStart(c)) {
+      key = _Literal(_readIdent());
+    } else {
+      throw ExpressionError('expected map key at $_pos');
+    }
+    _skipWs();
+    _expect(':');
+    final value = _parseOr();
+    return MapEntry(key, value);
+  }
+
   _Node _parsePrimary() {
     _skipWs();
     final c = _peek();
@@ -420,6 +448,24 @@ class _Parser {
       }
       _expect(']');
       return _ListLiteral(elements);
+    }
+    if (c == '{') {
+      _pos++; // past '{'
+      final entries = <MapEntry<_Node, _Node>>[];
+      _skipWs();
+      if (_peek() != '}') {
+        entries.add(_parseMapEntry());
+        _skipWs();
+        while (_peek() == ',') {
+          _pos++;
+          _skipWs();
+          if (_peek() == '}') break; // trailing comma
+          entries.add(_parseMapEntry());
+          _skipWs();
+        }
+      }
+      _expect('}');
+      return _MapLiteral(entries);
     }
     if (c != null && (_isIdentStart(c))) {
       final id = _readIdent();

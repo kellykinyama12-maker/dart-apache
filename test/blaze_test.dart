@@ -50,6 +50,12 @@ void main() {
       expect(ev("join([1, 2, 3], '-')"), '1-2-3');
     });
 
+    test('map literals', () {
+      expect(ev("{a: 1, b: 2}"), {'a': 1, 'b': 2});
+      expect(ev("{'x-y': v}", {'v': 3}), {'x-y': 3});
+      expect(ev('{}'), isEmpty);
+    });
+
     test('collection + number built-ins', () {
       expect(ev("first(xs)", {'xs': [1, 2, 3]}), 1);
       expect(ev("last(xs)", {'xs': [1, 2, 3]}), 3);
@@ -204,6 +210,20 @@ void main() {
       expect(
           fe.renderString('<button @disabled(busy)>', {'busy': true}),
           '<button disabled>');
+    });
+
+    test('@class / @style build attributes from strings + condition maps', () {
+      expect(
+          fe.renderString(
+              "<div @class(['btn', {active: on, off: x}])>", {'on': true, 'x': false}),
+          '<div class="btn active">');
+      expect(
+          fe.renderString("<div @class(['a', {b: no}])>", {'no': false}),
+          '<div class="a">');
+      expect(
+          fe.renderString(
+              "<div @style([{'color: red': bad}])>", {'bad': true}),
+          '<div style="color: red">');
     });
 
     test('@verbatim passes {{ }} and @-directives through literally', () {
