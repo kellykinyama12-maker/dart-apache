@@ -35,4 +35,28 @@ void main() {
       expect(Str.singular('boxes'), 'box');
     });
   });
+
+  group('collections', () {
+    final rows = <Map<String, Object?>>[
+      {'id': 3, 'cat': 'a', 'name': 'c'},
+      {'id': 1, 'cat': 'b', 'name': 'a'},
+      {'id': 2, 'cat': 'a', 'name': 'b'},
+    ];
+    test('sortedBy / sortedByDesc', () {
+      expect(rows.sortedBy((r) => r['id'] as int).pluck('id'), [1, 2, 3]);
+      expect(rows.sortedByDesc((r) => r['id'] as int).pluck('id'), [3, 2, 1]);
+    });
+    test('groupBy', () {
+      final g = rows.groupBy((r) => r['cat'] as String);
+      expect(g.keys.toList(), ['a', 'b']);
+      expect(g['a']!.pluck('id'), [3, 2]);
+    });
+    test('keyBy', () {
+      final k = rows.keyBy((r) => r['id'] as int);
+      expect(k[2]!['name'], 'b');
+    });
+    test('pluck', () {
+      expect(rows.pluck('name'), ['c', 'a', 'b']);
+    });
+  });
 }

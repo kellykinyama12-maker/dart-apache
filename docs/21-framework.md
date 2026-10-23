@@ -400,6 +400,11 @@ Small quality-of-life wins developers reach for daily.
       `req.isAjax`, `req.isJson`, `req.wantsJson` (AJAX or a JSON-favouring
       `Accept` header), and `req.cookie('name')` (parsed from the `Cookie`
       header).
+
+## 3x. Phase 24 — collection helpers
+
+- [x] **AC1 — `Iterable` helpers.** `sortedBy`/`sortedByDesc`, `groupBy`,
+      `keyBy`, and `pluck` (on rows) for working with query-builder results.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
