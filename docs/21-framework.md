@@ -574,6 +574,12 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **BG1 — `??` operator.** `name ?? 'anon'` null-coalescing in template
       expressions (chainable, between ternary and `||`).
+
+## 3bc. Phase 55 — pager window
+
+- [x] **BH1 — `Paginator.pages`.** `paginator.pages(onEachSide: 2)` returns a
+      clamped window of page numbers (also in `toMap()['pages']`) for rendering
+      a pager.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

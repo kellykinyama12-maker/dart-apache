@@ -102,6 +102,15 @@ void main() {
       expect(p2.toMap()['lastPage'], 2);
     });
 
+    test('Paginator.pages returns a window around the current page', () {
+      final p = Paginator<int>(const [], total: 100, page: 5, perPage: 10);
+      expect(p.lastPage, 10);
+      expect(p.pages(onEachSide: 2), [3, 4, 5, 6, 7]);
+      final first = Paginator<int>(const [], total: 100, page: 1, perPage: 10);
+      expect(first.pages(onEachSide: 2), [1, 2, 3]); // clamped at the start
+      expect(p.toMap()['pages'], [3, 4, 5, 6, 7]);
+    });
+
     test('update mutates matching rows and returns affected count', () async {
       final n =
           await db.table('users').where('name', 'ada').update({'age': 37});

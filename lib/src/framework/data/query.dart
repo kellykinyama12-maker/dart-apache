@@ -38,6 +38,13 @@ class Paginator<T> {
   int get from => total == 0 ? 0 : (page - 1) * perPage + 1;
   int get to => total == 0 ? 0 : from + items.length - 1;
 
+  /// A window of page numbers around the current page (for rendering a pager).
+  List<int> pages({int onEachSide = 2}) {
+    final start = (page - onEachSide).clamp(1, lastPage);
+    final end = (page + onEachSide).clamp(1, lastPage);
+    return [for (var p = start; p <= end; p++) p];
+  }
+
   Map<String, Object?> toMap() => {
         'items': items,
         'total': total,
@@ -50,6 +57,7 @@ class Paginator<T> {
         'nextPage': nextPage,
         'from': from,
         'to': to,
+        'pages': pages(),
       };
 }
 
