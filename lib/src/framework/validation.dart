@@ -20,7 +20,8 @@ class ValidationException implements Exception {
 /// `max:N`, `between:a,b`, `digits:N`, `in:a,b,c`, `not_in:a,b`, `same:field`,
 /// `different:field`, `starts_with:a,b`, `ends_with:a,b`, `regex:pattern`,
 /// `uuid`, `ip`, `json`, `size:N`, `date`, `before:date`, `after:date`,
-/// `gt:field|N`, `gte:field|N`, `lt:field|N`, `lte:field|N`, `confirmed`.
+/// `gt:field|N`, `gte:field|N`, `lt:field|N`, `lte:field|N`, `accepted`,
+/// `declined`, `confirmed`.
 class Validator {
   static final _email = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   static final _alpha = RegExp(r'^[A-Za-z]+$');
@@ -81,6 +82,14 @@ class Validator {
         return const {'true', 'false', '0', '1'}.contains(s)
             ? null
             : 'The $field field must be true or false.';
+      case 'accepted':
+        return const {'yes', 'on', '1', 'true'}.contains(s.toLowerCase())
+            ? null
+            : 'The $field must be accepted.';
+      case 'declined':
+        return const {'no', 'off', '0', 'false'}.contains(s.toLowerCase())
+            ? null
+            : 'The $field must be declined.';
       case 'url':
         return (s.startsWith('http://') || s.startsWith('https://'))
             ? null

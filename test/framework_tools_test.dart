@@ -111,6 +111,13 @@ void main() {
           Validator.validate({'max': '3', 'min': '4'}, {'min': 'lt:max'}),
           isNotEmpty);
     });
+
+    test('accepted / declined', () {
+      expect(Validator.validate({'tos': 'yes'}, {'tos': 'accepted'}), isEmpty);
+      expect(Validator.validate({'tos': 'no'}, {'tos': 'accepted'}), isNotEmpty);
+      expect(Validator.validate({'x': 'off'}, {'x': 'declined'}), isEmpty);
+      expect(Validator.validate({'x': '1'}, {'x': 'declined'}), isNotEmpty);
+    });
   });
 
   group('scaffold', () {

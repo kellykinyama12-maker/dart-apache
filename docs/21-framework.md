@@ -585,6 +585,11 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **BI1 — `gt` / `gte` / `lt` / `lte`.** Numeric validation against another
       field's value or a literal (e.g. `min` → `lt:max`, `age` → `gte:18`).
+
+## 3be. Phase 57 — accepted / declined
+
+- [x] **BJ1 — `accepted` / `declined`.** Checkbox/terms validation (`accepted` =
+      `yes/on/1/true`, `declined` = `no/off/0/false`).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
