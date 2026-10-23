@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · Dartisan</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
+    nav a { margin-right: 1rem; }
+    .flash { color: #0a7d2c; }
+    .error { color: #c0261a; }
+    form.inline { display: inline; }
+    input[type=text], input:not([type]) { padding: .35rem .5rem; }
+    button { padding: .35rem .7rem; cursor: pointer; }
+    ul { padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Home</a>
+    @auth<a href="/dashboard">Dashboard</a>@endauth
+    @guest<a href="/login">Log in</a>@endguest
+  </nav>
+  @yield('content')
+  <hr>
+  <p style="color:#888">Dartisan on dart-apache — one compiled binary, reactive over HTTP/3.</p>
+</body>
+</html>

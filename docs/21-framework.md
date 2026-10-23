@@ -87,8 +87,13 @@ production-real, in value order. Each slice stays shippable + tested + PHP-safe.
       `make` — a type-keyed IoC container (one per worker isolate), registered
       on the `Router` (`router.singleton<T>(...)`) and resolved in handlers via
       `request.make<T>()`. (`lib/src/framework/container/container.dart`.)
-- [ ] **G4 — Showcase app.** one end-to-end example (routes + Blaze +
-      validation + data + Live) that doubles as a living demo + bench target.
+- [x] **G4 — Showcase app.** `example/dartisan_app.dart` — one end-to-end app
+      (routing + middleware, Blaze views with `@auth/@guest`, validation, the
+      data layer via DI, encrypted-cookie sessions + `requireAuth`, flash
+      messages, and a Live counter over WebTransport). A login → notes → logout
+      flow that doubles as a living demo. Verified end-to-end over HTTP/1.1
+      (auth redirect, cookie session, per-user notes, flash) and the Live
+      channel over HTTP/3.
 - [ ] *(parked)* **wire DB driver** — a pure-Dart Postgres `Database` impl for
       shared, persistent state across workers. Deprioritized.
 

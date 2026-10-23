@@ -1,0 +1,14 @@
+@extends('layout')
+@section('content')
+<h1>Dartisan showcase</h1>
+<p>A tiny app that uses every piece of the framework in one compiled binary:
+routing, Blaze views, validation, the data layer, sessions + auth, the service
+container, and a reactive Live component over WebTransport/HTTP&#8203;3.</p>
+@auth
+  <p>Signed in as <strong>{{ user }}</strong>. Go to your
+  <a href="/dashboard">dashboard</a>.</p>
+@endauth
+@guest
+  <p><a href="/login">Log in</a> (any name) to see the dashboard.</p>
+@endguest
+@endsection

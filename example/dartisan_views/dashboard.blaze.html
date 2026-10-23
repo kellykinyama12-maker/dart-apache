@@ -1,0 +1,33 @@
+@extends('layout')
+@section('content')
+<h1>Dashboard</h1>
+<p>Welcome, <strong>{{ user }}</strong>.
+  <form method="post" action="/logout" class="inline"><button>Log out</button></form>
+</p>
+@if(flash)
+  <p class="flash">{{ flash }}</p>
+@endif
+
+<h2>Your notes</h2>
+@if(notes.isEmpty)
+  <p>No notes yet — add one below.</p>
+@else
+  <ul>
+    @foreach(notes as note)
+      <li>{{ note.text }}</li>
+    @endforeach
+  </ul>
+@endif
+@if(noteError)
+  <p class="error">{{ noteError }}</p>
+@endif
+<form method="post" action="/notes">
+  <input name="text" placeholder="New note" autofocus>
+  <button type="submit">Add note</button>
+</form>
+
+<h2>Live counter</h2>
+<p style="color:#888">The buttons below drive server-rendered state over a
+native WebTransport session on HTTP/3 — no page reload, no WebSocket tier.</p>
+{!! live !!}
+@endsection
