@@ -186,6 +186,16 @@ void main() {
               {'count': 5}),
           'A <span x-text="{{ count }}">@if(x)</span> B');
     });
+
+    test('@switch/@case/@default selects a branch', () {
+      const src = '@switch(role)'
+          "@case('admin')A@break"
+          "@case('user')U@break"
+          '@default?@endswitch';
+      expect(fe.renderString(src, {'role': 'admin'}), 'A');
+      expect(fe.renderString(src, {'role': 'user'}), 'U');
+      expect(fe.renderString(src, {'role': 'guest'}), '?');
+    });
   });
 
   group('components (<x-...>)', () {

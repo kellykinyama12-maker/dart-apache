@@ -429,6 +429,11 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **AG1 — `uuid` / `ip` / `json` / `size:N`.** UUID format, IPv4/IPv6
       address, parseable JSON, and exact size (string length or numeric value).
+
+## 3ac. Phase 29 — @switch
+
+- [x] **AH1 — `@switch/@case/@default/@break`.** Value-matching branch selection
+      in templates (`@switch(role) @case('admin')…@break @default… @endswitch`).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

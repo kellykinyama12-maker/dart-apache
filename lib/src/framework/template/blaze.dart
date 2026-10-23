@@ -109,6 +109,7 @@ class BlazeEngine {
     'auth', 'endauth', 'guest', 'endguest',
     'csrf',
     'checked', 'selected', 'disabled', 'readonly', 'required',
+    'switch', 'case', 'default', 'break', 'endswitch',
     'include', 'extends', 'section', 'endsection', 'yield',
   };
 
@@ -473,6 +474,8 @@ class _TreeParser {
             Expression.parse(parts[0].trim()), parts[1].trim(), body));
       case 'if':
         nodes.add(_parseIf(t));
+      case 'switch':
+        nodes.add(_parseSwitch(t));
       case 'unless':
         final body = parseBlock({'endunless'});
         _expect('endunless');
@@ -501,6 +504,8 @@ class _TreeParser {
         nodes.add(_IfNode([_Branch(Expression.parse('!auth'), body)]));
       case 'csrf':
         nodes.add(_CsrfNode());
+      case 'break':
+        nodes.add(_BreakNode());
       case 'checked':
       case 'selected':
       case 'disabled':
@@ -539,6 +544,38 @@ class _TreeParser {
     }
     _expect('endif');
     return _IfNode(branches);
+  }
+
+  _Node _parseSwitch(_Tok switchTok) {
+    final subject = Expression.parse(switchTok.args);
+    final cases = <_SwitchCase>[];
+    List<_Node>? defaultBody;
+    const stops = {'case', 'default', 'endswitch'};
+    // Skip any text (whitespace) between @switch and the first @case/@default.
+    while (_pos < _toks.length &&
+        _toks[_pos].kind == _TokKind.text &&
+        !_peekDirective('case')) {
+      _pos++;
+    }
+    while (_peekDirective('case') || _peekDirective('default')) {
+      if (_peekDirective('case')) {
+        final caseTok = _toks[_pos++];
+        final body = parseBlock(stops);
+        _dropTrailingBreak(body);
+        cases.add(_SwitchCase(Expression.parse(caseTok.args), body));
+      } else {
+        _pos++; // consume @default
+        defaultBody = parseBlock(stops);
+        _dropTrailingBreak(defaultBody);
+      }
+    }
+    _expect('endswitch');
+    return _SwitchNode(subject, cases, defaultBody);
+  }
+
+  // Blade case bodies end with @break; drop the trailing break node it parsed.
+  void _dropTrailingBreak(List<_Node> body) {
+    if (body.isNotEmpty && body.last is _BreakNode) body.removeLast();
   }
 
   bool _peekDirective(String name) =>
@@ -639,6 +676,44 @@ class _IfNode extends _Node {
           n.render(out, ctx, engine, sections);
         }
         return;
+      }
+    }
+  }
+}
+
+/// A placeholder produced by `@break`; stripped from switch-case bodies.
+class _BreakNode extends _Node {
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {}
+}
+
+class _SwitchCase {
+  _SwitchCase(this.value, this.body);
+  final Expression value;
+  final List<_Node> body;
+}
+
+class _SwitchNode extends _Node {
+  _SwitchNode(this.subject, this.cases, this.defaultBody);
+  final Expression subject;
+  final List<_SwitchCase> cases;
+  final List<_Node>? defaultBody;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final value = subject.evaluate(ctx);
+    for (final c in cases) {
+      if (c.value.evaluate(ctx) == value) {
+        for (final n in c.body) {
+          n.render(out, ctx, engine, sections);
+        }
+        return;
+      }
+    }
+    if (defaultBody != null) {
+      for (final n in defaultBody!) {
+        n.render(out, ctx, engine, sections);
       }
     }
   }
