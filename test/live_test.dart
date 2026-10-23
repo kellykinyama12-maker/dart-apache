@@ -147,6 +147,21 @@ void main() {
       expect(reply['html'], contains('42'));
     });
 
+    test('empty action re-renders the current state (poll/live-model idle)', () {
+      final handler =
+          liveWtHandler(LiveRegistry()..register(_Counter()), diff: false);
+      final session = _FakeWtSession();
+      handler(session, _action({
+        'id': 7,
+        'component': 'counter',
+        'action': '',
+        'state': {'count': 5},
+      }));
+      final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
+      expect(reply['state'], {'count': 5}); // unchanged
+      expect(reply['html'], contains('5'));
+    });
+
     test('ignores unknown components and datagrams', () {
       final handler = liveWtHandler(LiveRegistry()..register(_Counter()));
       final s1 = _FakeWtSession();

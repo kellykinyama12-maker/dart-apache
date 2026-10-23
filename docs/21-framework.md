@@ -597,13 +597,13 @@ Matching Blade directive-for-directive doesn't beat the giants; **Livewire over
 HTTP/3 + WebTransport** is the edge PHP can't match natively. This track widens
 that gap. Roadmap:
 
-- [ ] **B1 — validation round-trips + loading states.** `LiveComponent.validate`
+- [x] **B1 — validation round-trips + loading states.** `LiveComponent.validate`
       throws a `ValidationException` the WT handler catches, folding `errors`
       into the re-rendered state (input preserved); the client toggles
       `data-live-loading` elements, a `data-live-busy` root attribute, and
       `data-live-loading-class` classes for the duration of each action.
-- [ ] **B2 — polling + model modifiers.** `data-live-poll="action"` (interval)
-      and `.lazy` / `.debounce` on `data-live-model`.
+- [x] **B2 — polling + live models.** `data-live-poll="action"` (interval) and
+      eager `data-live-model-live` (re-renders on input, debounced).
 - [ ] **B3 — nested components.** Child components mount inside a parent render
       with independent state and their own action round-trips.
 - [ ] **B4 — component events.** `emit` / `listen` between components on the
@@ -630,6 +630,16 @@ that gap. Roadmap:
   so server-side validation never runs. (2) Mount extra components with
   `includeRuntime: false`; the single inlined runtime binds every component on
   `DOMContentLoaded`.
+
+### B2 — polling + live models
+
+- [x] `data-live-poll="action"` (+ `data-live-poll-interval="ms"`, default 2000)
+      runs the action on a per-container interval, re-established after each
+      render; `data-live-model-live="field"` re-renders on input (debounced via
+      `data-live-debounce="ms"`), folding the value with no explicit action.
+- [x] Demo: `ClockComponent` (polls `tick`) + `SearchComponent` (live filter).
+      Live-verified in Edge (`tool/browser-h3-test/live_b2_wt_test.js`): clock
+      advanced 0→2 unattended; search `ch`→`[cherry]`, `a`→4 — all over WT/h3.
 
 ## 4. Principles
 

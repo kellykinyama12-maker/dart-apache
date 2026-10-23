@@ -6,6 +6,9 @@
 //   data-live-submit="action"  -> on a form's submit
 //   data-live-model="field"    -> two-way: the input's value folds into state
 //                                 on the next action
+//   data-live-model-live="field" -> eager two-way: re-renders on input (debounced)
+//   data-live-poll="action"     -> runs the action on an interval
+//                                 (data-live-poll-interval="ms", default 2000)
 //   data-live-loading           -> element (use `hidden`) shown only while an
 //                                   action is in flight
 //   data-live-loading-class="…" -> classes toggled on the element while busy
@@ -69,12 +72,16 @@
     return inp.value;
   }
 
-  // Fold the live value of every [data-live-model] input into [st] so typed
-  // input is carried with the action even before it's committed server-side.
+  // Fold the live value of every model input into [st] so typed input is
+  // carried with the action even before it's committed server-side. Both the
+  // deferred [data-live-model] and the eager [data-live-model-live] are folded.
   function collectModels(el, st) {
-    var inputs = el.querySelectorAll('[data-live-model]');
+    var inputs = el.querySelectorAll('[data-live-model], [data-live-model-live]');
     for (var i = 0; i < inputs.length; i++) {
-      st[inputs[i].getAttribute('data-live-model')] = inputValue(inputs[i]);
+      var inp = inputs[i];
+      var field = inp.getAttribute('data-live-model') ||
+        inp.getAttribute('data-live-model-live');
+      st[field] = inputValue(inp);
     }
     return st;
   }
@@ -125,12 +132,26 @@
       el.__liveHtml = html;
       morph(el, html);
       el.setAttribute('data-live-state', JSON.stringify(reply.state));
+      setupPolling(el); // the poll element/interval may have changed in the render
       // Expose last state for tests / debugging.
       window.__dartisanLive = reply.state;
       el.dispatchEvent(new CustomEvent('live:updated', { detail: reply.state }));
     } finally {
       setLoading(el, false);
     }
+  }
+
+  // Restart the container's poll timer from its current [data-live-poll] element
+  // (if any). data-live-poll="action" + optional data-live-poll-interval="ms".
+  function setupPolling(el) {
+    if (el.__pollTimer) { clearInterval(el.__pollTimer); el.__pollTimer = null; }
+    var p = el.querySelector('[data-live-poll]');
+    if (!p) return;
+    var ms = parseInt(p.getAttribute('data-live-poll-interval'), 10) || 2000;
+    var action = p.getAttribute('data-live-poll') || '';
+    el.__pollTimer = setInterval(function () {
+      run(el, action, payloadFrom(p));
+    }, ms);
   }
 
   // ---- DOM morphing (morphdom-lite) --------------------------------------
@@ -230,14 +251,18 @@
 
   // ---- binding ------------------------------------------------------------
 
-  function debounce(node, fn) {
+  function debounce(node, fn, ms) {
     clearTimeout(node.__liveTimer);
-    node.__liveTimer = setTimeout(fn, 150);
+    node.__liveTimer = setTimeout(fn, ms || 150);
   }
 
   // Collect a trigger element's data-live-* params into the action payload
   // (e.g. data-live-id="5" -> {id: "5"}; data-live-item-id -> {itemId}).
-  var RESERVED = { click: 1, input: 1, change: 1, submit: 1, model: 1, key: 1, component: 1, state: 1 };
+  var RESERVED = {
+    click: 1, input: 1, change: 1, submit: 1, model: 1, 'model-live': 1,
+    key: 1, component: 1, state: 1, poll: 1, 'poll-interval': 1,
+    loading: 1, 'loading-class': 1, busy: 1, debounce: 1
+  };
   function payloadFrom(el) {
     var out = {};
     if (!el || !el.attributes) return out;
@@ -276,6 +301,14 @@
       if (!t || !el.contains(t)) return;
       debounce(t, function () { run(el, t.getAttribute('data-live-input'), payloadFrom(t)); });
     });
+    // Eager two-way model: re-sync + re-render on input (debounced), folding the
+    // current value via collectModels — a no-op action that just re-renders.
+    el.addEventListener('input', function (ev) {
+      var t = ev.target.closest('[data-live-model-live]');
+      if (!t || !el.contains(t)) return;
+      var ms = parseInt(t.getAttribute('data-live-debounce'), 10);
+      debounce(t, function () { run(el, '', {}); }, isNaN(ms) ? 150 : ms);
+    });
     el.addEventListener('change', function (ev) {
       var t = ev.target.closest('[data-live-change]');
       if (!t || !el.contains(t)) return;
@@ -287,6 +320,7 @@
       ev.preventDefault();
       run(el, t.getAttribute('data-live-submit'), payloadFrom(t));
     });
+    setupPolling(el);
   }
 
   function boot() {

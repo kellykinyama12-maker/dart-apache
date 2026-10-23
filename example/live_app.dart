@@ -91,10 +91,73 @@ class SignupComponent extends LiveComponent {
   }
 }
 
+/// A clock whose `tick` action is driven by the client on a 1s poll interval —
+/// the server stays stateless; the tick count round-trips like any other state.
+class ClockComponent extends LiveComponent {
+  @override
+  String get name => 'clock';
+
+  @override
+  Map<String, Object?> initialState() => {'ticks': 0};
+
+  @override
+  Map<String, Object?> update(
+    String action,
+    Map<String, Object?> state,
+    Map<String, Object?> payload,
+  ) {
+    final ticks = (state['ticks'] as num?)?.toInt() ?? 0;
+    return action == 'tick' ? {'ticks': ticks + 1} : state;
+  }
+
+  @override
+  String render(Map<String, Object?> state) =>
+      '<p>Server ticks: <strong id="tick-count">${state['ticks'] ?? 0}</strong></p>'
+      '<span hidden data-live-poll="tick" data-live-poll-interval="1000"></span>';
+}
+
+/// A live-search box: each keystroke re-renders the filtered list over
+/// WebTransport (eager `data-live-model-live`, so no explicit action needed).
+class SearchComponent extends LiveComponent {
+  static const _fruits = ['apple', 'banana', 'cherry', 'date', 'grape'];
+  static final _attr = const HtmlEscape(HtmlEscapeMode.attribute);
+  static final _text = const HtmlEscape();
+
+  @override
+  String get name => 'search';
+
+  @override
+  bool get diffable => false;
+
+  @override
+  Map<String, Object?> initialState() => {'q': ''};
+
+  @override
+  Map<String, Object?> update(
+    String action,
+    Map<String, Object?> state,
+    Map<String, Object?> payload,
+  ) =>
+      state; // model-live re-renders with the folded query; no named actions
+
+  @override
+  String render(Map<String, Object?> state) {
+    final q = '${state['q'] ?? ''}'.toLowerCase();
+    final matches = _fruits.where((f) => f.contains(q)).toList();
+    return '<input type="text" placeholder="filter fruit…" '
+        'data-live-model-live="q" value="${_attr.convert('${state['q'] ?? ''}')}">'
+        '<ul id="search-results">'
+        '${matches.map((f) => '<li>${_text.convert(f)}</li>').join()}</ul>'
+        '<small id="search-count">${matches.length} match(es)</small>';
+  }
+}
+
 DartApp buildApp(ServerConfig config) {
   final registry = LiveRegistry()
     ..register(CounterComponent())
-    ..register(SignupComponent());
+    ..register(SignupComponent())
+    ..register(ClockComponent())
+    ..register(SearchComponent());
   final wtPath = config.wtPath ?? '/wt';
   // Inline the client runtime so the demo needs no extra h3 request.
   final runtime = File('public/app/dartisan-live.js').readAsStringSync();
@@ -109,6 +172,10 @@ DartApp buildApp(ServerConfig config) {
             '${liveMount(CounterComponent(), wtPath: wtPath, inlineRuntime: runtime)}'
             '<h2>Signup (server-side validation + loading state)</h2>'
             '${liveMount(SignupComponent(), wtPath: wtPath, includeRuntime: false)}'
+            '<h2>Clock (polling every 1s over WebTransport)</h2>'
+            '${liveMount(ClockComponent(), wtPath: wtPath, includeRuntime: false)}'
+            '<h2>Live search (eager data-live-model-live)</h2>'
+            '${liveMount(SearchComponent(), wtPath: wtPath, includeRuntime: false)}'
             '</body></html>';
         await r.writeText(page, contentType: 'text/html; charset=UTF-8');
       }, methods: {'GET'}),
