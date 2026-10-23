@@ -27,6 +27,9 @@ path to **HTTP/3 (QUIC)**, TLS, reverse proxying, and horizontal scalability.
 | [17-parity.md](17-parity.md) | Differential-testing plan vs Apache/nginx + the implemented PHP↔Dart parity harness |
 | [18-pitch.md](18-pitch.md) | Positioning vs Apache & nginx (measured benchmarks, verdicts) |
 | [19-dart-development.md](19-dart-development.md) | **Developer guide**: writing in-process Dart app handlers + WebTransport sessions on dart-apache |
+| [20-beat-the-giants.md](20-beat-the-giants.md) | **Beat the giants**: the plan + measured proof that dart-apache wins dynamic app workloads vs nginx+php-fpm |
+| [21-framework.md](21-framework.md) | **Dartisan**: the batteries-included app framework (Blaze, Router, Live, CLI, validation, data) + Laravel/Flutter parity maps |
+| [22-getting-started.md](22-getting-started.md) | **Getting started**: build a Dartisan app in 10 minutes (scaffold → routes → Blaze → validation → data → Live over HTTP/3) |
 
 ## Reading order
 

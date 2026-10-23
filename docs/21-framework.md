@@ -14,7 +14,7 @@ can match natively.
 | Routing + controllers | **Dartisan Router / Controllers** | route groups, params, middleware, resourceful controllers |
 | Blade | **Blaze** | server-side templating: `{{ }}`, `@if/@foreach/@include`, layouts (`@extends/@section/@yield`) |
 | Livewire | **Dartisan Live** | reactive server-rendered components streamed over **WebTransport/HTTP‑3** (our edge) |
-| Eloquent | **(later) Dartisan ORM** | start with a thin query/record layer; DB drivers later |
+| Eloquent | **Dartisan Data** | thin query/record layer (`Database`/`QueryBuilder`) + pure-Dart `InMemoryDatabase`; wire-driver DBs later |
 | Artisan CLI | **`dartisan` CLI** | `new`, `make:controller`, `make:view`, `serve`, `routes` |
 | Validation / Requests | **FormRequest** | typed request validation |
 | Middleware | **Middleware** | before/after hooks (auth, CSRF, logging) — reuse client interceptor shape |
@@ -52,11 +52,16 @@ This is the thing PHP can't do without bolting on infrastructure.
       runtime `public/app/dartisan-live.js`). **Live-verified in Edge** over
       real HTTP/3: a counter's +/- clicks drive state over WebTransport
       (`example/live_app.dart`, `tool/browser-h3-test/live_wt_test.js`).
-- [ ] **F5 — Data layer.** [x] request validation (`Validator` /
-      `req.validate(rules)`, Laravel-style rule strings); [ ] a thin
-      record/query layer and a first DB driver.
-- [ ] **F6 — Docs site.** guides, API reference, a "build a Dartisan app in 10
-      minutes" tutorial; lead with the HTTP/3 + Live story.
+- [x] **F5 — Data layer.** [x] request validation (`Validator` /
+      `req.validate(rules)`, Laravel-style rule strings); [x] a thin
+      record/query layer (`Database` / `QueryBuilder` — chainable
+      `where/whereIn/orderBy/limit/offset` + `get/first/count/insert/update/
+      delete`) with a pure-Dart, no-FFI `InMemoryDatabase` first driver. A real
+      driver (e.g. pure-Dart Postgres) can implement `Database` unchanged.
+      (`lib/src/framework/data/query.dart`.)
+- [x] **F6 — Getting started.** a "build a Dartisan app in 10 minutes"
+      tutorial that leads with the HTTP/3 + Live story
+      ([22-getting-started.md](22-getting-started.md)).
 
 ## 4. Principles
 
