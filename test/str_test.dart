@@ -24,6 +24,15 @@ void main() {
       expect(Str.limit('abc', 5), 'abc');
       expect(Str.words('one two three four', 2), 'one two...');
     });
+    test('squish / before / after / between', () {
+      expect(Str.squish('  a   b\tc '), 'a b c');
+      expect(Str.before('user@example.com', '@'), 'user');
+      expect(Str.after('user@example.com', '@'), 'example.com');
+      expect(Str.beforeLast('a.b.c', '.'), 'a.b');
+      expect(Str.afterLast('a.b.c', '.'), 'c');
+      expect(Str.between('[hello]', '[', ']'), 'hello');
+      expect(Str.before('nodelim', '@'), 'nodelim');
+    });
     test('mask', () {
       expect(Str.mask('4111111111111234'), '************1234');
       expect(Str.mask('abc', visible: 4), 'abc');

@@ -66,6 +66,38 @@ class Str {
     return parts.length <= count ? value : '${parts.take(count).join(' ')}$end';
   }
 
+  /// Collapses runs of whitespace to single spaces and trims.
+  static String squish(String value) =>
+      value.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  /// The portion of [value] before the first occurrence of [search].
+  static String before(String value, String search) {
+    final i = value.indexOf(search);
+    return i < 0 ? value : value.substring(0, i);
+  }
+
+  /// The portion of [value] after the first occurrence of [search].
+  static String after(String value, String search) {
+    final i = value.indexOf(search);
+    return i < 0 ? value : value.substring(i + search.length);
+  }
+
+  /// The portion of [value] before the last occurrence of [search].
+  static String beforeLast(String value, String search) {
+    final i = value.lastIndexOf(search);
+    return i < 0 ? value : value.substring(0, i);
+  }
+
+  /// The portion of [value] after the last occurrence of [search].
+  static String afterLast(String value, String search) {
+    final i = value.lastIndexOf(search);
+    return i < 0 ? value : value.substring(i + search.length);
+  }
+
+  /// The portion of [value] between the first [from] and the last [to].
+  static String between(String value, String from, String to) =>
+      beforeLast(after(value, from), to);
+
   /// Masks all but the last [visible] characters with [char].
   static String mask(String value, {int visible = 4, String char = '*'}) =>
       value.length <= visible

@@ -538,6 +538,11 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AZ1 — `withCookie`.** `req.withCookie('pref', 'dark', maxAge: …,
       httpOnly: true)` queues a `Set-Cookie` header (Path/Max-Age/Domain/
       HttpOnly/Secure/SameSite) for non-session cookies.
+
+## 3av. Phase 48 — Str substrings
+
+- [x] **BA1 — `squish` / `before` / `after` / `between`.** `Str.squish`,
+      `before`/`after`/`beforeLast`/`afterLast`, and `between` substring helpers.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
