@@ -87,6 +87,28 @@ and `php-fpm` (persistent pool, the modern setup).
   modern PHP**; if you stay on PHP, use `php-fpm` (not `php-cgi`) and lean on
   `--cache`.
 
+### Dynamic PHP across servers — nginx vs Apache vs dart-apache (`tool/bench_fpm_servers.sh`)
+
+The **same PHP app** and the **same php-fpm pool**, fronted by each server
+(apples-to-apples on the PHP path), plus dart-apache's native Dart handler:
+
+| Server | index.php | fc.php | Notes |
+| --- | ---: | ---: | --- |
+| nginx + php-fpm | **31,625** req/s | **39,761** req/s | fastest FastCGI front-end |
+| Apache httpd + php-fpm | 26,882 req/s | 38,322 req/s | close behind nginx |
+| dart-apache + php-fpm | 16,275 req/s | 18,668 req/s | 🔴 ~1.6–2× slower proxying to fpm |
+| **dart-apache — native Dart** | **111,186** req/s | **131,247** req/s | 🟢 ~3.5–4× faster than nginx+fpm |
+
+**Honest read:**
+- **As a FastCGI front-end to php-fpm, dart-apache is the slowest** — nginx and
+  Apache have far more tuned FastCGI clients (~1.6–2× ahead). If your stack is
+  "PHP behind a web server," nginx/Apache + php-fpm is the better front.
+- **The dart-apache win is removing PHP+FastCGI entirely:** its native
+  in-process Dart handler does **~3.5–4× the throughput of nginx+php-fpm** (and
+  ~4× Apache+php-fpm), because there's no FastCGI hop — the app runs in the
+  serving isolate. That's the pitch: *rewrite the hot paths as native Dart*, not
+  "proxy PHP faster than nginx" (it doesn't).
+
 ### What the numbers say
 
 - **Raw static is nginx's game** — hand-tuned C + zero-copy `sendfile` vs
