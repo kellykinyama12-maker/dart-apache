@@ -606,7 +606,7 @@ that gap. Roadmap:
       eager `data-live-model-live` (re-renders on input, debounced).
 - [x] **B3 — nested components.** Child components mount inside a parent render
       with independent state and their own action round-trips.
-- [ ] **B4 — component events.** `emit` / `listen` between components on the
+- [x] **B4 — component events.** `emit` / `listen` between components on the
       same session.
 - [ ] **B5 — lifecycle + dirty state.** `mount` / `updated` hooks; dirty markers.
 
@@ -652,6 +652,16 @@ that gap. Roadmap:
       escapes `</` so a nested component's own `<script>` can't close the block.
 - [x] Live-verified in Edge (`tool/browser-h3-test/live_b3_wt_test.js`): nested
       counter → 2, parent bump, nested **stays 2**, then → 3 — over WT/h3.
+
+### B4 — component events
+
+- [x] Server stays stateless: `LiveComponent.emit(state, event, [payload])`
+      queues events; the handler lifts them off the state into `reply.emit`.
+- [x] Client fans them out — every element with a matching
+      `data-live-listen="event:action"` runs that action on its owning component
+      (a fresh round-trip carrying the event payload).
+- [x] Live-verified in Edge (`tool/browser-h3-test/live_b4_wt_test.js`):
+      `pinger` emits `ping` → `inbox` received count reaches 2 — over WT/h3.
 
 ## 4. Principles
 

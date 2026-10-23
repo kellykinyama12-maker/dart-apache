@@ -51,6 +51,24 @@ class _LoginForm extends LiveComponent {
       '<form>${state['saved'] == true ? 'ok' : ''}</form>';
 }
 
+class _Pinger extends LiveComponent {
+  @override
+  String get name => 'pinger';
+  @override
+  Map<String, Object?> initialState() => {'sent': 0};
+  @override
+  Map<String, Object?> update(
+      String action, Map<String, Object?> state, Map<String, Object?> p) {
+    if (action == 'ping') {
+      return emit({'sent': ((state['sent'] as num?)?.toInt() ?? 0) + 1}, 'ping');
+    }
+    return state;
+  }
+
+  @override
+  String render(Map<String, Object?> state) => '<span>${state['sent']}</span>';
+}
+
 class _FakeWtSession implements WtSession {
   final List<String> sent = [];
   @override
@@ -239,6 +257,38 @@ void main() {
           throwsA(isA<ValidationException>()));
       expect(() => form.validate({'email': 'a@b.co'}, {'email': 'email'}),
           returnsNormally);
+    });
+  });
+
+  group('Live component events (B4)', () {
+    test('emit lifts queued events into reply.emit, stripped from state', () {
+      final handler =
+          liveWtHandler(LiveRegistry()..register(_Pinger()), diff: false);
+      final session = _FakeWtSession();
+      handler(session, _action({
+        'id': 1,
+        'component': 'pinger',
+        'action': 'ping',
+        'state': {'sent': 0},
+      }));
+      final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
+      expect((reply['state'] as Map).containsKey('__emit'), isFalse);
+      final emit = (reply['emit'] as List).cast<Map<String, Object?>>();
+      expect(emit.single['event'], 'ping');
+    });
+
+    test('no events -> no emit key', () {
+      final handler =
+          liveWtHandler(LiveRegistry()..register(_Pinger()), diff: false);
+      final session = _FakeWtSession();
+      handler(session, _action({
+        'id': 2,
+        'component': 'pinger',
+        'action': 'noop',
+        'state': {'sent': 3},
+      }));
+      final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
+      expect(reply.containsKey('emit'), isFalse);
     });
   });
 

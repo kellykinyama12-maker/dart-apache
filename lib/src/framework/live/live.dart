@@ -46,6 +46,22 @@ abstract class LiveComponent {
     final errors = Validator.validate(data, rules);
     if (errors.isNotEmpty) throw ValidationException(errors);
   }
+
+  /// Returns [state] with an event queued for emission to other components.
+  /// The handler lifts queued events off the state into the reply; the client
+  /// dispatches each to components with a matching `data-live-listen`. Call from
+  /// [update]: `return emit({...state, 'saved': true}, 'item-saved', {'id': id});`
+  Map<String, Object?> emit(
+    Map<String, Object?> state,
+    String event, [
+    Map<String, Object?> payload = const {},
+  ]) {
+    final queued = [
+      ...?(state['__emit'] as List?),
+      {'event': event, 'payload': payload},
+    ];
+    return {...state, '__emit': queued};
+  }
 }
 
 /// Routes client actions to registered [LiveComponent]s by name.
@@ -92,6 +108,9 @@ WtHandler liveWtHandler(LiveRegistry registry, {bool diff = true}) {
     } on ValidationException catch (e) {
       next = {...state, 'errors': e.errors};
     }
+    // Lift any queued cross-component events off the state into the reply.
+    final emitted = next['__emit'];
+    if (emitted != null) next = {...next}..remove('__emit');
     final newHtml = component.render(next);
 
     final Map<String, Object?> reply;
@@ -106,6 +125,7 @@ WtHandler liveWtHandler(LiveRegistry registry, {bool diff = true}) {
     } else {
       reply = {'id': msg['id'], 'html': newHtml, 'state': next};
     }
+    if (emitted is List && emitted.isNotEmpty) reply['emit'] = emitted;
     session.send(utf8.encode(jsonEncode(reply)));
   };
 }

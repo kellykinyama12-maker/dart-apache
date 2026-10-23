@@ -184,13 +184,70 @@ class PanelComponent extends LiveComponent {
       '</div>';
 }
 
+/// Emits a `ping` event other components listen for (cross-component events,
+/// orchestrated by the client — the server stays stateless).
+class PingerComponent extends LiveComponent {
+  @override
+  String get name => 'pinger';
+
+  @override
+  Map<String, Object?> initialState() => {'sent': 0};
+
+  @override
+  Map<String, Object?> update(
+    String action,
+    Map<String, Object?> state,
+    Map<String, Object?> payload,
+  ) {
+    if (action == 'ping') {
+      final sent = (state['sent'] as num?)?.toInt() ?? 0;
+      return emit({'sent': sent + 1}, 'ping', {});
+    }
+    return state;
+  }
+
+  @override
+  String render(Map<String, Object?> state) =>
+      '<p>Pings sent: <strong id="pings-sent">${state['sent'] ?? 0}</strong> '
+      '<button data-live-click="ping">ping</button></p>';
+}
+
+/// Listens for `ping` (via data-live-listen) and counts how many it received.
+class InboxComponent extends LiveComponent {
+  @override
+  String get name => 'inbox';
+
+  @override
+  Map<String, Object?> initialState() => {'received': 0};
+
+  @override
+  Map<String, Object?> update(
+    String action,
+    Map<String, Object?> state,
+    Map<String, Object?> payload,
+  ) {
+    if (action == 'onPing') {
+      final got = (state['received'] as num?)?.toInt() ?? 0;
+      return {'received': got + 1};
+    }
+    return state;
+  }
+
+  @override
+  String render(Map<String, Object?> state) =>
+      '<span hidden data-live-listen="ping:onPing"></span>'
+      '<p>Pings received: <strong id="pings-received">${state['received'] ?? 0}</strong></p>';
+}
+
 DartApp buildApp(ServerConfig config) {
   final registry = LiveRegistry()
     ..register(CounterComponent())
     ..register(SignupComponent())
     ..register(ClockComponent())
     ..register(SearchComponent())
-    ..register(PanelComponent());
+    ..register(PanelComponent())
+    ..register(PingerComponent())
+    ..register(InboxComponent());
   final wtPath = config.wtPath ?? '/wt';
   // Inline the client runtime so the demo needs no extra h3 request.
   final runtime = File('public/app/dartisan-live.js').readAsStringSync();
@@ -211,6 +268,9 @@ DartApp buildApp(ServerConfig config) {
             '${liveMount(SearchComponent(), wtPath: wtPath, includeRuntime: false)}'
             '<h2>Nested components (child counter keeps state across parent bumps)</h2>'
             '${liveMount(PanelComponent(), wtPath: wtPath, includeRuntime: false)}'
+            '<h2>Component events (emit → listen, cross-component)</h2>'
+            '${liveMount(PingerComponent(), wtPath: wtPath, includeRuntime: false)}'
+            '${liveMount(InboxComponent(), wtPath: wtPath, includeRuntime: false)}'
             '</body></html>';
         await r.writeText(page, contentType: 'text/html; charset=UTF-8');
       }, methods: {'GET'}),

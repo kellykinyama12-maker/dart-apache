@@ -15,6 +15,8 @@ const String liveRuntimeSource = r'''
 //   data-live-model-live="field" -> eager two-way: re-renders on input (debounced)
 //   data-live-poll="action"     -> runs the action on an interval
 //                                 (data-live-poll-interval="ms", default 2000)
+//   data-live-listen="event:action;…" -> runs the action when another component
+//                                 emits a matching event
 //   data-live-loading           -> element (use `hidden`) shown only while an
 //                                   action is in flight
 //   data-live-loading-class="…" -> classes toggled on the element while busy
@@ -143,8 +145,31 @@ const String liveRuntimeSource = r'''
       // Expose last state for tests / debugging.
       window.__dartisanLive = reply.state;
       el.dispatchEvent(new CustomEvent('live:updated', { detail: reply.state }));
+      // Fan out any emitted events to listening components (own round-trips).
+      if (reply.emit) {
+        for (var i = 0; i < reply.emit.length; i++) {
+          dispatchLive(reply.emit[i].event, reply.emit[i].payload || {});
+        }
+      }
     } finally {
       setLoading(el, false);
+    }
+  }
+
+  // Dispatch a cross-component [event]: every element with a matching entry in
+  // its data-live-listen="event:action;…" runs that action on its owning
+  // component (a fresh round-trip carrying the event [payload]).
+  function dispatchLive(event, payload) {
+    var nodes = document.querySelectorAll('[data-live-listen]');
+    for (var i = 0; i < nodes.length; i++) {
+      var pairs = (nodes[i].getAttribute('data-live-listen') || '').split(';');
+      for (var j = 0; j < pairs.length; j++) {
+        var kv = pairs[j].split(':');
+        if (kv[0] && kv[0].trim() === event && kv[1]) {
+          var owner = nodes[i].closest('[data-live-component]');
+          if (owner) run(owner, kv[1].trim(), payload);
+        }
+      }
     }
   }
 
@@ -271,7 +296,7 @@ const String liveRuntimeSource = r'''
   var RESERVED = {
     click: 1, input: 1, change: 1, submit: 1, model: 1, 'model-live': 1,
     key: 1, component: 1, state: 1, poll: 1, 'poll-interval': 1,
-    loading: 1, 'loading-class': 1, busy: 1, debounce: 1
+    loading: 1, 'loading-class': 1, busy: 1, debounce: 1, listen: 1
   };
   function payloadFrom(el) {
     var out = {};
