@@ -338,6 +338,22 @@ bool _isWs(String c) => c == ' ' || c == '\t' || c == '\n' || c == '\r';
 
 /// Splits directive args on the first top-level comma (outside quotes), for
 /// `@include('name', expr)`.
+// The `loop` variable exposed inside @foreach/@forelse bodies.
+Map<String, Object?> _loopVars(int index, int length) {
+  final last = length - 1;
+  return {
+    'index': index,
+    'iteration': index + 1,
+    'count': index + 1, // 1-based position (kept for back-compat)
+    'total': length,
+    'remaining': last - index,
+    'first': index == 0,
+    'last': index == last,
+    'even': (index + 1) % 2 == 0,
+    'odd': (index + 1) % 2 == 1,
+  };
+}
+
 List<String> _splitFirstComma(String s) {
   var inQuote = false;
   String? quote;
@@ -885,16 +901,10 @@ class _ForeachNode extends _Node {
             ? value
             : const [];
     var index = 0;
-    final last = items.length - 1;
     for (final item in items) {
       final child = Map<String, Object?>.of(ctx)
         ..[itemVar] = item
-        ..['loop'] = {
-          'index': index,
-          'first': index == 0,
-          'last': index == last,
-          'count': index + 1,
-        };
+        ..['loop'] = _loopVars(index, items.length);
       for (final n in body) {
         n.render(out, child, engine, sections);
       }
@@ -927,16 +937,10 @@ class _ForelseNode extends _Node {
       return;
     }
     var index = 0;
-    final last = items.length - 1;
     for (final item in items) {
       final child = Map<String, Object?>.of(ctx)
         ..[itemVar] = item
-        ..['loop'] = {
-          'index': index,
-          'first': index == 0,
-          'last': index == last,
-          'count': index + 1,
-        };
+        ..['loop'] = _loopVars(index, items.length);
       for (final n in body) {
         n.render(out, child, engine, sections);
       }

@@ -558,6 +558,12 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **BD1 — `chunk` / `uniqueBy`.** Split an `Iterable` into fixed-size chunks
       and de-duplicate by a key (preserving order).
+
+## 3az. Phase 52 — richer loop variable
+
+- [x] **BE1 — `@foreach` loop metadata.** The `loop` variable now also exposes
+      `iteration` (1-based), `total`, `remaining`, `even`, and `odd` (alongside
+      `index`/`first`/`last`/`count`).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

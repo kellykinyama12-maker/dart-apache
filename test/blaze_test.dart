@@ -257,6 +257,15 @@ void main() {
       expect(fe.renderString('@isset(v)x@endisset', {}), '');
     });
 
+    test('@foreach loop variable exposes iteration/total/even/remaining', () {
+      expect(
+          fe.renderString(
+              '@foreach(xs as x){{ loop.iteration }}:{{ loop.total }}:'
+              '{{ loop.remaining }}:{{ loop.even }} @endforeach',
+              {'xs': ['a', 'b', 'c']}),
+          '1:3:2:false 2:3:1:true 3:3:0:false ');
+    });
+
     test('@includeIf skips a missing partial; @includeWhen gates on a cond', () {
       File('${dir.path}/present.blaze.html').writeAsStringSync('[here]');
       expect(fe.renderString("@includeIf('present')"), '[here]');
