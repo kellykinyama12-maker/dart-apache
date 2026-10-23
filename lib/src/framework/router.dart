@@ -244,7 +244,8 @@ class Request {
   /// When a session is configured, `errors` and `old` (from the flash) are
   /// injected into the view data so `@error` / `{{ old.x }}` work automatically
   /// ([data] overrides them).
-  Future<void> view(String view, [Map<String, Object?> data = const {}]) {
+  Future<void> view(String view,
+      [Map<String, Object?> data = const {}, int status = 200]) {
     final engine = _views;
     if (engine == null) {
       throw StateError('Router has no view engine; pass Router(views: ...)');
@@ -262,7 +263,7 @@ class Request {
     };
     _persistSession();
     return response.writeText(engine.render(view, enriched),
-        contentType: 'text/html; charset=UTF-8');
+        status: status, contentType: 'text/html; charset=UTF-8');
   }
 
   Future<void> html(String markup, {int status = 200}) {

@@ -457,6 +457,11 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AL1 — collection/number helpers.** `first`, `last`, `reverse`,
       `contains`, `keys`, `values`, and `number_format(n[, decimals])` added to
       the template expression allow-list.
+
+## 3ah. Phase 34 — view status
+
+- [x] **AM1 — `view` status code.** `req.view('errors.404', data, 404)` renders a
+      Blaze view with a custom HTTP status (for error pages).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

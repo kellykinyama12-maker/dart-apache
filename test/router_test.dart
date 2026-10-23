@@ -95,6 +95,17 @@ void main() {
       expect(res.headers['content-type'], contains('application/json'));
     });
 
+    test('view renders with a custom status (e.g. 404 pages)', () async {
+      final dir = Directory.systemTemp.createTempSync('blaze_status');
+      File('${dir.path}/missing.blaze.html').writeAsStringSync('Not here');
+      final app = (Router(views: BlazeEngine(dir.path, cache: false))
+            ..get('/x', (r) => r.view('missing', const {}, 404)))
+          .toApp();
+      final res = await run(app, 'GET', '/x');
+      expect(res.statusCode, 404);
+      expect(res.text, 'Not here');
+    });
+
     test('created / noContent / back responders', () async {
       final app = (Router()
             ..post('/c', (r) => r.created({'id': 1}, location: '/c/1'))
