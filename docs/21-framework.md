@@ -193,6 +193,24 @@ drop-in: `Mailer(SmtpTransport(...))` with no other changes.
       [`dart-email-server`](https://github.com/KellyKinyama/dart-email-server)
       package can implement the same `MailTransport` instead.
 
+## 3g. Phase 7 — wire DB driver
+
+Unparks the last item. The `Database` seam (F5) makes this a drop-in: build the
+same `QueryBuilder` API against a networked SQL server instead of the in-memory
+map — giving **shared, persistent state across worker isolates**.
+
+- [x] **L1 — `SqlDatabase` wire driver.** A pure-`dart:io` `Database` impl that
+      speaks [`dart-db-server`](https://github.com/KellyKinyama/dart-db-server)'s
+      newline-delimited JSON protocol (`{"id","sql"}` →
+      `{"ok","columns","rows","affected"}`): translates `QueryBuilder`
+      `where/whereIn/orderBy/limit/offset` → `SELECT`, `insert` →
+      `INSERT … RETURNING *`, `update`/`delete` → `UPDATE`/`DELETE … affected`;
+      plus a raw `execute(sql)` for DDL/migrations. Request multiplexing by
+      `id`, lazy connect, single-quote escaping. Tested against a loopback fake
+      server (default suite) and **live-verified** against a running
+      `dart-db-server` via `tool/smoke_sql_db.dart` (CREATE → insert w/ returned
+      auto-id → filtered select/first/count → update → delete).
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
