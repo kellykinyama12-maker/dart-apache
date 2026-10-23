@@ -124,6 +124,7 @@ String liveMount(
   String scriptUrl = '/app/dartisan-live.js',
   String? inlineRuntime,
   bool includeRuntime = true,
+  String? key,
 }) {
   final s = state ?? component.initialState();
   final attrEsc = const HtmlEscape(HtmlEscapeMode.attribute);
@@ -134,11 +135,18 @@ String liveMount(
       : inlineRuntime != null
           ? '\n<script>$inlineRuntime</script>'
           : '\n<script src="$scriptUrl"></script>';
+  final keyAttr = key == null ? '' : ' data-live-key="${attrEsc.convert(key)}"';
   // Seed the client's exact base string so server-side patches splice cleanly.
-  return '<div data-live-component="${component.name}" '
+  // `</` is escaped so a render containing a <script> (e.g. a nested component)
+  // can't terminate this <script> block early.
+  return '<div data-live-component="${component.name}"$keyAttr '
       'data-live-state="$stateAttr">$initial</div>\n'
-      '<script>window.DARTISAN_LIVE_PATH=${jsonEncode(wtPath)};'
+      '<script>window.DARTISAN_LIVE_PATH=${_scriptJson(wtPath)};'
       '(window.DARTISAN_LIVE_INIT=window.DARTISAN_LIVE_INIT||{})'
-      '[${jsonEncode(component.name)}]=${jsonEncode(initial)};</script>'
+      '[${_scriptJson(component.name)}]=${_scriptJson(initial)};</script>'
       '$boot';
 }
+
+/// JSON encodes [value] for safe embedding inside an inline `<script>` (escapes
+/// `</` so an embedded `</script>` can't close the block).
+String _scriptJson(Object? value) => jsonEncode(value).replaceAll('</', r'<\/');

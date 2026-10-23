@@ -138,6 +138,7 @@ const String liveRuntimeSource = r'''
       el.__liveHtml = html;
       morph(el, html);
       el.setAttribute('data-live-state', JSON.stringify(reply.state));
+      bindWithin(el);   // bind any child components a re-render introduced
       setupPolling(el); // the poll element/interval may have changed in the render
       // Expose last state for tests / debugging.
       window.__dartisanLive = reply.state;
@@ -152,7 +153,7 @@ const String liveRuntimeSource = r'''
   function setupPolling(el) {
     if (el.__pollTimer) { clearInterval(el.__pollTimer); el.__pollTimer = null; }
     var p = el.querySelector('[data-live-poll]');
-    if (!p) return;
+    if (!p || !owns(el, p)) return;
     var ms = parseInt(p.getAttribute('data-live-poll-interval'), 10) || 2000;
     var action = p.getAttribute('data-live-poll') || '';
     el.__pollTimer = setInterval(function () {
@@ -218,6 +219,9 @@ const String liveRuntimeSource = r'''
       return;
     }
     if (from.nodeType !== 1) return;
+    // A nested, already-bound component is a boundary: it owns its own state and
+    // DOM, so a parent re-render must not touch it (leave it entirely alone).
+    if (from.__liveBound && from.hasAttribute('data-live-component')) return;
     morphAttrs(from, to);
     var tag = from.nodeName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') {
@@ -288,6 +292,19 @@ const String liveRuntimeSource = r'''
     });
   }
 
+  // A trigger belongs to its nearest [data-live-component] ancestor; this lets
+  // nested components' delegated listeners ignore each other's events.
+  function owns(el, t) {
+    return t.closest('[data-live-component]') === el;
+  }
+
+  // Bind every (not-yet-bound) component within [el] — e.g. children a parent
+  // re-render just imported into the DOM.
+  function bindWithin(el) {
+    var ns = el.querySelectorAll('[data-live-component]');
+    for (var i = 0; i < ns.length; i++) bind(ns[i]);
+  }
+
   function bind(el) {
     if (el.__liveBound) return; // one set of listeners per container, even if
     el.__liveBound = true;      // the runtime script is evaluated more than once
@@ -296,33 +313,34 @@ const String liveRuntimeSource = r'''
     el.__liveHtml = init[el.getAttribute('data-live-component')];
     if (el.__liveHtml == null) el.__liveHtml = el.innerHTML;
     // Delegated listeners live on the container, so they survive DOM morphs.
+    // `owns` keeps a nested component's events from firing the parent's handler.
     el.addEventListener('click', function (ev) {
       var t = ev.target.closest('[data-live-click]');
-      if (!t || !el.contains(t)) return;
+      if (!t || !el.contains(t) || !owns(el, t)) return;
       ev.preventDefault();
       run(el, t.getAttribute('data-live-click'), payloadFrom(t));
     });
     el.addEventListener('input', function (ev) {
       var t = ev.target.closest('[data-live-input]');
-      if (!t || !el.contains(t)) return;
+      if (!t || !el.contains(t) || !owns(el, t)) return;
       debounce(t, function () { run(el, t.getAttribute('data-live-input'), payloadFrom(t)); });
     });
     // Eager two-way model: re-sync + re-render on input (debounced), folding the
     // current value via collectModels — a no-op action that just re-renders.
     el.addEventListener('input', function (ev) {
       var t = ev.target.closest('[data-live-model-live]');
-      if (!t || !el.contains(t)) return;
+      if (!t || !el.contains(t) || !owns(el, t)) return;
       var ms = parseInt(t.getAttribute('data-live-debounce'), 10);
       debounce(t, function () { run(el, '', {}); }, isNaN(ms) ? 150 : ms);
     });
     el.addEventListener('change', function (ev) {
       var t = ev.target.closest('[data-live-change]');
-      if (!t || !el.contains(t)) return;
+      if (!t || !el.contains(t) || !owns(el, t)) return;
       run(el, t.getAttribute('data-live-change'), payloadFrom(t));
     });
     el.addEventListener('submit', function (ev) {
       var t = ev.target.closest('[data-live-submit]');
-      if (!t || !el.contains(t)) return;
+      if (!t || !el.contains(t) || !owns(el, t)) return;
       ev.preventDefault();
       run(el, t.getAttribute('data-live-submit'), payloadFrom(t));
     });

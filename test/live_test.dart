@@ -103,6 +103,10 @@ void main() {
       expect(html, contains('DARTISAN_LIVE_INIT'));
       expect(html, isNot(contains('<script src=')));
     });
+    test('key adds a data-live-key for stable nested matching', () {
+      final html = liveMount(_Counter(), key: 'nested-1', includeRuntime: false);
+      expect(html, contains('data-live-key="nested-1"'));
+    });
   });
 
   group('liveWtHandler', () {

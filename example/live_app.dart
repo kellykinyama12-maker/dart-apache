@@ -152,12 +152,45 @@ class SearchComponent extends LiveComponent {
   }
 }
 
+/// A parent component that embeds a nested, independent counter. Bumping the
+/// parent re-renders it, but the nested counter keeps its own state (the client
+/// treats a bound child component as a morph boundary).
+class PanelComponent extends LiveComponent {
+  @override
+  String get name => 'panel';
+
+  @override
+  bool get diffable => false;
+
+  @override
+  Map<String, Object?> initialState() => {'bumps': 0};
+
+  @override
+  Map<String, Object?> update(
+    String action,
+    Map<String, Object?> state,
+    Map<String, Object?> payload,
+  ) {
+    final bumps = (state['bumps'] as num?)?.toInt() ?? 0;
+    return action == 'bump' ? {'bumps': bumps + 1} : state;
+  }
+
+  @override
+  String render(Map<String, Object?> state) =>
+      '<p>Parent bumps: <strong id="panel-bumps">${state['bumps'] ?? 0}</strong> '
+      '<button data-live-click="bump">bump parent</button></p>'
+      '<div style="margin-left:1rem;border-left:2px solid #ccc;padding-left:.5rem">'
+      '${liveMount(CounterComponent(), wtPath: '/wt', includeRuntime: false, key: 'nested-counter')}'
+      '</div>';
+}
+
 DartApp buildApp(ServerConfig config) {
   final registry = LiveRegistry()
     ..register(CounterComponent())
     ..register(SignupComponent())
     ..register(ClockComponent())
-    ..register(SearchComponent());
+    ..register(SearchComponent())
+    ..register(PanelComponent());
   final wtPath = config.wtPath ?? '/wt';
   // Inline the client runtime so the demo needs no extra h3 request.
   final runtime = File('public/app/dartisan-live.js').readAsStringSync();
@@ -176,6 +209,8 @@ DartApp buildApp(ServerConfig config) {
             '${liveMount(ClockComponent(), wtPath: wtPath, includeRuntime: false)}'
             '<h2>Live search (eager data-live-model-live)</h2>'
             '${liveMount(SearchComponent(), wtPath: wtPath, includeRuntime: false)}'
+            '<h2>Nested components (child counter keeps state across parent bumps)</h2>'
+            '${liveMount(PanelComponent(), wtPath: wtPath, includeRuntime: false)}'
             '</body></html>';
         await r.writeText(page, contentType: 'text/html; charset=UTF-8');
       }, methods: {'GET'}),

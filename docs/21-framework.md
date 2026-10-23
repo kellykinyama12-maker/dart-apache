@@ -604,7 +604,7 @@ that gap. Roadmap:
       `data-live-loading-class` classes for the duration of each action.
 - [x] **B2 — polling + live models.** `data-live-poll="action"` (interval) and
       eager `data-live-model-live` (re-renders on input, debounced).
-- [ ] **B3 — nested components.** Child components mount inside a parent render
+- [x] **B3 — nested components.** Child components mount inside a parent render
       with independent state and their own action round-trips.
 - [ ] **B4 — component events.** `emit` / `listen` between components on the
       same session.
@@ -640,6 +640,18 @@ that gap. Roadmap:
 - [x] Demo: `ClockComponent` (polls `tick`) + `SearchComponent` (live filter).
       Live-verified in Edge (`tool/browser-h3-test/live_b2_wt_test.js`): clock
       advanced 0→2 unattended; search `ch`→`[cherry]`, `a`→4 — all over WT/h3.
+
+### B3 — nested components
+
+- [x] `liveMount(child, includeRuntime: false, key: '…')` embeds a child in a
+      parent's render. The client scopes each component's delegated listeners to
+      its nearest `[data-live-component]` owner, treats a bound child as a morph
+      **boundary** (a parent re-render leaves it untouched), and binds any child
+      a re-render newly introduces.
+- [x] `liveMount(key:)` adds `data-live-key` for stable matching; the seed script
+      escapes `</` so a nested component's own `<script>` can't close the block.
+- [x] Live-verified in Edge (`tool/browser-h3-test/live_b3_wt_test.js`): nested
+      counter → 2, parent bump, nested **stays 2**, then → 3 — over WT/h3.
 
 ## 4. Principles
 
