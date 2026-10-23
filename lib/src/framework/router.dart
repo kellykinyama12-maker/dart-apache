@@ -533,6 +533,7 @@ class Router {
 
   // Active group scope while [group] runs.
   String _prefix = '';
+  String _namePrefix = '';
   final List<Middleware> _scoped = [];
 
   /// Registers global middleware (runs for every route).
@@ -576,25 +577,30 @@ class Router {
     return Uri(path: path, queryParameters: query).toString();
   }
 
-  /// Groups routes under a path [prefix] and optional [middleware]. Register
-  /// routes on this same router inside [build].
+  /// Groups routes under a path [prefix] and optional [middleware]. A [name]
+  /// prefix is prepended to the `name:` of routes registered inside [build]
+  /// (e.g. `group('/admin', ..., name: 'admin.')`).
   void group(
     String prefix,
     void Function() build, {
     List<Middleware> middleware = const [],
+    String name = '',
   }) {
     final savedPrefix = _prefix;
+    final savedName = _namePrefix;
     final savedLen = _scoped.length;
     _prefix = '$_prefix$prefix';
+    _namePrefix = '$_namePrefix$name';
     _scoped.addAll(middleware);
     build();
     _prefix = savedPrefix;
+    _namePrefix = savedName;
     _scoped.removeRange(savedLen, _scoped.length);
   }
 
   void _add(String method, String pattern, RouteAction action, {String? name}) {
     final full = '$_prefix$pattern';
-    if (name != null) _names[name] = full;
+    if (name != null) _names['$_namePrefix$name'] = full;
     final chain = [..._globalMiddleware, ..._scoped];
     final route = DartRoute.path(full, (exchange, response) async {
       final params = _paramsFor(full, exchange.uri.path);

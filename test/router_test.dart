@@ -67,6 +67,14 @@ void main() {
       expect(() => router.urlFor('users.show'), throwsArgumentError);
     });
 
+    test('group name + path prefixes compose for named routes', () {
+      final router = Router();
+      router.group('/admin', () {
+        router.get('/users/:id', (r) => r.text('x'), name: 'users.show');
+      }, name: 'admin.');
+      expect(router.urlFor('admin.users.show', {'id': 9}), '/admin/users/9');
+    });
+
     test('content negotiation + method + cookie helpers', () async {
       final app = (Router()
             ..get(

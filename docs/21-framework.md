@@ -497,6 +497,12 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AS1 — `find` / `value` / `exists` / `pluck` / `orderByDesc` /
       `whereNull`.** Common Eloquent-style shortcuts on `QueryBuilder` (all
       delegate to existing operators, so both drivers support them).
+
+## 3ao. Phase 41 — group name prefixes
+
+- [x] **AT1 — `group(..., name:)`.** A route group's `name:` is prepended to the
+      `name:` of routes registered inside it, so `urlFor('admin.users.show')`
+      resolves (composes with the path prefix).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
