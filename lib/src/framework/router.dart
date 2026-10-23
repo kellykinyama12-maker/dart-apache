@@ -87,6 +87,16 @@ class Request {
   /// A query-string parameter (`?q=x` -> `query('q')`).
   String? query(String name) => exchange.uri.queryParameters[name];
 
+  /// A query parameter parsed as an int, or [fallback] (handy for `?page=`).
+  int queryInt(String name, [int fallback = 0]) =>
+      int.tryParse(query(name) ?? '') ?? fallback;
+
+  /// A query parameter read as a boolean (`1/true/on/yes` are true).
+  bool queryBool(String name) {
+    final v = query(name)?.toLowerCase();
+    return v == '1' || v == 'true' || v == 'on' || v == 'yes';
+  }
+
   /// A request header (case-insensitive).
   String? header(String name) {
     final want = name.toLowerCase();

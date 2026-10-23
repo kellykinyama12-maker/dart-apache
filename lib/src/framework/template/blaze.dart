@@ -105,6 +105,7 @@ class BlazeEngine {
     'forelse', 'empty', 'endforelse',
     'error', 'enderror',
     'json',
+    'push', 'endpush', 'stack',
     'auth', 'endauth', 'guest', 'endguest',
     'csrf',
     'include', 'extends', 'section', 'endsection', 'yield',
@@ -482,6 +483,12 @@ class _TreeParser {
         nodes.add(_CsrfNode());
       case 'json':
         nodes.add(_JsonNode(Expression.parse(t.args)));
+      case 'push':
+        final body = parseBlock({'endpush'});
+        _expect('endpush');
+        nodes.add(_PushNode(_literal(t.args), body));
+      case 'stack':
+        nodes.add(_StackNode(_literal(t.args)));
       case 'error':
         final body = parseBlock({'enderror'});
         _expect('enderror');
@@ -698,6 +705,35 @@ class _JsonNode extends _Node {
   void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
           Map<String, String> sections) =>
       out.write(jsonEncode(expr.evaluate(ctx)));
+}
+
+/// `@push('name') … @endpush`: appends its body to the named stack (emitted by
+/// a `@stack('name')`, typically in a layout). Stacks ride in [sections] under
+/// a `__stack:` prefix.
+class _PushNode extends _Node {
+  _PushNode(this.name, this.body);
+  final String name;
+  final List<_Node> body;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final sb = StringBuffer();
+    for (final n in body) {
+      n.render(sb, ctx, engine, sections);
+    }
+    final key = '__stack:$name';
+    sections[key] = (sections[key] ?? '') + sb.toString();
+  }
+}
+
+/// `@stack('name')`: emits everything pushed to the named stack.
+class _StackNode extends _Node {
+  _StackNode(this.name);
+  final String name;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+          Map<String, String> sections) =>
+      out.write(sections['__stack:$name'] ?? '');
 }
 
 /// `@error('field') … @enderror`: renders the body (with `message` bound to the

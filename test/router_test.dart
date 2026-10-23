@@ -46,6 +46,15 @@ void main() {
       expect((await run(app, 'GET', '/s?q=hi')).text, 'q=hi');
     });
 
+    test('queryInt + queryBool parse typed query params', () async {
+      final app = (Router()
+            ..get('/p',
+                (r) => r.text('${r.queryInt('page', 1)}/${r.queryBool('all')}')))
+          .toApp();
+      expect((await run(app, 'GET', '/p?page=3&all=yes')).text, '3/true');
+      expect((await run(app, 'GET', '/p')).text, '1/false');
+    });
+
     test('json body echoed', () async {
       final app = (Router()
             ..post('/echo', (r) async => r.sendJson(await r.json())))

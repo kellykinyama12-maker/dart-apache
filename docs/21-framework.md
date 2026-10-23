@@ -364,6 +364,14 @@ Small quality-of-life wins developers reach for daily.
 - [x] **W1 — `@include` with data.** `@include('users.row', item)` merges the
       (map) value into the partial's context (the old single-arg form still
       shares the caller's context).
+
+## 3s. Phase 19 — stacks + typed query input
+
+- [x] **X1 — `@push / @stack`.** A child view `@push('scripts') … @endpush`
+      appends to a named stack a layout emits with `@stack('scripts')` (scripts/
+      styles bubbling up to the layout).
+- [x] **X2 — Typed query helpers.** `req.queryInt('page', 1)` and
+      `req.queryBool('all')` (`1/true/on/yes`) over query parameters.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

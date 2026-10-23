@@ -147,6 +147,14 @@ void main() {
           }),
           '[row:grace]');
     });
+
+    test('@push collects into a layout @stack', () {
+      File('${dir.path}/base.blaze.html')
+          .writeAsStringSync('<head>@stack("s")</head>');
+      File('${dir.path}/child.blaze.html').writeAsStringSync(
+          '@extends("base")@push("s")<a>@endpush@push("s")<b>@endpush');
+      expect(fe.render('child'), '<head><a><b></head>');
+    });
   });
 
   group('components (<x-...>)', () {
