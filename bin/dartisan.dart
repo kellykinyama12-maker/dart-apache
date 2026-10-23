@@ -1,0 +1,140 @@
+import 'dart:io';
+
+import 'package:dart_apache/src/framework/cli/scaffold.dart';
+
+/// `dartisan` — the Dartisan project/scaffolding CLI (the Artisan analog).
+///
+///   dartisan new myapp
+///   dartisan make:controller User
+///   dartisan make:component Counter
+///   dartisan make:view profile
+///   dartisan serve [entrypoint] [-- server args]
+Future<void> main(List<String> args) async {
+  if (args.isEmpty || args.first == 'help' || args.first == '--help') {
+    _usage();
+    return;
+  }
+  final cmd = args.first;
+  final rest = args.skip(1).toList();
+  switch (cmd) {
+    case 'new':
+      _new(rest);
+    case 'make:controller':
+      _make('controllers', rest, controllerSource, suffix: '_controller');
+    case 'make:component':
+      _make('components', rest, componentSource, suffix: '_component');
+    case 'make:view':
+      _makeView(rest);
+    case 'serve':
+      await _serve(rest);
+    default:
+      stderr.writeln('Unknown command: $cmd\n');
+      _usage();
+      exitCode = 2;
+  }
+}
+
+void _new(List<String> rest) {
+  if (rest.isEmpty) {
+    stderr.writeln('usage: dartisan new <name>');
+    exitCode = 2;
+    return;
+  }
+  final name = rest.first;
+  final dir = Directory(name);
+  if (dir.existsSync()) {
+    stderr.writeln('Directory "$name" already exists.');
+    exitCode = 2;
+    return;
+  }
+  newProjectFiles(name).forEach((rel, content) {
+    final f = File('$name/$rel');
+    f.parent.createSync(recursive: true);
+    f.writeAsStringSync(content.trimLeft());
+    stdout.writeln('  created $name/$rel');
+  });
+  stdout.writeln('\nCreated "$name". Next:\n  cd $name && dart pub get && dartisan serve');
+}
+
+void _make(
+  String folder,
+  List<String> rest,
+  String Function(String) gen, {
+  required String suffix,
+}) {
+  if (rest.isEmpty) {
+    stderr.writeln('usage: dartisan make:... <Name>');
+    exitCode = 2;
+    return;
+  }
+  final name = rest.first;
+  final path = '$folder/${snakeCase(name)}$suffix.dart';
+  _write(path, gen(name));
+}
+
+void _makeView(List<String> rest) {
+  if (rest.isEmpty) {
+    stderr.writeln('usage: dartisan make:view <name>');
+    exitCode = 2;
+    return;
+  }
+  _write('views/${snakeCase(rest.first)}.blaze.html', viewSource(rest.first));
+}
+
+void _write(String path, String content) {
+  final f = File(path);
+  if (f.existsSync()) {
+    stderr.writeln('$path already exists.');
+    exitCode = 2;
+    return;
+  }
+  f.parent.createSync(recursive: true);
+  f.writeAsStringSync(content.trimLeft());
+  stdout.writeln('created $path');
+}
+
+Future<void> _serve(List<String> rest) async {
+  // Entry point: first non-flag arg, else bin/<pkg>.dart or bin/main.dart.
+  final entry = rest.firstWhere((a) => !a.startsWith('-'),
+      orElse: () => _defaultEntry());
+  if (entry.isEmpty) {
+    stderr.writeln('No entrypoint found. Pass one: dartisan serve bin/app.dart');
+    exitCode = 2;
+    return;
+  }
+  final passthrough = rest.where((a) => a != entry).toList();
+  final serverArgs = passthrough.isEmpty
+      ? ['--root=.', '--port=8080']
+      : passthrough;
+  stdout.writeln('dartisan serve -> dart run $entry ${serverArgs.join(' ')}');
+  final proc = await Process.start(
+    'dart',
+    ['run', entry, ...serverArgs],
+    mode: ProcessStartMode.inheritStdio,
+  );
+  exitCode = await proc.exitCode;
+}
+
+String _defaultEntry() {
+  final bin = Directory('bin');
+  if (!bin.existsSync()) return '';
+  if (File('bin/main.dart').existsSync()) return 'bin/main.dart';
+  final dart = bin
+      .listSync()
+      .whereType<File>()
+      .firstWhere((f) => f.path.endsWith('.dart'), orElse: () => File(''));
+  return dart.path.isEmpty ? '' : dart.path.replaceAll('\\', '/');
+}
+
+void _usage() {
+  stdout.writeln('''
+dartisan — Dartisan project CLI
+
+Usage:
+  dartisan new <name>               scaffold a new app
+  dartisan make:controller <Name>   create controllers/<name>_controller.dart
+  dartisan make:component <Name>    create components/<name>_component.dart (Live)
+  dartisan make:view <name>         create views/<name>.blaze.html
+  dartisan serve [entry] [args]     run the app (dart run; dev)
+''');
+}

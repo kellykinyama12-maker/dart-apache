@@ -5,6 +5,7 @@ import '../pipeline/dart_handler.dart';
 import '../pipeline/server_exchange.dart';
 import '../wt/wt_handler.dart';
 import 'template/blaze.dart';
+import 'validation.dart';
 
 /// A request+response facade for route handlers: path params, query, body, and
 /// convenient responders (view/json/text/html/redirect). The Dartisan analog of
@@ -48,6 +49,30 @@ class Request {
 
   /// The request body parsed as JSON.
   Future<Object?> json() async => jsonDecode(await body());
+
+  /// Validates request input (query + body, JSON or form-encoded) against
+  /// [rules] and returns the merged data, or throws [ValidationException].
+  Future<Map<String, Object?>> validate(Map<String, String> rules) async {
+    final data = <String, Object?>{...exchange.uri.queryParameters};
+    final raw = await body();
+    if (raw.isNotEmpty) {
+      final ct = (header('content-type') ?? '').toLowerCase();
+      if (ct.contains('application/json')) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) data.addAll(decoded.cast<String, Object?>());
+      } else {
+        for (final pair in raw.split('&')) {
+          final i = pair.indexOf('=');
+          if (i < 0) continue;
+          data[Uri.decodeQueryComponent(pair.substring(0, i))] =
+              Uri.decodeQueryComponent(pair.substring(i + 1));
+        }
+      }
+    }
+    final errors = Validator.validate(data, rules);
+    if (errors.isNotEmpty) throw ValidationException(errors);
+    return data;
+  }
 
   // ---- responders (each sets status + content-type, writes, and closes) ----
 
