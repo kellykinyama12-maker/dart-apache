@@ -287,6 +287,20 @@ working code.
       (`tool/smoke_cert_pin.dart`): correct pin → 200, wrong pin →
       `HandshakeException`. (`lib/src/client/cert_pinning.dart`.)
 
+## 3l. Phase 12 — SPKI pins + CLI migrations
+
+- [ ] **P2 — SPKI certificate pins.** Add public-key (SubjectPublicKeyInfo)
+      pinning alongside whole-cert pins: a tiny ASN.1/DER walk extracts the
+      `SubjectPublicKeyInfo` from the certificate and pins SHA-256 of *that*, so
+      a pin survives certificate renewal with the same key (and matches the Edge
+      harness's `spki-list`). `CertificatePinner` accepts either a cert pin or an
+      SPKI pin; `spkiPinForCertFile/Pem/Der` compute them.
+- [ ] **P3 — `dartisan migrate`.** Run migrations from the CLI: discover
+      `migrations/*.dart`, order by the timestamped migration name, generate a
+      throwaway runner that imports them + runs `Migrator.migrate()` (or
+      `--rollback`) against a `--db=host:port`. Requires the generated migration
+      `name` to carry its timestamp prefix (fixes ordering).
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
