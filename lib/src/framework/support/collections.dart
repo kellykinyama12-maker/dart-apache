@@ -82,6 +82,32 @@ extension DartisanIterable<E> on Iterable<E> {
     }
     return best;
   }
+
+  /// Splits into consecutive chunks of at most [size] elements.
+  List<List<E>> chunk(int size) {
+    if (size <= 0) throw ArgumentError.value(size, 'size', 'must be > 0');
+    final out = <List<E>>[];
+    var current = <E>[];
+    for (final element in this) {
+      current.add(element);
+      if (current.length == size) {
+        out.add(current);
+        current = <E>[];
+      }
+    }
+    if (current.isNotEmpty) out.add(current);
+    return out;
+  }
+
+  /// Keeps the first element for each distinct [key] (preserving order).
+  List<E> uniqueBy<K>(K Function(E element) key) {
+    final seen = <K>{};
+    final out = <E>[];
+    for (final element in this) {
+      if (seen.add(key(element))) out.add(element);
+    }
+    return out;
+  }
 }
 
 extension DartisanRows on Iterable<Map<String, Object?>> {

@@ -82,5 +82,14 @@ void main() {
       expect(const <Map<String, Object?>>[].maxBy((r) => r['id'] as int),
           isNull);
     });
+    test('chunk / uniqueBy', () {
+      expect([1, 2, 3, 4, 5].chunk(2), [
+        [1, 2],
+        [3, 4],
+        [5]
+      ]);
+      expect(() => [1].chunk(0), throwsArgumentError);
+      expect(rows.uniqueBy((r) => r['cat']).pluck('id'), [3, 1]);
+    });
   });
 }

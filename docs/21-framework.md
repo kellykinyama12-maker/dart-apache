@@ -553,6 +553,11 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **BC1 — `@isset(expr) … @endisset`.** Renders its body when the expression
       is non-null (unlike `@if`, a `0`/`''`/`false` still counts as set).
+
+## 3ay. Phase 51 — chunk / uniqueBy
+
+- [x] **BD1 — `chunk` / `uniqueBy`.** Split an `Iterable` into fixed-size chunks
+      and de-duplicate by a key (preserving order).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,
