@@ -73,6 +73,18 @@ class _ListLiteral extends _Node {
       [for (final e in elements) e.eval(ctx)];
 }
 
+/// A `cond ? a : b` conditional expression.
+class _Ternary extends _Node {
+  _Ternary(this.cond, this.whenTrue, this.whenFalse);
+  final _Node cond;
+  final _Node whenTrue;
+  final _Node whenFalse;
+  @override
+  Object? eval(Map<String, Object?> ctx) => Expression.truthy(cond.eval(ctx))
+      ? whenTrue.eval(ctx)
+      : whenFalse.eval(ctx);
+}
+
 /// A `{key: value}` map literal (bare identifier keys are strings).
 class _MapLiteral extends _Node {
   _MapLiteral(this.entries);
@@ -292,12 +304,27 @@ class _Parser {
   int _pos = 0;
 
   _Node parse() {
-    final node = _parseOr();
+    final node = _parseTernary();
     _skipWs();
     if (_pos != _src.length) {
       throw ExpressionError('unexpected "${_src.substring(_pos)}"');
     }
     return node;
+  }
+
+  // `cond ? a : b` (right-associative, lowest precedence).
+  _Node _parseTernary() {
+    final cond = _parseOr();
+    _skipWs();
+    if (_peek() == '?') {
+      _pos++;
+      final whenTrue = _parseTernary();
+      _skipWs();
+      _expect(':');
+      final whenFalse = _parseTernary();
+      return _Ternary(cond, whenTrue, whenFalse);
+    }
+    return cond;
   }
 
   _Node _parseOr() {
@@ -391,7 +418,7 @@ class _Parser {
         node = _Member(node, name);
       } else if (_peek() == '[') {
         _pos++;
-        final key = _parseOr();
+        final key = _parseTernary();
         _skipWs();
         _expect(']');
         node = _Index(node, key);
@@ -415,7 +442,7 @@ class _Parser {
     }
     _skipWs();
     _expect(':');
-    final value = _parseOr();
+    final value = _parseTernary();
     return MapEntry(key, value);
   }
 
@@ -424,7 +451,7 @@ class _Parser {
     final c = _peek();
     if (c == '(') {
       _pos++;
-      final node = _parseOr();
+      final node = _parseTernary();
       _skipWs();
       _expect(')');
       return node;
@@ -436,13 +463,13 @@ class _Parser {
       final elements = <_Node>[];
       _skipWs();
       if (_peek() != ']') {
-        elements.add(_parseOr());
+        elements.add(_parseTernary());
         _skipWs();
         while (_peek() == ',') {
           _pos++;
           _skipWs();
           if (_peek() == ']') break; // trailing comma
-          elements.add(_parseOr());
+          elements.add(_parseTernary());
           _skipWs();
         }
       }
@@ -483,11 +510,11 @@ class _Parser {
         final args = <_Node>[];
         _skipWs();
         if (_peek() != ')') {
-          args.add(_parseOr());
+          args.add(_parseTernary());
           _skipWs();
           while (_peek() == ',') {
             _pos++;
-            args.add(_parseOr());
+            args.add(_parseTernary());
             _skipWs();
           }
         }

@@ -564,6 +564,11 @@ Small quality-of-life wins developers reach for daily.
 - [x] **BE1 — `@foreach` loop metadata.** The `loop` variable now also exposes
       `iteration` (1-based), `total`, `remaining`, `even`, and `odd` (alongside
       `index`/`first`/`last`/`count`).
+
+## 3ba. Phase 53 — ternary expressions
+
+- [x] **BF1 — ternary operator.** `cond ? a : b` in template expressions
+      (right-associative, lowest precedence; usable inside calls/lists/maps).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

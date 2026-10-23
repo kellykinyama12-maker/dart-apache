@@ -56,6 +56,13 @@ void main() {
       expect(ev('{}'), isEmpty);
     });
 
+    test('ternary conditional', () {
+      expect(ev("age >= 18 ? 'adult' : 'minor'", {'age': 20}), 'adult');
+      expect(ev("age >= 18 ? 'adult' : 'minor'", {'age': 5}), 'minor');
+      expect(ev("n ? n : 'none'", {'n': 0}), 'none'); // falsy -> else
+      expect(ev("upper(ok ? 'yes' : 'no')", {'ok': true}), 'YES'); // nested
+    });
+
     test('collection + number built-ins', () {
       expect(ev("first(xs)", {'xs': [1, 2, 3]}), 1);
       expect(ev("last(xs)", {'xs': [1, 2, 3]}), 3);
