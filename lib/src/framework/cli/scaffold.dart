@@ -73,7 +73,10 @@ String viewSource(String name) => '''
 ''';
 
 /// All files for a fresh project named [app]. Keys are relative paths.
-Map<String, String> newProjectFiles(String app) {
+/// [dartApachePath] is written into the generated pubspec as the path to this
+/// framework (the CLI passes an absolute path so the app builds from anywhere).
+Map<String, String> newProjectFiles(String app,
+    {String dartApachePath = '../dart-apache'}) {
   final slug = snakeCase(app);
   return {
     'pubspec.yaml': '''
@@ -83,9 +86,9 @@ publish_to: none
 environment:
   sdk: ^3.5.0
 dependencies:
-  # Point this at your dart-apache checkout (path) or a git ref.
+  # Path to your dart-apache checkout (or swap for a git ref).
   dart_apache:
-    path: ../dart-apache
+    path: $dartApachePath
 ''',
     'bin/$slug.dart': '''
 import 'dart:io';
@@ -95,7 +98,7 @@ import 'package:dart_apache/dart_apache.dart';
 /// Top-level so it crosses the worker-isolate boundary.
 DartApp buildApp(ServerConfig config) {
   final router = Router(views: BlazeEngine('views'));
-  router.get('/', (req) => req.view('home', {'name': 'world'}));
+  router.get('/', (req) => req.view('home', {'name': req.query('name') ?? 'world'}));
   router.get('/hello/:name', (req) => req.view('home', {'name': req.param('name')}));
   return router.toApp();
 }

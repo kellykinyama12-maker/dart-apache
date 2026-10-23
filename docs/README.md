@@ -4,6 +4,11 @@ This folder contains the plan to evolve the current CGI-based `dart-apache`
 prototype into an enterprise-grade web server comparable to **nginx**, with a
 path to **HTTP/3 (QUIC)**, TLS, reverse proxying, and horizontal scalability.
 
+> **Building apps?** Jump to **[22-getting-started.md](22-getting-started.md)**
+> (build a Dartisan app in 10 minutes) and **[21-framework.md](21-framework.md)**
+> (the Dartisan framework reference). The rest of these docs cover the web server
+> underneath.
+
 ## Documents
 
 | Document | Purpose |

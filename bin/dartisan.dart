@@ -47,13 +47,28 @@ void _new(List<String> rest) {
     exitCode = 2;
     return;
   }
-  newProjectFiles(name).forEach((rel, content) {
+  newProjectFiles(name, dartApachePath: _dartApachePath()).forEach((rel, content) {
     final f = File('$name/$rel');
     f.parent.createSync(recursive: true);
     f.writeAsStringSync(content.trimLeft());
     stdout.writeln('  created $name/$rel');
   });
   stdout.writeln('\nCreated "$name". Next:\n  cd $name && dart pub get && dartisan serve');
+}
+
+// Resolves the absolute path to this dart-apache checkout so a scaffolded app's
+// path dependency works no matter where the app is created.
+String _dartApachePath() {
+  try {
+    final self = File.fromUri(Platform.script); // .../dart-apache/bin/dartisan.dart
+    final root = self.parent.parent;
+    if (File('${root.path}/pubspec.yaml').existsSync()) {
+      return root.path.replaceAll(r'\', '/');
+    }
+  } on Object {
+    // fall through to the relative default
+  }
+  return '../dart-apache';
 }
 
 void _make(

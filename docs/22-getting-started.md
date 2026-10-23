@@ -12,8 +12,8 @@ without bolting on extra infrastructure.
 ## 0. Prerequisites
 
 - Dart SDK 3.5+ (`dart --version`).
-- A checkout of dart-apache (this repo). The scaffolder points a new project's
-  `pubspec.yaml` at `../dart-apache` by default.
+- A checkout of dart-apache (this repo). The scaffolder writes the absolute path
+  to this checkout into the new project's `pubspec.yaml`, so it builds anywhere.
 
 ## 1. Scaffold a project (`dartisan new`)
 
@@ -21,7 +21,7 @@ The `dartisan` CLI is the Artisan analog. From the dart-apache checkout:
 
 ```sh
 dart run bin/dartisan.dart new blog
-cd ../blog     # created next to dart-apache
+cd blog     # created in the current directory
 dart pub get
 ```
 
@@ -29,7 +29,7 @@ This generates:
 
 ```
 blog/
-  pubspec.yaml            # depends on dart_apache (path: ../dart-apache)
+  pubspec.yaml            # depends on dart_apache (path to this checkout)
   bin/blog.dart           # the server entrypoint (top-level buildApp)
   views/
     layout.blaze.html     # @yield('content')
@@ -172,8 +172,20 @@ Operators: `where(field, value)` for equality, `where(field, op, value)` for
 reads can't accidentally mutate the store.
 
 > One `InMemoryDatabase` lives per worker isolate — fine for demos and
-> read-mostly data. For shared, persistent state across workers, use a wire
-> driver (coming) that talks to an external database.
+> read-mostly data. For **shared, persistent state across workers**, swap in the
+> networked `SqlDatabase` driver — it's the same `QueryBuilder` API, so nothing
+> else changes:
+>
+> ```dart
+> final db = SqlDatabase(host: '127.0.0.1', port: 4599); // dart-db-server
+> await db.execute('CREATE TABLE IF NOT EXISTS users '
+>     '(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER)');
+> final row = await db.table('users').insert({'name': 'ada', 'age': 36});
+> final adults = await db.table('users').where('age', '>=', 18).get();
+> ```
+>
+> Bind whichever driver you want in the container (`router.singleton<Database>(…)`)
+> and resolve it with `req.make<Database>()`.
 
 ## 6. The differentiator: a reactive Live component over HTTP/3
 

@@ -8,6 +8,71 @@ execution to the `php-cgi` binary over the CGI/1.1 protocol: request metadata is
 passed as environment variables, the request body is piped to the interpreter's
 stdin, and the response (headers + body) is read back from its stdout.
 
+## Dartisan — build dynamic apps (not just serve files)
+
+Dart-apache ships **Dartisan**, a batteries-included web framework that runs
+*inside* the server: Laravel-style DX + Livewire-style reactivity, in pure Dart,
+compiled to **one binary** — reactive over **HTTP/3 + WebTransport**, with PHP
+and static serving still intact.
+
+```sh
+# scaffold a new app (created in the current directory), then run it
+dart run bin/dartisan.dart new blog
+cd blog && dart pub get
+dart run bin/blog.dart --root=. --port=8080
+```
+
+```dart
+// bin/blog.dart — a top-level buildApp crosses the worker-isolate boundary
+DartApp buildApp(ServerConfig config) {
+  final router = Router(
+    views: BlazeEngine('views'),
+    sessions: SessionManager(appKey),          // encrypted-cookie sessions
+    maxBodyBytes: 1 << 20,                      // DoS guard -> 413
+    onError: (e, _) => print('error: $e'),      // 422/500, no stack leak
+  );
+  router.use(verifyCsrf());                      // CSRF on unsafe methods
+
+  router.get('/', (req) => req.view('home', {'name': req.query('name') ?? 'world'}));
+
+  router.post('/users', (req) async {
+    final data = await req.validate({'name': 'required|min:3', 'email': 'required|email'});
+    await req.make<InMemoryDatabase>().table('users').insert(data);
+    await req.redirect('/');
+  });
+
+  return router.toApp();
+}
+```
+
+**What you get** — all pure Dart, no sidecars, no FFI:
+
+| | |
+| --- | --- |
+| **Routing** | `Router` with `:param` paths, groups, middleware, a `Request`/response facade |
+| **Blaze** (Blade) | `{{ }}`/`{!! !!}`, `@if/@foreach/@include`, layouts, `@auth/@guest/@csrf` |
+| **Dartisan Live** (Livewire) | reactive server-rendered components over **WebTransport/HTTP‑3**, with **server-side diffing** (a counter update is ~30 B, not the whole fragment) |
+| **Validation** | `req.validate({'email': 'required|email'})`, Laravel-style rules |
+| **Data** | one `Database` API, two drivers: in-memory (zero-config) and `SqlDatabase` (networked SQL, shared across workers) |
+| **Sessions / auth** | stateless encrypted-cookie sessions, `req.auth`, `requireAuth`, flash |
+| **Security** | CSRF, `rateLimit`, body-size limits, timing-safe compares, error boundary |
+| **DI** | a `Container` (`bind`/`singleton`/`make`), resolved in handlers |
+| **Services** | `EventDispatcher`, in-memory `Queue`, `Mailer` (Array/Log/SMTP transports) |
+| **CLI** | `dartisan new / make:controller / make:component / make:view / serve` |
+
+Start here:
+
+- **[docs/22-getting-started.md](docs/22-getting-started.md)** — build a Dartisan
+  app in 10 minutes (scaffold → routes → Blaze → validation → data → sessions →
+  Live over HTTP/3 → ship one binary).
+- **[example/dartisan_app.dart](example/dartisan_app.dart)** — the showcase app
+  that wires every piece together (login → notes → logout, event→queue→mail).
+- **[docs/21-framework.md](docs/21-framework.md)** — the framework reference,
+  design, and Laravel/Flutter parity maps.
+
+The rest of this README covers the underlying **web server** (static, PHP, HTTP/3,
+reverse proxy) that Dartisan runs on.
+
 ## Why dart-apache?
 
 **TL;DR** — Reach for it when you want **modern transport + an embedded Dart app
@@ -239,6 +304,12 @@ dart test -t e2e --run-skipped test/parity_test.dart
 ## Project layout
 
 - `bin/dart_apache.dart` — entry point / CLI.
+- `bin/dartisan.dart` — the **Dartisan** app CLI (`new`, `make:*`, `serve`).
+- `lib/src/framework/` — the **Dartisan** framework: `router.dart` (routing +
+  `Request` + middleware + CSRF/rate-limit/error-boundary), `template/`
+  (Blaze), `live/` (reactive components + server-side diff), `data/`
+  (`QueryBuilder` + in-memory + `SqlDatabase`), `auth/` (sessions + auth),
+  `container/` (DI), `events/`, `queue/`, `mail/`, `cli/` (scaffolding).
 - `lib/src/supervisor.dart` — worker-per-core isolate supervisor (shared socket,
   respawn, zero-downtime reload).
 - `lib/src/server.dart` — HTTP server and request dispatch.
@@ -252,4 +323,5 @@ dart test -t e2e --run-skipped test/parity_test.dart
 - `lib/src/config.dart` — server configuration.
 - `bin/dart_apache_h3.dart` — experimental HTTP/3 entry point.
 - `bin/dart_apache_client.dart` — Alt-Svc auto-upgrade client demo.
+- `example/dartisan_app.dart` — the Dartisan showcase app.
 - `public/` — sample DocumentRoot with a PHP page and a static page.
