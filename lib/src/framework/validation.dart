@@ -16,7 +16,9 @@ class ValidationException implements Exception {
 /// Validates a data map against rule strings, returning `field -> [messages]`
 /// (empty when everything passes). Supported rules: `required`, `email`,
 /// `numeric`, `integer`, `boolean`, `url`, `alpha`, `alphanum`, `min:N`,
-/// `max:N`, `in:a,b,c`, `confirmed`.
+/// `max:N`, `between:a,b`, `digits:N`, `in:a,b,c`, `not_in:a,b`, `same:field`,
+/// `different:field`, `starts_with:a,b`, `ends_with:a,b`, `regex:pattern`,
+/// `confirmed`.
 class Validator {
   static final _email = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   static final _alpha = RegExp(r'^[A-Za-z]+$');
@@ -110,6 +112,48 @@ class Validator {
         return options.contains(s)
             ? null
             : 'The selected $field is invalid.';
+      case 'not_in':
+        return arg.split(',').contains(s)
+            ? 'The selected $field is invalid.'
+            : null;
+      case 'same':
+        return '${data[arg]}' == s
+            ? null
+            : 'The $field and $arg must match.';
+      case 'different':
+        return '${data[arg]}' != s
+            ? null
+            : 'The $field and $arg must be different.';
+      case 'between':
+        final parts = arg.split(',');
+        final lo = num.tryParse(parts.first) ?? 0;
+        final hi = num.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+        final numVal = num.tryParse(s);
+        if (numVal != null) {
+          return (numVal >= lo && numVal <= hi)
+              ? null
+              : 'The $field must be between $lo and $hi.';
+        }
+        return (s.length >= lo && s.length <= hi)
+            ? null
+            : 'The $field must be between $lo and $hi characters.';
+      case 'digits':
+        final n = int.tryParse(arg) ?? 0;
+        return (RegExp(r'^\d+$').hasMatch(s) && s.length == n)
+            ? null
+            : 'The $field must be $n digits.';
+      case 'starts_with':
+        return arg.split(',').any(s.startsWith)
+            ? null
+            : 'The $field must start with one of: $arg.';
+      case 'ends_with':
+        return arg.split(',').any(s.endsWith)
+            ? null
+            : 'The $field must end with one of: $arg.';
+      case 'regex':
+        return RegExp(arg).hasMatch(s)
+            ? null
+            : 'The $field format is invalid.';
       case 'confirmed':
         return '${data['${field}_confirmation']}' == s
             ? null

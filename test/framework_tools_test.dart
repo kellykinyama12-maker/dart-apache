@@ -44,6 +44,28 @@ void main() {
       final errors = Validator.validate({'e': 'x'}, {'e': 'email|min:5'});
       expect(errors['e'], hasLength(2));
     });
+
+    test('same / different / between / not_in / starts_with / regex', () {
+      expect(
+          Validator.validate(
+              {'p': 'a', 'p2': 'b'}, {'p': 'same:p2'}),
+          isNotEmpty);
+      expect(
+          Validator.validate(
+              {'p': 'a', 'p2': 'a'}, {'p': 'same:p2'}),
+          isEmpty);
+      expect(Validator.validate({'a': 'x', 'b': 'x'}, {'a': 'different:b'}),
+          isNotEmpty);
+      expect(Validator.validate({'n': '50'}, {'n': 'between:1,10'}), isNotEmpty);
+      expect(Validator.validate({'n': '5'}, {'n': 'between:1,10'}), isEmpty);
+      expect(Validator.validate({'r': 'x'}, {'r': 'not_in:x,y'}), isNotEmpty);
+      expect(Validator.validate({'s': 'hello'}, {'s': 'starts_with:he,yo'}),
+          isEmpty);
+      expect(Validator.validate({'s': 'nope'}, {'s': 'ends_with:se,ye'}),
+          isNotEmpty);
+      expect(Validator.validate({'z': '1234'}, {'z': r'regex:^\d+$'}), isEmpty);
+      expect(Validator.validate({'d': '12'}, {'d': 'digits:3'}), isNotEmpty);
+    });
   });
 
   group('scaffold', () {
