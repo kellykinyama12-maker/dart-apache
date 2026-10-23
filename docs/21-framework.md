@@ -349,6 +349,14 @@ Small quality-of-life wins developers reach for daily.
       injects a `flash` map (current non-internal flash values) so
       `{{ flash.status }}` works without manual passing.
 
+## 3q. Phase 17 — template helper functions
+
+- [ ] **U1 — Expression functions.** A safe set of built-in functions in Blaze
+      expressions: `upper/lower/ucfirst/trim/length/default/limit/round/abs/
+      join`, e.g. `{{ upper(name) }}`, `{{ limit(body, 100) }}`,
+      `{{ default(title, 'Untitled') }}`. No arbitrary calls — only the
+      allow-listed helpers.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

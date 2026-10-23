@@ -30,6 +30,17 @@ void main() {
       expect(ev('!done', {'done': false}), true);
       expect(ev("role == 'admin'", {'role': 'admin'}), true);
     });
+    test('built-in functions', () {
+      expect(ev("upper(name)", {'name': 'ada'}), 'ADA');
+      expect(ev("lower('HI')"), 'hi');
+      expect(ev("ucfirst(name)", {'name': 'ada'}), 'Ada');
+      expect(ev("length(items)", {'items': [1, 2, 3]}), 3);
+      expect(ev("default(title, 'Untitled')", {'title': ''}), 'Untitled');
+      expect(ev("default(title, 'Untitled')", {'title': 'Hi'}), 'Hi');
+      expect(ev("limit('abcdef', 3, '~')"), 'abc~');
+      expect(ev("join(xs, '-')", {'xs': [1, 2, 3]}), '1-2-3');
+      expect(ev("upper(trim('  hi '))"), 'HI'); // nested calls
+    });
   });
 
   group('echo + escaping', () {

@@ -1,7 +1,8 @@
 // A tiny, safe expression language for the Blaze templating engine. It
 // evaluates against a `Map<String, Object?>` context at runtime (AOT-friendly —
-// no `eval`), supporting variable paths, literals, arithmetic, comparisons and
-// boolean logic. Deliberately limited: no function calls, no arbitrary code.
+// no `eval`), supporting variable paths, literals, arithmetic, comparisons,
+// boolean logic, and an allow-listed set of helper functions (no arbitrary
+// code).
 import 'dart:collection';
 
 /// Thrown when an expression cannot be parsed.
@@ -62,6 +63,56 @@ class _Ident extends _Node {
   @override
   Object? eval(Map<String, Object?> ctx) => ctx[name];
 }
+
+/// A call to one of the allow-listed [_builtins] helper functions.
+class _Call extends _Node {
+  _Call(this.name, this.args);
+  final String name;
+  final List<_Node> args;
+  @override
+  Object? eval(Map<String, Object?> ctx) {
+    final fn = _builtins[name];
+    if (fn == null) throw ExpressionError('unknown function "$name"');
+    return fn([for (final a in args) a.eval(ctx)]);
+  }
+}
+
+int _len(Object? v) {
+  if (v is String) return v.length;
+  if (v is Iterable) return v.length;
+  if (v is Map) return v.length;
+  return 0;
+}
+
+/// The only functions callable from a template expression.
+final Map<String, Object? Function(List<Object?>)> _builtins = {
+  'upper': (a) => '${a.isEmpty ? '' : a[0] ?? ''}'.toUpperCase(),
+  'lower': (a) => '${a.isEmpty ? '' : a[0] ?? ''}'.toLowerCase(),
+  'trim': (a) => '${a.isEmpty ? '' : a[0] ?? ''}'.trim(),
+  'length': (a) => _len(a.isEmpty ? null : a[0]),
+  'ucfirst': (a) {
+    final s = '${a.isEmpty ? '' : a[0] ?? ''}';
+    return s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+  },
+  'default': (a) {
+    final v = a.isEmpty ? null : a[0];
+    final empty = v == null || (v is String && v.isEmpty);
+    return empty ? (a.length > 1 ? a[1] : '') : v;
+  },
+  'limit': (a) {
+    final s = '${a.isEmpty ? '' : a[0] ?? ''}';
+    final n = a.length > 1 ? (a[1] as num).toInt() : 100;
+    final end = a.length > 2 ? '${a[2]}' : '…';
+    return s.length <= n ? s : s.substring(0, n) + end;
+  },
+  'round': (a) => (a[0] as num).round(),
+  'abs': (a) => (a[0] as num).abs(),
+  'join': (a) {
+    final v = a.isEmpty ? null : a[0];
+    final sep = a.length > 1 ? '${a[1]}' : ', ';
+    return v is Iterable ? v.map((e) => '$e').join(sep) : '$v';
+  },
+};
 
 class _Member extends _Node {
   _Member(this.target, this.name);
@@ -305,6 +356,23 @@ class _Parser {
           return _Literal(false);
         case 'null':
           return _Literal(null);
+      }
+      _skipWs();
+      if (_peek() == '(') {
+        _pos++; // past '('
+        final args = <_Node>[];
+        _skipWs();
+        if (_peek() != ')') {
+          args.add(_parseOr());
+          _skipWs();
+          while (_peek() == ',') {
+            _pos++;
+            args.add(_parseOr());
+            _skipWs();
+          }
+        }
+        _expect(')');
+        return _Call(id, args);
       }
       return _Ident(id);
     }
