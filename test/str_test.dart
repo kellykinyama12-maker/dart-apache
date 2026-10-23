@@ -65,5 +65,13 @@ void main() {
     test('pluck', () {
       expect(rows.pluck('name'), ['c', 'a', 'b']);
     });
+    test('sumBy / avgBy / maxBy / minBy', () {
+      expect(rows.sumBy((r) => r['id'] as int), 6);
+      expect(rows.avgBy((r) => r['id'] as int), 2);
+      expect(rows.maxBy((r) => r['id'] as int)!['name'], 'c');
+      expect(rows.minBy((r) => r['id'] as int)!['name'], 'a');
+      expect(const <Map<String, Object?>>[].maxBy((r) => r['id'] as int),
+          isNull);
+    });
   });
 }

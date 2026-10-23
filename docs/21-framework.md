@@ -462,6 +462,11 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **AM1 — `view` status code.** `req.view('errors.404', data, 404)` renders a
       Blaze view with a custom HTTP status (for error pages).
+
+## 3ai. Phase 35 — collection aggregates
+
+- [x] **AN1 — `sumBy` / `avgBy` / `maxBy` / `minBy`.** Numeric aggregates over
+      any `Iterable` (e.g. totals/averages/extremes of query rows).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

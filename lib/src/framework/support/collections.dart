@@ -34,6 +34,54 @@ extension DartisanIterable<E> on Iterable<E> {
     }
     return out;
   }
+
+  /// Sums the numeric [value] extracted from each element.
+  num sumBy(num Function(E element) value) {
+    num total = 0;
+    for (final element in this) {
+      total += value(element);
+    }
+    return total;
+  }
+
+  /// The average of the numeric [value] over all elements (0 when empty).
+  num avgBy(num Function(E element) value) {
+    var count = 0;
+    num total = 0;
+    for (final element in this) {
+      total += value(element);
+      count++;
+    }
+    return count == 0 ? 0 : total / count;
+  }
+
+  /// The element with the greatest [key], or null when empty.
+  E? maxBy<K extends Comparable<Object>>(K Function(E element) key) {
+    E? best;
+    K? bestKey;
+    for (final element in this) {
+      final k = key(element);
+      if (bestKey == null || k.compareTo(bestKey) > 0) {
+        best = element;
+        bestKey = k;
+      }
+    }
+    return best;
+  }
+
+  /// The element with the smallest [key], or null when empty.
+  E? minBy<K extends Comparable<Object>>(K Function(E element) key) {
+    E? best;
+    K? bestKey;
+    for (final element in this) {
+      final k = key(element);
+      if (bestKey == null || k.compareTo(bestKey) < 0) {
+        best = element;
+        bestKey = k;
+      }
+    }
+    return best;
+  }
 }
 
 extension DartisanRows on Iterable<Map<String, Object?>> {
