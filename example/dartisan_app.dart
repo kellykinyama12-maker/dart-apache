@@ -96,6 +96,9 @@ DartApp buildApp(ServerConfig config) {
   router.instance<Queue>(queue);
   router.instance<Mailer>(mailer);
 
+  // CSRF-protect every unsafe (POST/PUT/PATCH/DELETE) request.
+  router.use(verifyCsrf());
+
   // Reactive channel for the Live counter.
   router.wt = liveWtHandler(LiveRegistry()..register(CounterComponent()));
 
@@ -110,6 +113,7 @@ DartApp buildApp(ServerConfig config) {
         'auth': req.auth.check,
         'error': null,
         'old': '',
+        'csrf': req.csrfToken(),
       }));
 
   router.post('/login', (req) async {
@@ -125,6 +129,7 @@ DartApp buildApp(ServerConfig config) {
         'auth': req.auth.check,
         'error': e.errors.values.first.first,
         'old': req.query('name') ?? '',
+        'csrf': req.csrfToken(),
       });
     }
   });
@@ -147,6 +152,7 @@ DartApp buildApp(ServerConfig config) {
         'notes': notes,
         'noteError': null,
         'live': liveHtml,
+        'csrf': req.csrfToken(),
       });
     });
 
@@ -169,6 +175,7 @@ DartApp buildApp(ServerConfig config) {
           'notes': notes,
           'noteError': e.errors.values.first.first,
           'live': liveHtml,
+          'csrf': req.csrfToken(),
         });
       }
     });

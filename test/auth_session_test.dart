@@ -92,6 +92,65 @@ void main() {
     });
   });
 
+  group('@csrf + verifyCsrf', () {
+    final engine = BlazeEngine('.', cache: false);
+
+    test('@csrf renders a hidden field with the escaped token', () {
+      final html = engine.renderString('@csrf', {'csrf': 'a&b"c'});
+      expect(html,
+          '<input type="hidden" name="_token" value="a&amp;b&quot;c">');
+    });
+
+    final sm = SessionManager(SessionManager.generateKey(), secure: false);
+
+    Future<_FakeResponse> run(DartApp app, String method, String path,
+        {Map<String, String> headers = const {}, List<int>? body}) async {
+      final uri = Uri.parse(path);
+      final route = app.match(method, uri.path);
+      expect(route, isNotNull, reason: 'no route for $method $path');
+      final ex = _FakeExchange(method, uri, headers, body ?? const []);
+      await route!.handler(ex, ex.response);
+      return ex.response;
+    }
+
+    test('safe methods pass; unsafe without token -> 419; with token -> ok',
+        () async {
+      String? issuedCookie;
+      final app = (Router(sessions: sm)
+            ..use(verifyCsrf())
+            ..get('/form', (r) {
+              // Issue a token (stored in the session cookie).
+              return r.text(r.csrfToken());
+            })
+            ..post('/save', (r) => r.text('saved')))
+          .toApp();
+
+      // GET issues a token + Set-Cookie.
+      final form = await run(app, 'GET', '/form');
+      expect(form.statusCode, 200);
+      final token = form.text;
+      issuedCookie = form.headers['set-cookie']!.split(';').first;
+
+      // POST with no token is rejected.
+      final blocked = await run(app, 'POST', '/save',
+          headers: {'cookie': issuedCookie});
+      expect(blocked.statusCode, 419);
+
+      // POST with the matching token (form field) passes.
+      final okForm = await run(app, 'POST', '/save', headers: {
+        'cookie': issuedCookie,
+        'content-type': 'application/x-www-form-urlencoded',
+      }, body: utf8.encode('_token=${Uri.encodeQueryComponent(token)}'));
+      expect(okForm.statusCode, 200);
+      expect(okForm.text, 'saved');
+
+      // POST with the matching token (header) also passes.
+      final okHeader = await run(app, 'POST', '/save',
+          headers: {'cookie': issuedCookie, 'x-csrf-token': token});
+      expect(okHeader.statusCode, 200);
+    });
+  });
+
   group('requireAuth + session end-to-end', () {
     final sm = SessionManager(SessionManager.generateKey(), secure: false);
 

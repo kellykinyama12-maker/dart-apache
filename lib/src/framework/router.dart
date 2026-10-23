@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import '../pipeline/dart_handler.dart';
 import '../pipeline/server_exchange.dart';
@@ -28,6 +29,7 @@ class Request {
   final SessionManager? _sessions;
   final Container? _container;
   Session? _session;
+  Future<List<int>>? _bodyFuture;
 
   /// The app's service container (requires `Router(container: ...)`).
   Container get container {
@@ -89,15 +91,39 @@ class Request {
     return found;
   }
 
-  /// The raw request body bytes.
+  /// The raw request body bytes (buffered once, so multiple readers — e.g. CSRF
+  /// middleware then `validate` — all see the same body).
   Future<List<int>> bodyBytes() =>
-      exchange.body.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+      _bodyFuture ??= exchange.body.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
 
   /// The request body as UTF-8 text.
   Future<String> body() async => utf8.decode(await bodyBytes());
 
   /// The request body parsed as JSON.
   Future<Object?> json() async => jsonDecode(await body());
+
+  /// The session CSRF token, generating + storing one on first use.
+  String csrfToken() {
+    final existing = session.get('_csrf');
+    if (existing is String) return existing;
+    final token = base64Url.encode(
+        List<int>.generate(24, (_) => _csrfRng.nextInt(256)));
+    session.put('_csrf', token);
+    return token;
+  }
+
+  /// A form field from a URL-encoded body (null for JSON or when absent).
+  Future<String?> formField(String name) async {
+    final raw = await body();
+    for (final pair in raw.split('&')) {
+      final i = pair.indexOf('=');
+      if (i < 0) continue;
+      if (Uri.decodeQueryComponent(pair.substring(0, i)) == name) {
+        return Uri.decodeQueryComponent(pair.substring(i + 1));
+      }
+    }
+    return null;
+  }
 
   /// Validates request input (query + body, JSON or form-encoded) against
   /// [rules] and returns the merged data, or throws [ValidationException].
@@ -180,6 +206,26 @@ Middleware requireAuth({String redirectTo = '/login'}) {
       return redirectTo.isEmpty
           ? request.text('Unauthorized', status: 401)
           : request.redirect(redirectTo);
+    }
+    return next();
+  };
+}
+
+final Random _csrfRng = Random.secure();
+
+/// Middleware that verifies a CSRF token on unsafe methods (POST/PUT/PATCH/
+/// DELETE). The token comes from the `_token` form field or the
+/// `X-CSRF-Token` header and must match the session token; mismatches get
+/// [status] (419 by convention). Safe methods pass through untouched.
+Middleware verifyCsrf({int status = 419}) {
+  const unsafe = {'POST', 'PUT', 'PATCH', 'DELETE'};
+  return (request, next) async {
+    if (!unsafe.contains(request.method.toUpperCase())) return next();
+    final expected = request.session.get('_csrf');
+    final provided =
+        request.header('x-csrf-token') ?? await request.formField('_token');
+    if (expected == null || provided == null || provided != expected) {
+      return request.text('CSRF token mismatch', status: status);
     }
     return next();
   };

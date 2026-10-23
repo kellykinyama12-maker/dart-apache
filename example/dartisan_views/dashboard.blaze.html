@@ -2,7 +2,7 @@
 @section('content')
 <h1>Dashboard</h1>
 <p>Welcome, <strong>{{ user }}</strong>.
-  <form method="post" action="/logout" class="inline"><button>Log out</button></form>
+  <form method="post" action="/logout" class="inline">@csrf<button>Log out</button></form>
 </p>
 @if(flash)
   <p class="flash">{{ flash }}</p>
@@ -22,6 +22,7 @@
   <p class="error">{{ noteError }}</p>
 @endif
 <form method="post" action="/notes">
+  @csrf
   <input name="text" placeholder="New note" autofocus>
   <button type="submit">Add note</button>
 </form>

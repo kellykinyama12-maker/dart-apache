@@ -101,6 +101,7 @@ class BlazeEngine {
     'if', 'elseif', 'else', 'endif',
     'foreach', 'endforeach',
     'auth', 'endauth', 'guest', 'endguest',
+    'csrf',
     'include', 'extends', 'section', 'endsection', 'yield',
   };
 
@@ -284,6 +285,8 @@ class _TreeParser {
         final body = parseBlock({'endguest'});
         _expect('endguest');
         nodes.add(_IfNode([_Branch(Expression.parse('!auth'), body)]));
+      case 'csrf':
+        nodes.add(_CsrfNode());
       default:
         throw TemplateError('unexpected @${t.value}');
     }
@@ -347,6 +350,17 @@ class _TextNode extends _Node {
   void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
           Map<String, String> sections) =>
       out.write(text);
+}
+
+/// Renders a hidden CSRF field using the `csrf` context value.
+class _CsrfNode extends _Node {
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final token = ctx['csrf'];
+    out.write('<input type="hidden" name="_token" value="'
+        '${_escapeHtml(token == null ? '' : '$token')}">');
+  }
 }
 
 class _EchoNode extends _Node {

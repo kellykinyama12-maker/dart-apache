@@ -132,15 +132,22 @@ docs + numbers. No new external dependencies.
       `NoteAdded` event whose listener queues a `LogTransport` notification,
       delivered off the request path). Verified: `[mail] to=…` logged after a
       note POST.
-- [ ] **I2 — CSRF protection.** A session-backed CSRF token, a `verifyCsrf`
-      middleware for unsafe methods (POST/PUT/PATCH/DELETE), a Blaze `@csrf`
-      directive (hidden field) + `request.csrfToken`. Pairs with G2 sessions.
-- [ ] **I3 — Perf receipt for Live diffing.** A `tool/bench_*` (or test-backed
-      measurement) comparing bytes-on-the-wire per update, full-HTML vs H1
-      patch, so the diffing win is a measured number like everything else.
-- [ ] **I4 — Docs refresh.** Fold Phase 2 + Phase 3 (auth/sessions, DI,
-      events/queue/mail, Live diffing) into the getting-started tutorial so the
-      end-to-end story is complete.
+- [x] **I2 — CSRF protection.** A session-backed CSRF token
+      (`request.csrfToken()`), a `verifyCsrf` middleware for unsafe methods
+      (POST/PUT/PATCH/DELETE; token from the `_token` field or `X-CSRF-Token`
+      header → 419 on mismatch), and a Blaze `@csrf` directive (hidden field).
+      Wired into the showcase; request body is buffered so CSRF + `validate`
+      both read it. (`router.dart`, `blaze.dart`.)
+- [x] **I3 — Perf receipt for Live diffing.** `tool/bench_live_diff.dart`
+      measures bytes-on-the-wire, full-HTML reply vs H1 patch. **Measured:** the
+      patch is a flat **~23–36 B** regardless of fragment size — counter 41→42
+      **218→23 B html (−89%)**, 50-item list toggle **5,347→34 B (−99.4%)**,
+      200-item list toggle **21,597→36 B (−99.8%)**; full replies (incl. state)
+      shrink **77–83%**.
+- [x] **I4 — Docs refresh.** Folded Phase 2 + Phase 3 (sessions/auth + CSRF,
+      DI, events/queue/mail, Live diffing) into the getting-started tutorial
+      ([22-getting-started.md](22-getting-started.md) §7–§9) so the end-to-end
+      story is complete.
 - [ ] *(parked)* **SMTP mail transport** — a real `MailTransport` over sockets.
       Deprioritized.
 - [ ] *(parked)* **wire DB driver** — a pure-Dart Postgres `Database` impl.

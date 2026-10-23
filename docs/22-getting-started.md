@@ -240,7 +240,94 @@ WebTransport, server-rendered, with no page reload. See
 works and [example/live_app.dart](../example/live_app.dart) for a complete,
 browser-verified example.
 
-## 7. Ship one binary
+> **Server-side diffing.** The server is stateless but holds both the old and
+> new state, so it sends only the *changed region* of HTML, not the whole
+> fragment. A toggle in a 200-item list goes out as ~36 bytes instead of ~21 KB
+> (see [tool/bench_live_diff.dart](../tool/bench_live_diff.dart)). On by default.
+
+## 7. Sessions, auth, and CSRF
+
+Add a session store and an auth guard to the router. Sessions are stateless,
+encrypted cookies — nothing to provision:
+
+```dart
+final router = Router(
+  views: BlazeEngine('views'),
+  sessions: SessionManager(appKey), // 32-byte key from a secret in prod
+);
+
+router.get('/login', (req) => req.view('login', {'csrf': req.csrfToken()}));
+
+router.post('/login', (req) async {
+  final data = await req.validate({'name': 'required|min:2'});
+  req.auth.login(data['name']!);        // stores the user id in the session
+  req.session.flash('status', 'Welcome!'); // one-request flash
+  await req.redirect('/dashboard');
+});
+
+// Guard a group of routes.
+router.group('/app', () {
+  router.get('/dashboard', (req) => req.view('dashboard', {'user': req.auth.id}));
+}, middleware: [requireAuth(redirectTo: '/login')]);
+```
+
+`req.session` gives `get/put/forget/pull/flush` + `flash`/`flashed`; `req.auth`
+has `login/logout/check/id`. In Blaze, `@auth … @endauth` / `@guest … @endguest`
+branch on the authenticated state.
+
+**CSRF.** Add `router.use(verifyCsrf())` and drop `@csrf` into each form — it
+emits a hidden `_token` field matched against the session token on every
+POST/PUT/PATCH/DELETE (or send an `X-CSRF-Token` header):
+
+```html
+<form method="post" action="/notes">
+  @csrf
+  <input name="text">
+  <button>Add</button>
+</form>
+```
+
+## 8. Dependency injection
+
+Register services on the router's container and resolve them in handlers:
+
+```dart
+router.singleton<InMemoryDatabase>((_) => InMemoryDatabase());
+
+router.get('/notes', (req) async {
+  final db = req.make<InMemoryDatabase>();
+  await req.sendJson(await db.table('notes').get());
+});
+```
+
+`bind` (fresh each time), `singleton` (built once), and `instance` (a value you
+already have) are all available; factories receive the container so they can
+resolve their own dependencies.
+
+## 9. Events, queue, and mail
+
+Do work off the request path. Register the services, then fire an event whose
+listener queues a job:
+
+```dart
+final events = EventDispatcher();
+final queue = Queue();
+final mailer = Mailer(LogTransport()); // or ArrayTransport in tests
+events.listen<NoteAdded>((e) =>
+    mailer.queue(Message(to: '${e.owner}@x.io', subject: 'New note'), queue));
+router..instance<EventDispatcher>(events)..instance<Queue>(queue);
+
+// in a handler, after saving:
+await req.events.dispatch(NoteAdded(owner, text)); // listener queues the mail
+```
+
+The queue drains on a microtask (so `dispatch` returns immediately), with
+delayed jobs, retries (`maxAttempts`), and an `onFailed` hook. See
+[example/dartisan_app.dart](../example/dartisan_app.dart) — the showcase app
+wires routing, Blaze, validation, data, sessions/auth, CSRF, DI, and this
+event→queue→mail flow together.
+
+## 10. Ship one binary
 
 When you're ready, compile the whole thing — server **and** app — into a single
 native executable:
