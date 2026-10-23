@@ -485,6 +485,12 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AQ1 — `string` / `integer` / `boolean`.** Typed getters over the merged
       request input (query + body), complementing the query-only
       `queryInt`/`queryBool`.
+
+## 3am. Phase 39 — @each
+
+- [x] **AR1 — `@each('view', items, 'var'[, 'empty'])`.** Renders a partial once
+      per item (binding `var`), or the optional empty view when the collection
+      is empty — the `@foreach`+`@include` shorthand.
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

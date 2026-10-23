@@ -227,6 +227,19 @@ void main() {
           fe.renderString("@includeWhen(show, 'present')", {'show': false}),
           '');
     });
+
+    test('@each renders a partial per item with an empty fallback', () {
+      File('${dir.path}/item.blaze.html').writeAsStringSync('[{{ it }}]');
+      File('${dir.path}/none.blaze.html').writeAsStringSync('empty');
+      expect(
+          fe.renderString("@each('item', xs, 'it', 'none')", {
+            'xs': ['a', 'b']
+          }),
+          '[a][b]');
+      expect(
+          fe.renderString("@each('item', xs, 'it', 'none')", {'xs': []}),
+          'empty');
+    });
   });
 
   group('components (<x-...>)', () {

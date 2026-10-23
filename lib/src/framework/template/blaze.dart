@@ -125,8 +125,8 @@ class BlazeEngine {
     'csrf',
     'checked', 'selected', 'disabled', 'readonly', 'required',
     'switch', 'case', 'default', 'break', 'endswitch',
-    'include', 'includeIf', 'includeWhen', 'extends', 'section', 'endsection',
-    'yield',
+    'include', 'includeIf', 'includeWhen', 'each', 'extends', 'section',
+    'endsection', 'yield',
   };
 
   List<_Tok> _tokenize(String src) {
@@ -352,6 +352,33 @@ List<String> _splitFirstComma(String s) {
   return [s];
 }
 
+// Splits on every top-level comma, respecting quotes and (), [] nesting.
+List<String> _splitArgs(String s) {
+  final parts = <String>[];
+  var depth = 0;
+  var inQuote = false;
+  String? quote;
+  var start = 0;
+  for (var i = 0; i < s.length; i++) {
+    final c = s[i];
+    if (inQuote) {
+      if (c == quote) inQuote = false;
+    } else if (c == "'" || c == '"') {
+      inQuote = true;
+      quote = c;
+    } else if (c == '(' || c == '[') {
+      depth++;
+    } else if (c == ')' || c == ']') {
+      depth--;
+    } else if (c == ',' && depth == 0) {
+      parts.add(s.substring(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.add(s.substring(start).trim());
+  return parts;
+}
+
 // ---------------------------------------------------------------------------
 // Tokens + tree parser
 // ---------------------------------------------------------------------------
@@ -483,6 +510,17 @@ class _TreeParser {
             rest.length > 1 ? Expression.parse(rest[1].trim()) : null,
             false,
             Expression.parse(parts[0].trim())));
+      case 'each':
+        final parts = _splitArgs(t.args);
+        if (parts.length < 3) {
+          throw TemplateError(
+              "@each expects ('view', collection, 'var'[, 'emptyView'])");
+        }
+        nodes.add(_EachNode(
+            _literal(parts[0]),
+            Expression.parse(parts[1]),
+            _literal(parts[2]),
+            parts.length > 3 ? _literal(parts[3]) : null));
       case 'yield':
         nodes.add(_YieldNode(_literal(t.args)));
       case 'section':
@@ -844,6 +882,33 @@ class _IncludeNode extends _Node {
       child = <String, Object?>{...ctx, ...data.cast<String, Object?>()};
     }
     out.write(engine.render(name, child));
+  }
+}
+
+/// `@each('view', collection, 'var'[, 'emptyView'])`: renders the partial once
+/// per item (binding `var`), or the optional empty view when there are none.
+class _EachNode extends _Node {
+  _EachNode(this.view, this.listExpr, this.itemVar, this.emptyView);
+  final String view;
+  final Expression listExpr;
+  final String itemVar;
+  final String? emptyView;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+      Map<String, String> sections) {
+    final value = listExpr.evaluate(ctx);
+    final items = value is Map
+        ? value.values.toList()
+        : value is Iterable
+            ? value.toList()
+            : const [];
+    if (items.isEmpty) {
+      if (emptyView != null) out.write(engine.render(emptyView!, ctx));
+      return;
+    }
+    for (final item in items) {
+      out.write(engine.render(view, {itemVar: item}));
+    }
   }
 }
 
