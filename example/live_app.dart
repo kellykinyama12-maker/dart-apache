@@ -84,7 +84,8 @@ class SignupComponent extends LiveComponent {
         '<input name="email" type="email" placeholder="you@example.com" '
         'data-live-model="email" value="${_attr.convert(email)}"> '
         '<button type="submit" data-live-loading-class="busy">Sign up</button> '
-        '<span data-live-loading hidden>…</span>'
+        '<span data-live-loading hidden>…</span> '
+        '<span data-live-dirty hidden style="color:#a60">● unsaved</span>'
         '${emailErr.isNotEmpty ? '<p style="color:#c00">${_text.convert(emailErr.first)}</p>' : ''}'
         '${saved ? '<p style="color:#070">Signed up ✓</p>' : ''}'
         '</form>';

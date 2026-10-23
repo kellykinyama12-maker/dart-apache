@@ -13,6 +13,8 @@
 //                                 emits a matching event
 //   data-live-loading           -> element (use `hidden`) shown only while an
 //                                   action is in flight
+//   data-live-dirty             -> element (use `hidden`) shown while a deferred
+//                                   model has uncommitted changes
 //   data-live-loading-class="…" -> classes toggled on the element while busy
 //   (the container also gets a [data-live-busy] attribute during the request)
 // Each action sends {component, action, state, payload} on a fresh bidi stream;
@@ -134,6 +136,7 @@
       el.__liveHtml = html;
       morph(el, html);
       el.setAttribute('data-live-state', JSON.stringify(reply.state));
+      setDirty(el, false); // the state is now committed on the server
       bindWithin(el);   // bind any child components a re-render introduced
       setupPolling(el); // the poll element/interval may have changed in the render
       // Expose last state for tests / debugging.
@@ -147,6 +150,28 @@
       }
     } finally {
       setLoading(el, false);
+    }
+  }
+
+  // Toggle the "unsaved changes" affordance: a [data-live-dirty] marker on the
+  // container, un-hiding [data-live-dirty] elements, and any data-live-dirty-class
+  // classes. Deferred [data-live-model] input sets it; a committed action clears.
+  function setDirty(el, on) {
+    if (on) el.setAttribute('data-live-dirty', '');
+    else el.removeAttribute('data-live-dirty');
+    var marks = el.querySelectorAll('[data-live-dirty]');
+    for (var i = 0; i < marks.length; i++) {
+      if (marks[i] === el || !owns(el, marks[i])) continue;
+      if (on) marks[i].removeAttribute('hidden');
+      else marks[i].setAttribute('hidden', '');
+    }
+    var classed = el.querySelectorAll('[data-live-dirty-class]');
+    for (var j = 0; j < classed.length; j++) {
+      if (!owns(el, classed[j])) continue;
+      var classes = (classed[j].getAttribute('data-live-dirty-class') || '').split(/\s+/);
+      for (var k = 0; k < classes.length; k++) {
+        if (classes[k]) classed[j].classList[on ? 'add' : 'remove'](classes[k]);
+      }
     }
   }
 
@@ -290,7 +315,8 @@
   var RESERVED = {
     click: 1, input: 1, change: 1, submit: 1, model: 1, 'model-live': 1,
     key: 1, component: 1, state: 1, poll: 1, 'poll-interval': 1,
-    loading: 1, 'loading-class': 1, busy: 1, debounce: 1, listen: 1
+    loading: 1, 'loading-class': 1, busy: 1, debounce: 1, listen: 1,
+    dirty: 1, 'dirty-class': 1
   };
   function payloadFrom(el) {
     var out = {};
@@ -351,6 +377,12 @@
       if (!t || !el.contains(t) || !owns(el, t)) return;
       var ms = parseInt(t.getAttribute('data-live-debounce'), 10);
       debounce(t, function () { run(el, '', {}); }, isNaN(ms) ? 150 : ms);
+    });
+    // Deferred model input marks the component dirty (uncommitted changes).
+    el.addEventListener('input', function (ev) {
+      var t = ev.target.closest('[data-live-model]');
+      if (!t || !el.contains(t) || !owns(el, t)) return;
+      setDirty(el, true);
     });
     el.addEventListener('change', function (ev) {
       var t = ev.target.closest('[data-live-change]');

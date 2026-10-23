@@ -608,7 +608,9 @@ that gap. Roadmap:
       with independent state and their own action round-trips.
 - [x] **B4 — component events.** `emit` / `listen` between components on the
       same session.
-- [ ] **B5 — lifecycle + dirty state.** `mount` / `updated` hooks; dirty markers.
+- [x] **B5 — dirty state.** `data-live-dirty` "unsaved changes" markers while a
+      deferred model has uncommitted input (lifecycle hooks intentionally
+      omitted — see below).
 
 ### B1 — validation round-trips + loading states
 
@@ -662,6 +664,18 @@ that gap. Roadmap:
       (a fresh round-trip carrying the event payload).
 - [x] Live-verified in Edge (`tool/browser-h3-test/live_b4_wt_test.js`):
       `pinger` emits `ping` → `inbox` received count reaches 2 — over WT/h3.
+
+### B5 — dirty state (lifecycle intentionally omitted)
+
+- [x] Client tracks "unsaved changes": deferred `data-live-model` input sets a
+      `data-live-dirty` marker on the container (un-hides `[data-live-dirty]`
+      elements, toggles `data-live-dirty-class`); a committed action clears it.
+- [x] Live-verified in Edge (`tool/browser-h3-test/live_b5_wt_test.js`): clean →
+      dirty-on-type (marker shown) → clean-on-save — over WT/h3.
+- **Lifecycle hooks (`mount`/`updated`) are deliberately not added.** The
+  stateless round-trip model already covers them: `initialState()` *is* mount,
+  and `update()` is the single, explicit mutation point where side effects
+  belong — a separate `updated` hook would just invite hidden state.
 
 ## 4. Principles
 
