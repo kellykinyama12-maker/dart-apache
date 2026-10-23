@@ -393,6 +393,13 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AA1 — `@checked/@selected/@disabled/@readonly/@required`.** Each emits
       its HTML boolean attribute when the guarded expression is truthy, e.g.
       `<input @checked(user.active)>` / `<option @selected(v == current)>`.
+
+## 3w. Phase 23 — request helpers
+
+- [x] **AB1 — content negotiation + request helpers.** `req.isMethod('post')`,
+      `req.isAjax`, `req.isJson`, `req.wantsJson` (AJAX or a JSON-favouring
+      `Accept` header), and `req.cookie('name')` (parsed from the `Cookie`
+      header).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

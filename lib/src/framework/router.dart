@@ -107,6 +107,42 @@ class Request {
     return found;
   }
 
+  /// True when the request method equals [verb] (case-insensitive).
+  bool isMethod(String verb) => method.toUpperCase() == verb.toUpperCase();
+
+  /// True for an AJAX request (`X-Requested-With: XMLHttpRequest`).
+  bool get isAjax =>
+      (header('x-requested-with') ?? '').toLowerCase() == 'xmlhttprequest';
+
+  /// True when the request body is declared as JSON (`Content-Type`).
+  bool get isJson =>
+      (header('content-type') ?? '').toLowerCase().contains('json');
+
+  /// True when the client prefers a JSON response (AJAX, or an `Accept` header
+  /// that favours JSON over HTML) — handy for returning JSON vs a redirect.
+  bool get wantsJson {
+    if (isAjax) return true;
+    final accept = (header('accept') ?? '').toLowerCase();
+    if (accept.contains('application/json') || accept.contains('+json')) {
+      return !accept.contains('text/html');
+    }
+    return false;
+  }
+
+  /// A cookie value by [name] (parsed from the `Cookie` header), or null.
+  String? cookie(String name) {
+    final raw = header('cookie');
+    if (raw == null) return null;
+    for (final pair in raw.split(';')) {
+      final i = pair.indexOf('=');
+      if (i < 0) continue;
+      if (pair.substring(0, i).trim() == name) {
+        return Uri.decodeComponent(pair.substring(i + 1).trim());
+      }
+    }
+    return null;
+  }
+
   /// The raw request body bytes (buffered once, so multiple readers — e.g. CSRF
   /// middleware then `validate` — all see the same body). Throws
   /// [PayloadTooLargeException] when a body-size limit is set and exceeded.

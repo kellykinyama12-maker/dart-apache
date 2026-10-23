@@ -55,6 +55,25 @@ void main() {
       expect((await run(app, 'GET', '/p')).text, '1/false');
     });
 
+    test('content negotiation + method + cookie helpers', () async {
+      final app = (Router()
+            ..get(
+                '/n',
+                (r) => r.text('${r.isMethod('get')}/${r.wantsJson}/'
+                    '${r.isAjax}/${r.cookie('sid')}')))
+          .toApp();
+      final html = await run(app, 'GET', '/n', headers: {
+        'accept': 'text/html',
+        'cookie': 'sid=abc; other=1',
+      });
+      expect(html.text, 'true/false/false/abc');
+      final ajax = await run(app, 'GET', '/n', headers: {
+        'accept': 'application/json',
+        'x-requested-with': 'XMLHttpRequest',
+      });
+      expect(ajax.text, 'true/true/true/null');
+    });
+
     test('json body echoed', () async {
       final app = (Router()
             ..post('/echo', (r) async => r.sendJson(await r.json())))
