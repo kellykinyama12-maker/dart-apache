@@ -71,6 +71,8 @@ DartApp buildApp(ServerConfig config) {
   final router = Router(
     views: BlazeEngine('example/dartisan_views', cache: false),
     sessions: SessionManager(_demoKey, secure: false),
+    maxBodyBytes: 64 * 1024, // reject oversized form posts (J1)
+    onError: (error, _) => stderr.writeln('[app] unhandled: $error'), // J4
   );
 
   // DI: a single in-memory store for this worker, resolved in handlers.
@@ -108,31 +110,34 @@ DartApp buildApp(ServerConfig config) {
         'user': req.auth.id,
       }));
 
-  router.get('/login', (req) => req.view('login', {
-        'title': 'Log in',
-        'auth': req.auth.check,
-        'error': null,
-        'old': '',
-        'csrf': req.csrfToken(),
-      }));
+  // Login endpoints are rate-limited per client IP (J5).
+  router.group('', () {
+    router.get('/login', (req) => req.view('login', {
+          'title': 'Log in',
+          'auth': req.auth.check,
+          'error': null,
+          'old': '',
+          'csrf': req.csrfToken(),
+        }));
 
-  router.post('/login', (req) async {
-    try {
-      final data = await req.validate({'name': 'required|min:2'});
-      final name = data['name'].toString();
-      req.auth.login(name);
-      req.session.flash('status', 'Welcome, $name!');
-      await req.redirect('/dashboard');
-    } on ValidationException catch (e) {
-      return req.view('login', {
-        'title': 'Log in',
-        'auth': req.auth.check,
-        'error': e.errors.values.first.first,
-        'old': req.query('name') ?? '',
-        'csrf': req.csrfToken(),
-      });
-    }
-  });
+    router.post('/login', (req) async {
+      try {
+        final data = await req.validate({'name': 'required|min:2'});
+        final name = data['name'].toString();
+        req.auth.login(name);
+        req.session.flash('status', 'Welcome, $name!');
+        await req.redirect('/dashboard');
+      } on ValidationException catch (e) {
+        return req.view('login', {
+          'title': 'Log in',
+          'auth': req.auth.check,
+          'error': e.errors.values.first.first,
+          'old': req.query('name') ?? '',
+          'csrf': req.csrfToken(),
+        });
+      }
+    });
+  }, middleware: [rateLimit(20, const Duration(minutes: 1))]);
 
   router.post('/logout', (req) async {
     req.auth.logout();

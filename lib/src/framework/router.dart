@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import '../pipeline/dart_handler.dart';
@@ -17,7 +18,7 @@ import 'validation.dart';
 /// Laravel's `Request` + response helpers.
 class Request {
   Request(this.exchange, this.response, this.params, this._views,
-      [this._sessions, this._container]);
+      [this._sessions, this._container, this._maxBodyBytes]);
 
   final ServerExchange exchange;
   final ServerResponse response;
@@ -28,8 +29,13 @@ class Request {
   final BlazeEngine? _views;
   final SessionManager? _sessions;
   final Container? _container;
+  final int? _maxBodyBytes;
   Session? _session;
   Future<List<int>>? _bodyFuture;
+  bool _responded = false;
+
+  /// True once a responder has started writing the response.
+  bool get responded => _responded;
 
   /// The app's service container (requires `Router(container: ...)`).
   Container get container {
@@ -92,9 +98,22 @@ class Request {
   }
 
   /// The raw request body bytes (buffered once, so multiple readers — e.g. CSRF
-  /// middleware then `validate` — all see the same body).
-  Future<List<int>> bodyBytes() =>
-      _bodyFuture ??= exchange.body.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+  /// middleware then `validate` — all see the same body). Throws
+  /// [PayloadTooLargeException] when a body-size limit is set and exceeded.
+  Future<List<int>> bodyBytes() => _bodyFuture ??= _readBody();
+
+  Future<List<int>> _readBody() async {
+    final max = _maxBodyBytes;
+    if (max != null && exchange.contentLength > max) {
+      throw PayloadTooLargeException(max);
+    }
+    final out = <int>[];
+    await for (final chunk in exchange.body) {
+      out.addAll(chunk);
+      if (max != null && out.length > max) throw PayloadTooLargeException(max);
+    }
+    return out;
+  }
 
   /// The request body as UTF-8 text.
   Future<String> body() async => utf8.decode(await bodyBytes());
@@ -157,28 +176,33 @@ class Request {
     if (engine == null) {
       throw StateError('Router has no view engine; pass Router(views: ...)');
     }
+    _responded = true;
     _persistSession();
     return response.writeText(engine.render(view, data),
         contentType: 'text/html; charset=UTF-8');
   }
 
   Future<void> html(String markup, {int status = 200}) {
+    _responded = true;
     _persistSession();
     return response.writeText(markup,
         status: status, contentType: 'text/html; charset=UTF-8');
   }
 
   Future<void> text(String body, {int status = 200}) {
+    _responded = true;
     _persistSession();
     return response.writeText(body, status: status);
   }
 
   Future<void> sendJson(Object? value, {int status = 200}) {
+    _responded = true;
     _persistSession();
     return response.writeJson(value, status: status);
   }
 
   Future<void> redirect(String location, {int status = 302}) async {
+    _responded = true;
     _persistSession();
     response
       ..setStatus(status)
@@ -213,6 +237,25 @@ Middleware requireAuth({String redirectTo = '/login'}) {
 
 final Random _csrfRng = Random.secure();
 
+/// Thrown when a request body exceeds the configured limit.
+class PayloadTooLargeException implements Exception {
+  PayloadTooLargeException(this.maxBytes);
+  final int maxBytes;
+  @override
+  String toString() => 'PayloadTooLargeException: body exceeds $maxBytes bytes';
+}
+
+/// Length-aware, value-constant-time string comparison (no early-out on the
+/// first differing byte), for comparing secrets/tokens without a timing oracle.
+bool constantTimeEquals(String a, String b) {
+  if (a.length != b.length) return false;
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) {
+    diff |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+  }
+  return diff == 0;
+}
+
 /// Middleware that verifies a CSRF token on unsafe methods (POST/PUT/PATCH/
 /// DELETE). The token comes from the `_token` form field or the
 /// `X-CSRF-Token` header and must match the session token; mismatches get
@@ -224,9 +267,45 @@ Middleware verifyCsrf({int status = 419}) {
     final expected = request.session.get('_csrf');
     final provided =
         request.header('x-csrf-token') ?? await request.formField('_token');
-    if (expected == null || provided == null || provided != expected) {
+    if (expected is! String ||
+        provided == null ||
+        !constantTimeEquals(provided, expected)) {
       return request.text('CSRF token mismatch', status: status);
     }
+    return next();
+  };
+}
+
+class _RateWindow {
+  _RateWindow(this.resetAt, this.count);
+  final DateTime resetAt;
+  int count;
+}
+
+/// Fixed-window rate-limiting middleware: at most [max] requests per [window]
+/// per key (the client IP by default, or [keyBy]). Over the limit responds
+/// [status] (429) with a `Retry-After` header. In-memory, per worker isolate.
+Middleware rateLimit(
+  int max,
+  Duration window, {
+  String Function(Request request)? keyBy,
+  int status = 429,
+}) {
+  final windows = <String, _RateWindow>{};
+  return (request, next) {
+    final key = keyBy?.call(request) ?? request.exchange.remoteAddress;
+    final now = DateTime.now();
+    final w = windows[key];
+    if (w == null || !now.isBefore(w.resetAt)) {
+      windows[key] = _RateWindow(now.add(window), 1);
+      return next();
+    }
+    if (w.count >= max) {
+      final retry = w.resetAt.difference(now).inSeconds + 1;
+      request.response.setHeader('retry-after', '$retry');
+      return request.text('Too Many Requests', status: status);
+    }
+    w.count++;
     return next();
   };
 }
@@ -236,16 +315,28 @@ Middleware verifyCsrf({int status = 419}) {
 /// view engine. Build it into a [DartApp] with [toApp].
 class Router {
   // Named params can't be underscore-prefixed, so no initializing formal here.
-  Router({BlazeEngine? views, SessionManager? sessions, Container? container})
-      // ignore: prefer_initializing_formals
-      : _views = views,
+  Router({
+    BlazeEngine? views,
+    SessionManager? sessions,
+    Container? container,
+    int? maxBodyBytes,
+    void Function(Object error, StackTrace stackTrace)? onError,
+  })  :
+        // ignore: prefer_initializing_formals
+        _views = views,
         // ignore: prefer_initializing_formals
         _sessions = sessions,
-        _container = container ?? Container();
+        _container = container ?? Container(),
+        // ignore: prefer_initializing_formals
+        _maxBodyBytes = maxBodyBytes,
+        // ignore: prefer_initializing_formals
+        _onError = onError;
 
   final BlazeEngine? _views;
   final SessionManager? _sessions;
   final Container _container;
+  final int? _maxBodyBytes;
+  final void Function(Object error, StackTrace stackTrace)? _onError;
   final List<DartRoute> _routes = [];
   final List<Middleware> _globalMiddleware = [];
 
@@ -302,8 +393,8 @@ class Router {
     final chain = [..._globalMiddleware, ..._scoped];
     final route = DartRoute.path(full, (exchange, response) async {
       final params = _paramsFor(full, exchange.uri.path);
-      final request =
-          Request(exchange, response, params, _views, _sessions, _container);
+      final request = Request(
+          exchange, response, params, _views, _sessions, _container, _maxBodyBytes);
       await _runChain(request, chain, action);
     }, methods: {method});
     _routes.add(route);
@@ -313,16 +404,40 @@ class Router {
     Request request,
     List<Middleware> chain,
     RouteAction action,
-  ) {
-    var i = -1;
-    FutureOr<void> next() {
-      i++;
-      if (i < chain.length) return chain[i](request, next);
-      return action(request);
-    }
+  ) async {
+    try {
+      var i = -1;
+      FutureOr<void> next() {
+        i++;
+        if (i < chain.length) return chain[i](request, next);
+        return action(request);
+      }
 
-    return Future<void>.sync(next);
+      await Future<void>.sync(next);
+    } catch (error, stackTrace) {
+      await _handleError(request, error, stackTrace);
+    }
   }
+
+  // Turns uncaught handler errors into clean responses without leaking details.
+  Future<void> _handleError(
+      Request request, Object error, StackTrace stackTrace) async {
+    if (request.responded) {
+      _onError?.call(error, stackTrace);
+      return;
+    }
+    if (error is ValidationException) {
+      await request.sendJson({'errors': error.errors}, status: 422);
+    } else if (error is PayloadTooLargeException) {
+      await request.text('Payload Too Large', status: 413);
+    } else {
+      (_onError ?? _logError)(error, stackTrace);
+      await request.text('Internal Server Error', status: 500);
+    }
+  }
+
+  static void _logError(Object error, StackTrace stackTrace) =>
+      stderr.writeln('[router] unhandled error: $error\n$stackTrace');
 
   /// Builds the per-worker [DartApp] (routes + optional WT handler).
   DartApp toApp() => DartApp(_routes, wt: wt);

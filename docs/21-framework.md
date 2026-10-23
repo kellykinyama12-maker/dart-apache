@@ -153,6 +153,31 @@ docs + numbers. No new external dependencies.
 - [ ] *(parked)* **wire DB driver** — a pure-Dart Postgres `Database` impl.
       Deprioritized.
 
+## 3e. Phase 5 — tightening & hardening
+
+Features are in; Phase 5 makes them safe and robust under hostile input, in
+value order. All framework-layer (Router/Request/middleware), pure Dart, each
+slice shippable + tested + PHP-safe.
+
+- [x] **J1 — Request body limits.** A configurable max request-body size
+      (`Router(maxBodyBytes:)`): reject on `Content-Length` over the cap and
+      stop buffering a stream that exceeds it → `413`, via a
+      `PayloadTooLargeException`. Protects `bodyBytes`/`validate`/`formField`/
+      CSRF from unbounded-memory DoS. Verified live (70 KB → 413).
+- [x] **J2 — Timing-safe token comparison.** A `constantTimeEquals` helper used
+      by `verifyCsrf` (and available for session/auth checks) so token checks
+      don't leak via timing.
+- [x] **J3 — Session + auth hardening.** `session.regenerate()` (rotate the
+      CSRF token on privilege change), `Auth.login`/`logout` regenerate, and a
+      32-byte session-key assertion.
+- [x] **J4 — Error boundary.** A router-level guard around the handler chain:
+      `ValidationException → 422` (JSON field errors), any other throw → a
+      generic `500` with **no stack-trace leak**, plus a server-side `onError`
+      log hook (`Router(onError:)`, safe default to stderr).
+- [x] **J5 — Rate limiting.** A `rateLimit(max, window, {keyBy})` middleware —
+      in-memory fixed-window per key (client IP by default) → `429` with
+      `Retry-After`. Wired onto the showcase login group.
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

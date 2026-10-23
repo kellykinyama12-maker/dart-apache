@@ -16,7 +16,7 @@ class SessionManager {
     this.cookieName = 'dartisan_session',
     this.ttl = const Duration(hours: 2),
     this.secure = true,
-  });
+  }) : assert(key.length == 32, 'session key must be 32 bytes (AES-256)');
 
   /// 32-byte AES key. Use a persistent key in production (see [generateKey]).
   final Uint8List key;
@@ -148,6 +148,12 @@ class Session {
     return value;
   }
 
+  /// Rotates per-session secrets (the CSRF token) on a privilege change, so any
+  /// previously known token is invalidated (mitigates fixation/replay).
+  void regenerate() {
+    if (_data.remove('_csrf') != null) _dirty = true;
+  }
+
   /// Stores [value] under [key] for the *next* request only.
   void flash(String key, Object? value) {
     _nextFlash[key] = value;
@@ -171,6 +177,13 @@ class Auth {
   bool get guest => !check;
   Object? get id => _session.get(idKey);
 
-  void login(Object userId) => _session.put(idKey, userId);
-  void logout() => _session.forget(idKey);
+  void login(Object userId) {
+    _session.put(idKey, userId);
+    _session.regenerate(); // rotate the CSRF token on privilege change
+  }
+
+  void logout() {
+    _session.forget(idKey);
+    _session.regenerate();
+  }
 }
