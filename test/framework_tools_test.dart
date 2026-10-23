@@ -66,6 +66,21 @@ void main() {
       expect(Validator.validate({'z': '1234'}, {'z': r'regex:^\d+$'}), isEmpty);
       expect(Validator.validate({'d': '12'}, {'d': 'digits:3'}), isNotEmpty);
     });
+
+    test('uuid / ip / json / size', () {
+      expect(
+          Validator.validate(
+              {'u': '550e8400-e29b-41d4-a716-446655440000'}, {'u': 'uuid'}),
+          isEmpty);
+      expect(Validator.validate({'u': 'nope'}, {'u': 'uuid'}), isNotEmpty);
+      expect(Validator.validate({'a': '192.168.0.1'}, {'a': 'ip'}), isEmpty);
+      expect(Validator.validate({'a': '999.1.1.1'}, {'a': 'ip'}), isNotEmpty);
+      expect(Validator.validate({'j': '{"a":1}'}, {'j': 'json'}), isEmpty);
+      expect(Validator.validate({'j': '{bad'}, {'j': 'json'}), isNotEmpty);
+      expect(Validator.validate({'s': 'abcd'}, {'s': 'size:4'}), isEmpty);
+      expect(Validator.validate({'s': 'abc'}, {'s': 'size:4'}), isNotEmpty);
+      expect(Validator.validate({'n': '7'}, {'n': 'numeric|size:7'}), isEmpty);
+    });
   });
 
   group('scaffold', () {

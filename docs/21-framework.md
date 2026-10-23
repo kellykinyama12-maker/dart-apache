@@ -424,6 +424,11 @@ Small quality-of-life wins developers reach for daily.
 - [x] **AF1 — `created` / `noContent` / `back`.** `req.created(data,
       {location})` (201 JSON), `req.noContent()` (204), and `req.back({fallback})`
       (redirect to the `Referer`).
+
+## 3ab. Phase 28 — more validation rules
+
+- [x] **AG1 — `uuid` / `ip` / `json` / `size:N`.** UUID format, IPv4/IPv6
+      address, parseable JSON, and exact size (string length or numeric value).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

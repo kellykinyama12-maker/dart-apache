@@ -1,6 +1,7 @@
 // Request validation for Dartisan — the Laravel `Validator` / FormRequest
 // analog. Rules are `pipe|separated` strings (e.g. `required|email|min:3`),
 // validated against a data map; errors are collected per field.
+import 'dart:convert';
 
 /// Thrown by [Request.validate] when validation fails; carries field errors.
 class ValidationException implements Exception {
@@ -18,11 +19,13 @@ class ValidationException implements Exception {
 /// `numeric`, `integer`, `boolean`, `url`, `alpha`, `alphanum`, `min:N`,
 /// `max:N`, `between:a,b`, `digits:N`, `in:a,b,c`, `not_in:a,b`, `same:field`,
 /// `different:field`, `starts_with:a,b`, `ends_with:a,b`, `regex:pattern`,
-/// `confirmed`.
+/// `uuid`, `ip`, `json`, `size:N`, `confirmed`.
 class Validator {
   static final _email = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   static final _alpha = RegExp(r'^[A-Za-z]+$');
   static final _alphanum = RegExp(r'^[A-Za-z0-9]+$');
+  static final _uuid = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
 
   static Map<String, List<String>> validate(
     Map<String, Object?> data,
@@ -154,6 +157,28 @@ class Validator {
         return RegExp(arg).hasMatch(s)
             ? null
             : 'The $field format is invalid.';
+      case 'uuid':
+        return _uuid.hasMatch(s)
+            ? null
+            : 'The $field must be a valid UUID.';
+      case 'ip':
+        return _isIp(s) ? null : 'The $field must be a valid IP address.';
+      case 'json':
+        try {
+          jsonDecode(s);
+          return null;
+        } catch (_) {
+          return 'The $field must be a valid JSON string.';
+        }
+      case 'size':
+        final n = int.tryParse(arg) ?? 0;
+        final numVal = num.tryParse(s);
+        if (numVal != null) {
+          return numVal == n ? null : 'The $field must be $n.';
+        }
+        return s.length == n
+            ? null
+            : 'The $field must be $n characters.';
       case 'confirmed':
         return '${data['${field}_confirmation']}' == s
             ? null
@@ -161,5 +186,21 @@ class Validator {
       default:
         return null; // unknown rule -> ignore
     }
+  }
+
+  static bool _isIp(String s) {
+    if (s.contains(':')) {
+      // Loose IPv6: hex groups separated by ':' (allows '::' compression).
+      return RegExp(r'^[0-9a-fA-F:]+$').hasMatch(s) && s.contains('::') ||
+          RegExp(r'^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$').hasMatch(s);
+    }
+    final octets = s.split('.');
+    if (octets.length != 4) return false;
+    for (final o in octets) {
+      if (o.isEmpty || o.length > 3) return false;
+      final n = int.tryParse(o);
+      if (n == null || n < 0 || n > 255) return false;
+    }
+    return true;
   }
 }
