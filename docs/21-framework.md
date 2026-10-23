@@ -110,13 +110,16 @@ layer Laravel leans on. All pure Dart, in-process, no sidecars.
       small updates (a counter sends a few bytes, not the whole fragment).
       Default on (`liveWtHandler(registry, diff: true)`); live-verified in Edge
       over HTTP/3. (`lib/src/framework/live/diff.dart`.)
-- [ ] **H2 — Events + queue.** A type-keyed `EventDispatcher`
-      (`listen<T>` / `dispatch`) and an in-memory async `Queue` (`push`, delayed
-      jobs, retries, a drain loop) for `Job`s — fire-and-forget work off the
-      request path.
-- [ ] **H3 — Mail.** A `Mailer` over a `MailTransport` seam with pure-Dart
+- [x] **H2 — Events + queue.** A type-keyed `EventDispatcher`
+      (`listen<T>` / `dispatch`, awaits async listeners) and an in-memory async
+      `Queue` (`push` + `CallbackJob`, delayed jobs, retries up to
+      `maxAttempts`, `onFailed`, microtask drain + `settle()`) for fire-and-
+      forget work off the request path.
+      (`lib/src/framework/events/events.dart`, `.../queue/queue.dart`.)
+- [x] **H3 — Mail.** A `Mailer` over a `MailTransport` seam with pure-Dart
       `ArrayTransport` (tests) and `LogTransport` (dev); `Message` (to/subject/
-      html/text), optionally queued via H2. (SMTP is a later transport.)
+      html/text), and `mailer.queue(message, queue)` for background delivery via
+      H2. (SMTP is a later transport.) (`lib/src/framework/mail/mail.dart`.)
 
 ## 4. Principles
 
