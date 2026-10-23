@@ -110,6 +110,26 @@ class Request {
   /// True when the request method equals [verb] (case-insensitive).
   bool isMethod(String verb) => method.toUpperCase() == verb.toUpperCase();
 
+  /// The client's remote address.
+  String get ip => exchange.remoteAddress;
+
+  /// The `User-Agent` header, or null.
+  String? get userAgent => header('user-agent');
+
+  /// The `Host` header, or null.
+  String? get host => header('host');
+
+  /// The bearer token from an `Authorization: Bearer <token>` header, or null.
+  String? get bearerToken {
+    final auth = header('authorization') ?? '';
+    const prefix = 'Bearer ';
+    return auth.length > prefix.length &&
+            auth.substring(0, prefix.length).toLowerCase() ==
+                prefix.toLowerCase()
+        ? auth.substring(prefix.length).trim()
+        : null;
+  }
+
   /// True for an AJAX request (`X-Requested-With: XMLHttpRequest`).
   bool get isAjax =>
       (header('x-requested-with') ?? '').toLowerCase() == 'xmlhttprequest';

@@ -543,6 +543,11 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **BA1 — `squish` / `before` / `after` / `between`.** `Str.squish`,
       `before`/`after`/`beforeLast`/`afterLast`, and `between` substring helpers.
+
+## 3aw. Phase 49 — request metadata
+
+- [x] **BB1 — `ip` / `userAgent` / `host` / `bearerToken`.** Request metadata
+      getters (`bearerToken` parses `Authorization: Bearer …`).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

@@ -75,6 +75,22 @@ void main() {
       expect(router.urlFor('admin.users.show', {'id': 9}), '/admin/users/9');
     });
 
+    test('request metadata helpers (ip / userAgent / host / bearerToken)',
+        () async {
+      final app = (Router()
+            ..get(
+                '/m',
+                (r) => r.text('${r.ip}/${r.userAgent}/${r.host}/'
+                    '${r.bearerToken}')))
+          .toApp();
+      final res = await run(app, 'GET', '/m', headers: {
+        'user-agent': 'UA',
+        'host': 'example.test',
+        'authorization': 'Bearer abc123',
+      });
+      expect(res.text, '127.0.0.1/UA/example.test/abc123');
+    });
+
     test('content negotiation + method + cookie helpers', () async {
       final app = (Router()
             ..get(
