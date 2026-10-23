@@ -569,6 +569,11 @@ Small quality-of-life wins developers reach for daily.
 
 - [x] **BF1 — ternary operator.** `cond ? a : b` in template expressions
       (right-associative, lowest precedence; usable inside calls/lists/maps).
+
+## 3bb. Phase 54 — null-coalescing
+
+- [x] **BG1 — `??` operator.** `name ?? 'anon'` null-coalescing in template
+      expressions (chainable, between ternary and `||`).
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

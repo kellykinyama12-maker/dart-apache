@@ -73,6 +73,15 @@ class _ListLiteral extends _Node {
       [for (final e in elements) e.eval(ctx)];
 }
 
+/// An `a ?? b` null-coalescing expression.
+class _Coalesce extends _Node {
+  _Coalesce(this.left, this.right);
+  final _Node left;
+  final _Node right;
+  @override
+  Object? eval(Map<String, Object?> ctx) => left.eval(ctx) ?? right.eval(ctx);
+}
+
 /// A `cond ? a : b` conditional expression.
 class _Ternary extends _Node {
   _Ternary(this.cond, this.whenTrue, this.whenFalse);
@@ -314,7 +323,7 @@ class _Parser {
 
   // `cond ? a : b` (right-associative, lowest precedence).
   _Node _parseTernary() {
-    final cond = _parseOr();
+    final cond = _parseCoalesce();
     _skipWs();
     if (_peek() == '?') {
       _pos++;
@@ -325,6 +334,15 @@ class _Parser {
       return _Ternary(cond, whenTrue, whenFalse);
     }
     return cond;
+  }
+
+  // `a ?? b` (null-coalescing).
+  _Node _parseCoalesce() {
+    var left = _parseOr();
+    while (_match('??')) {
+      left = _Coalesce(left, _parseOr());
+    }
+    return left;
   }
 
   _Node _parseOr() {

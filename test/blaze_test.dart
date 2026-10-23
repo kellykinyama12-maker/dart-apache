@@ -63,6 +63,13 @@ void main() {
       expect(ev("upper(ok ? 'yes' : 'no')", {'ok': true}), 'YES'); // nested
     });
 
+    test('null-coalescing ??', () {
+      expect(ev("name ?? 'anon'", {'name': 'ada'}), 'ada');
+      expect(ev("name ?? 'anon'", {}), 'anon');
+      expect(ev("a ?? b ?? 'z'", {'a': null, 'b': null}), 'z');
+      expect(ev("missing ?? 0", {}), 0); // null -> fallback, 0 kept
+    });
+
     test('collection + number built-ins', () {
       expect(ev("first(xs)", {'xs': [1, 2, 3]}), 1);
       expect(ev("last(xs)", {'xs': [1, 2, 3]}), 3);
