@@ -76,6 +76,47 @@ void main() {
       expect(src, contains('final Database db'));
     });
 
+    test('schema-aware modelSource types fields and embeds CREATE TABLE', () {
+      final fields =
+          parseFields(['title:text', 'views:integer', 'published:boolean']);
+      final src = modelSource('Post', fields: fields);
+      expect(src, contains('final String? title;'));
+      expect(src, contains('final int? views;'));
+      expect(src, contains('final bool? published;'));
+      expect(src, contains("(row['views'] as num?)?.toInt()"));
+      expect(src, contains("row['published'] as bool?"));
+      expect(
+          src,
+          contains('CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY '
+              'AUTOINCREMENT, title TEXT, views INTEGER, published BOOLEAN)'));
+    });
+
+    test('parseFields maps types and ignores table:', () {
+      final f = parseFields(['table:posts', 'n:int', 'x:double', 'name']);
+      expect(f.map((e) => e.name), ['n', 'x', 'name']);
+      expect(f.map((e) => e.sqlType), ['INTEGER', 'REAL', 'TEXT']);
+    });
+
+    test('tableFromMigrationName strips create_/_table', () {
+      expect(tableFromMigrationName('CreatePostsTable'), 'posts');
+      expect(tableFromMigrationName('add_index'), 'add_index');
+    });
+
+    test('migrationSource builds up/down from fields', () {
+      final src = migrationSource('CreatePostsTable',
+          table: 'posts', fields: parseFields(['title:text']));
+      expect(src, contains('class CreatePostsTable implements Migration'));
+      expect(src, contains('CREATE TABLE IF NOT EXISTS posts'));
+      expect(src, contains('DROP TABLE IF EXISTS posts'));
+    });
+
+    test('migrationSource without fields is a stub', () {
+      final src = migrationSource('AddStuff', table: 'add_stuff');
+      expect(src, contains('implements Migration'));
+      expect(src, contains('Future<void> up(SqlDatabase db)'));
+      expect(src, contains('// TODO'));
+    });
+
     test('middlewareSource is a Middleware stub', () {
       final src = middlewareSource('EnsureAdmin');
       expect(src, contains('final Middleware ensureAdmin ='));

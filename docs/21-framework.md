@@ -231,6 +231,28 @@ developer reaches for next, so you're productive from the first command.
 - [x] **M4 — `make:middleware`.** Generates a `Middleware` stub (before/after
       `next()`), ready to `router.use(...)`.
 
+## 3i. Phase 9 — schema-aware generators + migrations
+
+Turn the data layer into a full workflow: describe columns on the command line,
+get a typed model and a runnable migration.
+
+- [x] **N1 — Schema-aware `make:model`.** `make:model Post title:text
+      views:integer published:boolean` parses `name:type` field specs into a
+      typed record (correctly-typed fields, `fromRow`/`toMap`) + repository, and
+      embeds the matching `CREATE TABLE` SQL. Types: `text/string`,
+      `integer/int`, `real/double`, `boolean/bool`.
+- [x] **N2 — `make:migration`.** `make:migration CreatePostsTable title:text …`
+      writes `migrations/<timestamp>_<name>.dart` — a `Migration` with
+      `up()` = `CREATE TABLE` (from the field specs) and `down()` = `DROP TABLE`
+      (an empty `up/down` stub when no fields are given). The target table is
+      derived from the name (`create_posts_table` → `posts`) or given as
+      `table:posts`.
+- [x] **N3 — Migration runtime.** A `Migration` interface + `Migrator`
+      (`migrate` runs pending migrations in order, `rollback` undoes the last
+      batch) backed by a `schema_migrations` tracking table on `SqlDatabase`.
+      Tested against a stateful loopback DB, and **live-verified** against a
+      running `dart-db-server` (generated migration → insert/select → rollback).
+
 ## 4. Principles
 
 - **DX first** — the happy path should feel like Laravel: a route, a controller,

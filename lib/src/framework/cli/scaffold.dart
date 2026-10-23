@@ -80,25 +80,41 @@ String viewSource(String name) => '''
 
 /// A typed record + repository over the [Database] (edit fields to match your
 /// schema). The table name is the pluralized snake_case of [name].
-String modelSource(String name) {
+String modelSource(String name, {List<FieldSpec> fields = const []}) {
   final cls = pascalCase(name);
   final table = '${snakeCase(name)}s';
+  if (fields.isEmpty) {
+    // Default stub with a single `name` field.
+    fields = [FieldSpec('name', 'TEXT', 'String')];
+  }
+  final ctorParams = fields.map((f) => 'this.${f.name}').join(', ');
+  final fieldDecls =
+      fields.map((f) => '  final ${f.dartType}? ${f.name};').join('\n');
+  final fromRow = fields
+      .map((f) => "        ${f.name}: ${_fromRowExpr(f)},")
+      .join('\n');
+  final toMap = fields
+      .map((f) => "        if (${f.name} != null) '${f.name}': ${f.name},")
+      .join('\n');
+  final createSql = createTableSql(table, fields);
   return '''
 import 'package:dart_apache/dart_apache.dart';
 
-/// A record for the `$table` table. Add fields to match your schema.
+/// A record for the `$table` table.
 class $cls {
-  $cls({this.id, required this.name});
+  $cls({this.id, $ctorParams});
 
   final int? id;
-  final String name;
+$fieldDecls
 
   factory $cls.fromRow(Map<String, Object?> row) => $cls(
         id: row['id'] as int?,
-        name: row['name'] as String? ?? '',
+$fromRow
       );
 
-  Map<String, Object?> toMap() => {'name': name};
+  Map<String, Object?> toMap() => {
+$toMap
+      };
 }
 
 /// Query helper for [$cls] over any [Database] driver.
@@ -107,6 +123,9 @@ class ${cls}Repository {
 
   final Database db;
   static const table = '$table';
+
+  /// DDL for this model's table (run via SqlDatabase.execute or a migration).
+  static const createTableSql = '$createSql';
 
   Future<List<$cls>> all() async =>
       (await db.table(table).get()).map($cls.fromRow).toList();
@@ -139,6 +158,119 @@ final Middleware $fn = (request, next) async {
   await next();
   // TODO: post-processing.
 };
+''';
+}
+
+/// A parsed `name:type` column: its SQL type and Dart type.
+class FieldSpec {
+  FieldSpec(this.name, this.sqlType, this.dartType);
+  final String name;
+  final String sqlType;
+  final String dartType;
+}
+
+/// Parses `name:type` CLI specs into [FieldSpec]s (a bare `name` defaults to
+/// text). A `table:<name>` spec is ignored here (callers read it separately).
+List<FieldSpec> parseFields(Iterable<String> specs) {
+  final out = <FieldSpec>[];
+  for (final spec in specs) {
+    final i = spec.indexOf(':');
+    final name = i < 0 ? spec : spec.substring(0, i);
+    final type = i < 0 ? 'text' : spec.substring(i + 1);
+    if (name == 'table' || name.isEmpty) continue;
+    out.add(_fieldSpec(name, type));
+  }
+  return out;
+}
+
+FieldSpec _fieldSpec(String name, String type) {
+  switch (type.toLowerCase()) {
+    case 'int':
+    case 'integer':
+      return FieldSpec(name, 'INTEGER', 'int');
+    case 'real':
+    case 'double':
+    case 'float':
+      return FieldSpec(name, 'REAL', 'double');
+    case 'bool':
+    case 'boolean':
+      return FieldSpec(name, 'BOOLEAN', 'bool');
+    default:
+      return FieldSpec(name, 'TEXT', 'String');
+  }
+}
+
+String _fromRowExpr(FieldSpec f) {
+  switch (f.dartType) {
+    case 'int':
+      return "(row['${f.name}'] as num?)?.toInt()";
+    case 'double':
+      return "(row['${f.name}'] as num?)?.toDouble()";
+    case 'bool':
+      return "row['${f.name}'] as bool?";
+    default:
+      return "row['${f.name}'] as String?";
+  }
+}
+
+/// A `CREATE TABLE IF NOT EXISTS` statement (`id` PK + the given [fields]).
+String createTableSql(String table, List<FieldSpec> fields) {
+  final cols = <String>[
+    'id INTEGER PRIMARY KEY AUTOINCREMENT',
+    for (final f in fields) '${f.name} ${f.sqlType}',
+  ];
+  return 'CREATE TABLE IF NOT EXISTS $table (${cols.join(', ')})';
+}
+
+/// The table a migration named [name] targets (`create_posts_table` → `posts`).
+String tableFromMigrationName(String name) {
+  final s = snakeCase(name)
+      .replaceFirst(RegExp(r'^create_'), '')
+      .replaceFirst(RegExp(r'_table$'), '');
+  return s.isEmpty ? snakeCase(name) : s;
+}
+
+/// A [Migration] class. With [fields], `up` creates [table] and `down` drops
+/// it; without fields, an editable up/down stub.
+String migrationSource(String name,
+    {required String table, List<FieldSpec> fields = const []}) {
+  final cls = pascalCase(name);
+  if (fields.isEmpty) {
+    return '''
+import 'package:dart_apache/dart_apache.dart';
+
+class $cls implements Migration {
+  @override
+  String get name => '${snakeCase(name)}';
+
+  @override
+  Future<void> up(SqlDatabase db) async {
+    // TODO: await db.execute('CREATE TABLE ...');
+  }
+
+  @override
+  Future<void> down(SqlDatabase db) async {
+    // TODO: await db.execute('DROP TABLE ...');
+  }
+}
+''';
+  }
+  final createSql = createTableSql(table, fields);
+  return '''
+import 'package:dart_apache/dart_apache.dart';
+
+class $cls implements Migration {
+  @override
+  String get name => '${snakeCase(name)}';
+
+  @override
+  Future<void> up(SqlDatabase db) =>
+      db.execute('$createSql');
+
+  @override
+  Future<void> down(SqlDatabase db) =>
+      db.execute('DROP TABLE IF EXISTS $table');
+}
 ''';
 }
 

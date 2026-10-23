@@ -24,7 +24,9 @@ Future<void> main(List<String> args) async {
     case 'make:component':
       _make('components', rest, componentSource, suffix: '_component');
     case 'make:model':
-      _make('models', rest, modelSource, suffix: '');
+      _makeModel(rest);
+    case 'make:migration':
+      _makeMigration(rest);
     case 'make:middleware':
       _make('middleware', rest, middlewareSource, suffix: '');
     case 'make:view':
@@ -100,6 +102,46 @@ void _makeView(List<String> rest) {
   _write('views/${snakeCase(rest.first)}.blaze.html', viewSource(rest.first));
 }
 
+void _makeModel(List<String> rest) {
+  if (rest.isEmpty) {
+    stderr.writeln('usage: dartisan make:model <Name> [field:type ...]');
+    exitCode = 2;
+    return;
+  }
+  final name = rest.first;
+  final fields = parseFields(rest.skip(1));
+  _write('models/${snakeCase(name)}.dart', modelSource(name, fields: fields));
+}
+
+void _makeMigration(List<String> rest) {
+  if (rest.isEmpty) {
+    stderr.writeln(
+        'usage: dartisan make:migration <Name> [table:posts] [field:type ...]');
+    exitCode = 2;
+    return;
+  }
+  final name = rest.first;
+  final specs = rest.skip(1).toList();
+  final table = _specValue(specs, 'table') ?? tableFromMigrationName(name);
+  final fields = parseFields(specs);
+  _write('migrations/${_timestamp()}_${snakeCase(name)}.dart',
+      migrationSource(name, table: table, fields: fields));
+}
+
+String? _specValue(List<String> specs, String key) {
+  for (final s in specs) {
+    final i = s.indexOf(':');
+    if (i > 0 && s.substring(0, i) == key) return s.substring(i + 1);
+  }
+  return null;
+}
+
+String _timestamp() {
+  final n = DateTime.now();
+  String p(int v) => v.toString().padLeft(2, '0');
+  return '${n.year}${p(n.month)}${p(n.day)}${p(n.hour)}${p(n.minute)}${p(n.second)}';
+}
+
 void _write(String path, String content) {
   final f = File(path);
   if (f.existsSync()) {
@@ -153,9 +195,13 @@ Usage:
   dartisan new <name>               scaffold a new app
   dartisan make:controller <Name>   create controllers/<name>_controller.dart
   dartisan make:component <Name>    create components/<name>_component.dart (Live)
-  dartisan make:model <Name>        create models/<name>.dart (record + repository)
+  dartisan make:model <Name> [f:t]  create models/<name>.dart (record + repository)
+  dartisan make:migration <Name>    create migrations/<ts>_<name>.dart (up/down)
   dartisan make:middleware <Name>   create middleware/<name>.dart
   dartisan make:view <name>         create views/<name>.blaze.html
   dartisan serve [entry] [args]     run the app (dart run; dev)
+
+Field specs (make:model / make:migration): name:type where type is
+  text | integer | real | boolean  (e.g. make:model Post title:text views:integer)
 ''');
 }
