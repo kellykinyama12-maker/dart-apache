@@ -146,6 +146,22 @@ void main() {
       expect(form.text,
           '[The name must be at least 3 characters.] old=[A]');
     });
+
+    test('view auto-injects the flash bag ({{ flash.status }})', () async {
+      File('${dir.path}/notice.blaze.html')
+          .writeAsStringSync('flash=[{{ flash.status }}]');
+      final app = (Router(views: BlazeEngine(dir.path, cache: false), sessions: sm)
+            ..get('/notice', (r) => r.view('notice'))
+            ..post('/do', (r) async {
+              r.session.flash('status', 'saved');
+              await r.redirect('/notice');
+            }))
+          .toApp();
+      final posted = await run(app, 'POST', '/do');
+      final cookie = posted.headers['set-cookie']!.split(';').first;
+      final notice = await run(app, 'GET', '/notice', headers: {'cookie': cookie});
+      expect(notice.text, 'flash=[saved]');
+    });
   });
 }
 

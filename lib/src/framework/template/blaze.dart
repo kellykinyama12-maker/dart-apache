@@ -4,6 +4,7 @@
 // `@include('partial')`, and layouts via `@extends('layout')` +
 // `@section('name')...@endsection` + `@yield('name')`. Runs under AOT (no eval).
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'expression.dart';
@@ -103,6 +104,7 @@ class BlazeEngine {
     'foreach', 'endforeach',
     'forelse', 'empty', 'endforelse',
     'error', 'enderror',
+    'json',
     'auth', 'endauth', 'guest', 'endguest',
     'csrf',
     'include', 'extends', 'section', 'endsection', 'yield',
@@ -456,6 +458,8 @@ class _TreeParser {
         nodes.add(_IfNode([_Branch(Expression.parse('!auth'), body)]));
       case 'csrf':
         nodes.add(_CsrfNode());
+      case 'json':
+        nodes.add(_JsonNode(Expression.parse(t.args)));
       case 'error':
         final body = parseBlock({'enderror'});
         _expect('enderror');
@@ -655,6 +659,17 @@ class _IncludeNode extends _Node {
       Map<String, String> sections) {
     out.write(engine.render(name, ctx));
   }
+}
+
+/// `@json(expr)`: emits `jsonEncode(expr)` (unescaped) — for embedding server
+/// data into a `<script>`.
+class _JsonNode extends _Node {
+  _JsonNode(this.expr);
+  final Expression expr;
+  @override
+  void render(StringBuffer out, Map<String, Object?> ctx, BlazeEngine engine,
+          Map<String, String> sections) =>
+      out.write(jsonEncode(expr.evaluate(ctx)));
 }
 
 /// `@error('field') … @enderror`: renders the body (with `message` bound to the

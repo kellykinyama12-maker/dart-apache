@@ -95,6 +95,17 @@ void main() {
       expect(render(tpl, {'errors': <String, Object?>{}}), '');
       expect(render(tpl), '');
     });
+
+    test('@json emits jsonEncode of the expression', () {
+      expect(
+          render('var d = @json(items);', {
+            'items': [1, 2, 3]
+          }),
+          'var d = [1,2,3];');
+      expect(render('@json(user)', {
+        'user': {'name': 'ada'}
+      }), '{"name":"ada"}');
+    });
   });
 
   group('layouts + includes (file-backed)', () {

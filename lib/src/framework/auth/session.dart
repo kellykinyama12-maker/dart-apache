@@ -163,6 +163,9 @@ class Session {
   /// Reads a value flashed by the previous request.
   Object? flashed(String key, [Object? fallback]) =>
       _flash.containsKey(key) ? _flash[key] : fallback;
+
+  /// All values flashed by the previous request (a copy).
+  Map<String, Object?> get flashBag => Map<String, Object?>.of(_flash);
 }
 
 /// Minimal authentication over a [Session]: it keeps the authenticated user id

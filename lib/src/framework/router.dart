@@ -207,6 +207,11 @@ class Request {
     final enriched = <String, Object?>{
       if (_sessions != null) 'errors': session.flashed('_errors') ?? const {},
       if (_sessions != null) 'old': session.flashed('_old') ?? const {},
+      if (_sessions != null)
+        'flash': {
+          for (final e in session.flashBag.entries)
+            if (!e.key.startsWith('_')) e.key: e.value,
+        },
       ...data,
     };
     _persistSession();

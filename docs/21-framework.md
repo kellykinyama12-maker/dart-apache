@@ -340,14 +340,14 @@ Small quality-of-life wins developers reach for daily.
 
 ## 3p. Phase 16 — pagination + template helpers
 
-- [ ] **T1 — Pagination.** `query.paginate(page: n, perPage: m)` → a `Paginator`
+- [x] **T1 — Pagination.** `query.paginate(page: n, perPage: m)` → a `Paginator`
       (items + `total/page/perPage/lastPage/hasNext/hasPrev/from/to`), backed by
       a driver `runCount` (in-memory + `SELECT COUNT(*)` on SQL). `toMap()` for
       Blaze.
-- [ ] **T2 — `@json` + auto `flash` in views.** `@json(expr)` emits
+- [x] **T2 — `@json` + auto `flash` in views.** `@json(expr)` emits
       `jsonEncode(expr)` (embed server data into `<script>`), and `req.view`
-      injects a `flash` map (all current flash values) so `{{ flash.status }}`
-      works without manual passing.
+      injects a `flash` map (current non-internal flash values) so
+      `{{ flash.status }}` works without manual passing.
 
 ## 4. Principles
 
