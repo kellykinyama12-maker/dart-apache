@@ -619,6 +619,17 @@ that gap. Roadmap:
 - [x] Client: during each action the runtime sets `data-live-busy` on the
       container, un-hides `[data-live-loading]` elements, and toggles any
       `data-live-loading-class` classes — restored when the reply lands.
+- [x] `LiveComponent.diffable` (default true): form components whose render
+      depends on client-only `data-live-model` input return false so the full
+      HTML is sent (the diff base would diverge from the client's).
+- [x] Live-verified over real HTTP/3 + WebTransport in Edge
+      (`tool/browser-h3-test/live_signup_wt_test.js`): invalid email → server
+      error round-trips and renders inline (input preserved); valid → saved.
+- Gotchas learned: (1) Live form `<form>`s need **`novalidate`** — native HTML5
+  constraint validation on `<input type="email">` suppresses the `submit` event,
+  so server-side validation never runs. (2) Mount extra components with
+  `includeRuntime: false`; the single inlined runtime binds every component on
+  `DOMContentLoaded`.
 
 ## 4. Principles
 

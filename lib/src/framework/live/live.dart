@@ -31,6 +31,13 @@ abstract class LiveComponent {
   /// Renders the component's inner HTML for [state].
   String render(Map<String, Object?> state);
 
+  /// Whether this component's updates may be sent as a minimal HTML diff.
+  /// Diffing assumes the client's base HTML matches `render(submitted-state)`.
+  /// Components whose render depends on client-only input (forms with
+  /// `data-live-model`) should return false so the full HTML is sent and the
+  /// DOM morph reconciles cleanly.
+  bool get diffable => true;
+
   /// Validates [data] against [rules] (Laravel-style), throwing a
   /// [ValidationException] on failure — the Live handler catches it and folds
   /// the errors into the re-rendered state (see [liveWtHandler]). Call it from
@@ -88,7 +95,7 @@ WtHandler liveWtHandler(LiveRegistry registry, {bool diff = true}) {
     final newHtml = component.render(next);
 
     final Map<String, Object?> reply;
-    if (diff) {
+    if (diff && component.diffable) {
       // Diff against the old state's render — exactly the client's base string.
       final oldHtml = component.render(state);
       reply = {

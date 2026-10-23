@@ -35,6 +35,8 @@ class _LoginForm extends LiveComponent {
   @override
   Map<String, Object?> initialState() => {'email': '', 'saved': false};
   @override
+  bool get diffable => false;
+  @override
   Map<String, Object?> update(
       String action, Map<String, Object?> state, Map<String, Object?> p) {
     if (action == 'save') {
@@ -196,6 +198,20 @@ void main() {
       final state = (reply['state'] as Map).cast<String, Object?>();
       expect(state['saved'], isTrue);
       expect(state['errors'], isEmpty);
+    });
+
+    test('a non-diffable component replies with full html even under diff', () {
+      final handler = liveWtHandler(LiveRegistry()..register(_LoginForm()));
+      final session = _FakeWtSession();
+      handler(session, _action({
+        'id': 3,
+        'component': 'login',
+        'action': 'save',
+        'state': {'email': 'ada@example.com'},
+      }));
+      final reply = jsonDecode(session.sent.single) as Map<String, Object?>;
+      expect(reply['patch'], isNull); // _LoginForm.diffable is false
+      expect(reply['html'], isNotNull);
     });
 
     test('LiveComponent.validate throws on failure, passes on success', () {

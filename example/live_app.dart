@@ -57,6 +57,10 @@ class SignupComponent extends LiveComponent {
   @override
   Map<String, Object?> initialState() => {'email': '', 'saved': false};
 
+  // Render depends on client-only model input, so send full HTML (not a diff).
+  @override
+  bool get diffable => false;
+
   @override
   Map<String, Object?> update(
     String action,
@@ -76,7 +80,7 @@ class SignupComponent extends LiveComponent {
     final errors = (state['errors'] as Map?) ?? const {};
     final emailErr = (errors['email'] as List?)?.cast<String>() ?? const [];
     final saved = state['saved'] == true;
-    return '<form data-live-submit="save">'
+    return '<form data-live-submit="save" novalidate>'
         '<input name="email" type="email" placeholder="you@example.com" '
         'data-live-model="email" value="${_attr.convert(email)}"> '
         '<button type="submit" data-live-loading-class="busy">Sign up</button> '
