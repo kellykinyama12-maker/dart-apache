@@ -103,15 +103,16 @@ void main() {
     });
 
     test('migrationSource builds up/down from fields', () {
-      final src = migrationSource('CreatePostsTable',
+      final src = migrationSource('CreatePostsTable', '20260101_create_posts_table',
           table: 'posts', fields: parseFields(['title:text']));
       expect(src, contains('class CreatePostsTable implements Migration'));
+      expect(src, contains("String get name => '20260101_create_posts_table'"));
       expect(src, contains('CREATE TABLE IF NOT EXISTS posts'));
       expect(src, contains('DROP TABLE IF EXISTS posts'));
     });
 
     test('migrationSource without fields is a stub', () {
-      final src = migrationSource('AddStuff', table: 'add_stuff');
+      final src = migrationSource('AddStuff', '20260101_add_stuff', table: 'add_stuff');
       expect(src, contains('implements Migration'));
       expect(src, contains('Future<void> up(SqlDatabase db)'));
       expect(src, contains('// TODO'));

@@ -230,18 +230,18 @@ String tableFromMigrationName(String name) {
   return s.isEmpty ? snakeCase(name) : s;
 }
 
-/// A [Migration] class. With [fields], `up` creates [table] and `down` drops
-/// it; without fields, an editable up/down stub.
-String migrationSource(String name,
+/// A [Migration] class named [className] whose `name` is [migrationName] (the
+/// timestamped id used for ordering). With [fields], `up` creates [table] and
+/// `down` drops it; without fields, an editable up/down stub.
+String migrationSource(String className, String migrationName,
     {required String table, List<FieldSpec> fields = const []}) {
-  final cls = pascalCase(name);
   if (fields.isEmpty) {
     return '''
 import 'package:dart_apache/dart_apache.dart';
 
-class $cls implements Migration {
+class $className implements Migration {
   @override
-  String get name => '${snakeCase(name)}';
+  String get name => '$migrationName';
 
   @override
   Future<void> up(SqlDatabase db) async {
@@ -259,9 +259,9 @@ class $cls implements Migration {
   return '''
 import 'package:dart_apache/dart_apache.dart';
 
-class $cls implements Migration {
+class $className implements Migration {
   @override
-  String get name => '${snakeCase(name)}';
+  String get name => '$migrationName';
 
   @override
   Future<void> up(SqlDatabase db) =>

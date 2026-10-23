@@ -289,17 +289,20 @@ working code.
 
 ## 3l. Phase 12 — SPKI pins + CLI migrations
 
-- [ ] **P2 — SPKI certificate pins.** Add public-key (SubjectPublicKeyInfo)
+- [x] **P2 — SPKI certificate pins.** Add public-key (SubjectPublicKeyInfo)
       pinning alongside whole-cert pins: a tiny ASN.1/DER walk extracts the
       `SubjectPublicKeyInfo` from the certificate and pins SHA-256 of *that*, so
       a pin survives certificate renewal with the same key (and matches the Edge
       harness's `spki-list`). `CertificatePinner` accepts either a cert pin or an
-      SPKI pin; `spkiPinForCertFile/Pem/Der` compute them.
-- [ ] **P3 — `dartisan migrate`.** Run migrations from the CLI: discover
-      `migrations/*.dart`, order by the timestamped migration name, generate a
+      SPKI pin; `spkiPinForCertFile/Pem/Der` compute them. Cross-validated
+      against node's `X509Certificate` reference pins.
+- [x] **P3 — `dartisan migrate`.** Runs migrations from the CLI: discovers
+      `migrations/*.dart`, orders by the timestamped migration name, generates a
       throwaway runner that imports them + runs `Migrator.migrate()` (or
-      `--rollback`) against a `--db=host:port`. Requires the generated migration
-      `name` to carry its timestamp prefix (fixes ordering).
+      `--rollback`) against `--db=host:port`. The generated migration `name` now
+      carries its timestamp (fixes ordering). **Live-verified** against
+      `dart-db-server`: migrate (ordered) → idempotent → rollback (reverse) →
+      re-migrate.
 
 ## 4. Principles
 
