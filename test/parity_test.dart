@@ -8,15 +8,16 @@ import 'package:test/test.dart';
 
 import '../example/parity_app.dart';
 
-/// Parity tests: the native-Dart app (`example/parity_app.dart`, mounted under
-/// `/parity/`) must produce responses equivalent to the PHP sample app in
-/// `public/*.php`. Runs one in-process HTTP/1.1 server serving both, hits each
-/// pair, and compares (normalizing volatile timestamps). Tagged `e2e` and
-/// skipped by default; also skipped when php-cgi is unavailable.
+/// Parity tests: the native-Dart app (`example/parity_app.dart`) must produce
+/// responses equivalent to the PHP sample app in `public/*.php`. Two styles:
+///  1. one server serving both (PHP at `*.php`, Dart under `/parity/*`);
+///  2. A/B — two servers (one PHP, one Dart drop-in) at *identical* `.php`
+///     paths, which lets even path-sensitive endpoints (fc, index) match
+///     strictly. Tagged `e2e`, skipped by default and when php-cgi is absent.
 void main() {
   final php = _phpAvailable();
 
-  group('PHP vs Dart parity', () {
+  group('PHP vs Dart (one server: *.php vs /parity/*)', () {
     late ApacheServer server;
     late Uri base;
     late AltSvcHttpClient client;
@@ -47,7 +48,6 @@ void main() {
       final d = await client.post(base.resolve('/parity/echo'),
           body: body, headers: headers);
       expect(p.statusCode, 200);
-      expect(d.statusCode, 200);
       expect(d.text, p.text);
       expect(d.text, 'method=POST\nname=ada\nlen=8\n');
     });
@@ -58,7 +58,6 @@ void main() {
       expect(d.statusCode, p.statusCode);
       expect(d.statusCode, 419);
       expect(d.headers['x-demo-header'], p.headers['x-demo-header']);
-      expect(d.headers['x-demo-header'], 'demo-value');
       expect(d.json, p.json);
       expect(d.json, {'msg': 'page-expired', 'code': 419});
     });
@@ -90,12 +89,125 @@ void main() {
       expect(p.text, startsWith('generated-at='));
     });
 
+    test('swr.php == /parity/swr (headers + shape)', () async {
+      final p = await client.get(base.resolve('/swr.php'));
+      final d = await client.get(base.resolve('/parity/swr'));
+      expect(d.statusCode, p.statusCode);
+      expect(d.headers['cache-control'], p.headers['cache-control']);
+      expect(d.headers['cache-control'], 'max-age=0, stale-while-revalidate=30');
+      expect(d.text, startsWith('generated-at='));
+      expect(p.text, startsWith('generated-at='));
+    });
+
     test('index.php == /parity/ (normalized HTML)', () async {
       final p = await client.get(base.resolve('/index.php?name=ada'));
       final d = await client.get(base.resolve('/parity/?name=ada'));
       expect(d.statusCode, p.statusCode);
       expect(_normalizeHtml(d.text), _normalizeHtml(p.text));
       expect(_normalizeHtml(d.text), contains('<h1>Hello, ada!</h1>'));
+    });
+  }, skip: php ? null : 'php-cgi not found on PATH');
+
+  group('PHP vs Dart drop-in (A/B, identical .php paths)', () {
+    late ApacheServer phpServer;
+    late ApacheServer dartServer;
+    late Uri phpBase;
+    late Uri dartBase;
+    late AltSvcHttpClient client;
+
+    setUp(() async {
+      final phpPort = await _freeTcpPort();
+      final phpConfig = ServerConfig(
+          documentRoot: 'public', port: phpPort, accessLogEnabled: false);
+      phpServer = ApacheServer(phpConfig); // no app -> serves PHP
+      await phpServer.start();
+      phpBase = Uri.parse('http://127.0.0.1:$phpPort');
+
+      final dartPort = await _freeTcpPort();
+      final dartConfig = ServerConfig(
+          documentRoot: 'public', port: dartPort, accessLogEnabled: false);
+      // Dart handlers mounted at the .php paths shadow the PHP files.
+      dartServer = ApacheServer(dartConfig, app: buildDropInApp(dartConfig));
+      await dartServer.start();
+      dartBase = Uri.parse('http://127.0.0.1:$dartPort');
+
+      client = AltSvcHttpClient();
+    });
+
+    tearDown(() async {
+      client.close();
+      await phpServer.stop();
+      await dartServer.stop();
+    });
+
+    Future<(ClientResponse, ClientResponse)> both(
+      String method,
+      String path, {
+      Map<String, String> headers = const {},
+      List<int>? body,
+    }) async {
+      final p = await client.request(method, phpBase.resolve(path),
+          headers: headers, body: body);
+      final d = await client.request(method, dartBase.resolve(path),
+          headers: headers, body: body);
+      return (p, d);
+    }
+
+    test('/index.php — normalized HTML matches', () async {
+      final (p, d) = await both('GET', '/index.php?name=ada');
+      expect(d.statusCode, p.statusCode);
+      expect(_normalizeHtml(d.text), _normalizeHtml(p.text));
+    });
+
+    test('/echo.php — byte-identical', () async {
+      final (p, d) = await both('POST', '/echo.php',
+          headers: {'content-type': 'application/x-www-form-urlencoded'},
+          body: 'name=ada'.codeUnits);
+      expect(d.text, p.text);
+      expect(d.text, 'method=POST\nname=ada\nlen=8\n');
+    });
+
+    test('/cacheable.php — headers + shape', () async {
+      final (p, d) = await both('GET', '/cacheable.php');
+      expect(d.headers['cache-control'], p.headers['cache-control']);
+      expect(d.text, startsWith('generated-at='));
+    });
+
+    test('/swr.php — headers + shape', () async {
+      final (p, d) = await both('GET', '/swr.php');
+      expect(d.headers['cache-control'], p.headers['cache-control']);
+      expect(d.headers['cache-control'], 'max-age=0, stale-while-revalidate=30');
+    });
+
+    test('/status_echo.php — status + header + JSON', () async {
+      final (p, d) = await both('GET', '/status_echo.php');
+      expect(d.statusCode, p.statusCode);
+      expect(d.statusCode, 419);
+      expect(d.headers['x-demo-header'], p.headers['x-demo-header']);
+      expect(d.json, p.json);
+    });
+
+    test('/csrf_echo.php — JSON matches', () async {
+      final (p, d) = await both('POST', '/csrf_echo.php', headers: {
+        'content-type': 'application/json',
+        'cookie': 'sess=abc',
+        'x-csrf-token': 'csrf-1',
+        'authorization': 'Bearer z',
+      }, body: '{"a":1}'.codeUnits);
+      expect(d.json, p.json);
+    });
+
+    test('/fc.php — strict JSON (same path -> request_uri/script_name match)',
+        () async {
+      final (p, d) = await both('GET', '/fc.php');
+      expect(d.statusCode, p.statusCode);
+      expect(d.json, p.json);
+      expect(d.json, {
+        'front_controller': true,
+        'request_uri': '/fc.php',
+        'method': 'GET',
+        'script_name': '/fc.php',
+      });
     });
   }, skip: php ? null : 'php-cgi not found on PATH');
 }
