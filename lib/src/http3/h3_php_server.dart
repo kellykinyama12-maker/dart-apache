@@ -122,12 +122,13 @@ class Http3PhpServer implements WorkerServer {
   }
 
   /// Builds the server certificate: a real PEM cert/key when configured, or a
-  /// generated self-signed cert in `--dev` mode.
+  /// generated self-signed cert in `--dev` mode. The key type (RSA or ECDSA
+  /// P-256) is auto-detected, so CA-issued RSA certs (e.g. DigiCert) work.
   EcdsaCert _buildCert() {
     final certPath = config.tlsCertPath;
     final keyPath = config.tlsKeyPath;
     if (certPath != null && keyPath != null) {
-      return loadEcdsaCertFromPem(
+      return loadServerCertFromPem(
         certPem: File(certPath).readAsStringSync(),
         keyPem: File(keyPath).readAsStringSync(),
       );

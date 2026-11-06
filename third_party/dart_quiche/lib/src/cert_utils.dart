@@ -33,6 +33,62 @@ cu.EcdsaCert loadEcdsaCertFromPem({
       privateKeyPem: keyPem.trim(),
     );
 
+/// Loads an RSA certificate (leaf or full-chain bundle) + private key from
+/// PEM strings for serving. The server signs TLS 1.3 CertificateVerify with
+/// `rsa_pss_rsae_sha256`. [certPem] may hold the leaf alone or the leaf
+/// followed by its intermediates; extra [intermediatesPem] blocks are
+/// appended to the chain. Supports PKCS#8 and PKCS#1 private keys.
+cu.EcdsaCert loadRsaCertFromPem({
+  required String certPem,
+  required String keyPem,
+  List<String> intermediatesPem = const [],
+}) =>
+    cu.loadRsaCertFromPemStrings(
+      certPem: certPem.trim(),
+      privateKeyPem: keyPem.trim(),
+      intermediatesPem: intermediatesPem,
+    );
+
+/// Loads a server certificate + key from PEM, auto-detecting RSA vs ECDSA
+/// P-256 from the private-key type: RSA keys yield an RSA-PSS-signing
+/// credential, EC keys an ECDSA P-256 one. Use this when the key type isn't
+/// known ahead of time (e.g. a CA-issued cert supplied by an operator).
+cu.EcdsaCert loadServerCertFromPem({
+  required String certPem,
+  required String keyPem,
+  List<String> intermediatesPem = const [],
+}) {
+  if (_keyPemIsRsa(keyPem)) {
+    return loadRsaCertFromPem(
+      certPem: certPem,
+      keyPem: keyPem,
+      intermediatesPem: intermediatesPem,
+    );
+  }
+  return loadEcdsaCertFromPem(certPem: certPem, keyPem: keyPem);
+}
+
+/// True if [keyPem] carries an RSA private key. PKCS#1 / SEC1 are decided by
+/// the PEM armor; PKCS#8 (`BEGIN PRIVATE KEY`) is decided by the
+/// `rsaEncryption` OID (1.2.840.113549.1.1.1) inside the DER.
+bool _keyPemIsRsa(String keyPem) {
+  if (keyPem.contains('BEGIN RSA PRIVATE KEY')) return true;
+  if (keyPem.contains('BEGIN EC PRIVATE KEY')) return false;
+  final der = cu.decodePemToDer(keyPem.trim());
+  const rsaOid = [0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01];
+  for (var i = 0; i + rsaOid.length <= der.length; i++) {
+    var match = true;
+    for (var j = 0; j < rsaOid.length; j++) {
+      if (der[i + j] != rsaOid[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
 /// Verifies an ECDSA P-256 (DER) signature over [message] using the raw
 /// uncompressed (`0x04 || X || Y`) public key.
 bool verifyEcdsaP256({
